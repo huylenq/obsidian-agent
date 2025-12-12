@@ -1,0 +1,14 @@
+# Build output
+main.js
+styles.css
+
+node_modules/
+
+.idea/
+
+.DS_Store
+
+.env
+.env.local
+
+pnpm-debug.log*

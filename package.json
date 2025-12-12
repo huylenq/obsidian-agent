@@ -1,0 +1,36 @@
+{
+  "name": "obsidian-claude-agent",
+  "version": "0.1.0",
+  "description": "Chat with your Obsidian vault using Claude Agent SDK",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "deploy": "npm run build && node deploy.js",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write 'src/**/*.{ts,tsx}'"
+  },
+  "keywords": [
+    "obsidian",
+    "claude",
+    "ai",
+    "agent"
+  ],
+  "author": "Huy",
+  "license": "MIT",
+  "dependencies": {
+    "jotai": "^2.10.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^16.11.6",
+    "@types/react": "^18.0.33",
+    "@types/react-dom": "^18.0.11",
+    "builtin-modules": "3.3.0",
+    "esbuild": "^0.25.0",
+    "obsidian": "^1.2.5",
+    "tslib": "2.4.0",
+    "typescript": "^5.7.2"
+  }
+}

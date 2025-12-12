@@ -1,0 +1,165 @@
+import { ClaudeAgentSettings } from "@/types";
+
+const PROXY_URL = "http://localhost:27182";
+
+export interface ChatResponse {
+  type: "text" | "tool_call" | "tool_result" | "error" | "done" | "session";
+  content: string;
+  toolName?: string;
+  sessionId?: string;
+}
+
+/**
+ * ClaudeAgentClient communicates with the local proxy server
+ */
+export class ClaudeAgentClient {
+  private settings: ClaudeAgentSettings;
+  private vaultPath: string;
+  private onSessionChange: ((sessionId: string | null) => void) | null = null;
+
+  constructor(settings: ClaudeAgentSettings, vaultPath: string) {
+    this.settings = settings;
+    this.vaultPath = vaultPath;
+  }
+
+  /**
+   * Set callback for when session ID changes (for persistence)
+   */
+  setOnSessionChange(callback: (sessionId: string | null) => void): void {
+    this.onSessionChange = callback;
+  }
+
+  /**
+   * Get current session ID
+   */
+  getSessionId(): string | null {
+    return this.settings.sessionId;
+  }
+
+  /**
+   * Clear the session (start fresh conversation)
+   */
+  clearSession(): void {
+    this.settings.sessionId = null;
+    this.onSessionChange?.(null);
+  }
+
+  /**
+   * Initialize the client (check proxy is running)
+   */
+  async initialize(): Promise<void> {
+    // Check if proxy server is running
+    try {
+      const response = await fetch(`${PROXY_URL}/health`);
+      if (!response.ok) {
+        throw new Error("Proxy server health check failed");
+      }
+      console.log("[ClaudeAgentClient] Proxy server is running");
+    } catch (error) {
+      throw new Error(
+        `Claude Agent proxy server is not running. Please start it with:\n` +
+        `cd server && npm start\n\n` +
+        `Original error: ${error instanceof Error ? error.message : error}`
+      );
+    }
+  }
+
+  /**
+   * Send a message and stream the response
+   */
+  async *chat(message: string): AsyncGenerator<ChatResponse> {
+    try {
+      console.log("[ClaudeAgentClient] Sending chat with workingDirectory:", this.vaultPath);
+      const response = await fetch(`${PROXY_URL}/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message,
+          systemPrompt: this.settings.systemPrompt,
+          sessionId: this.settings.sessionId || undefined,
+          workingDirectory: this.vaultPath,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Proxy request failed: ${error}`);
+      }
+
+      // Parse SSE stream
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("No response body");
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              yield this.parseProxyMessage(data);
+            } catch (e) {
+              // Ignore parse errors for incomplete data
+            }
+          }
+        }
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error occurred";
+      yield { type: "error", content: errorMessage };
+    }
+  }
+
+  /**
+   * Parse proxy server message into ChatResponse
+   */
+  private parseProxyMessage(data: { type: string; content?: string; toolName?: string; sessionId?: string }): ChatResponse {
+    switch (data.type) {
+      case "text":
+        return { type: "text", content: data.content || "" };
+      case "tool_call":
+        return { type: "tool_call", content: `Executing: ${data.toolName}`, toolName: data.toolName };
+      case "tool_result":
+        return { type: "tool_result", content: `Result from: ${data.toolName}`, toolName: data.toolName };
+      case "error":
+        return { type: "error", content: data.content || "Unknown error" };
+      case "session":
+        // Store session ID for conversation continuity
+        if (data.sessionId) {
+          this.settings.sessionId = data.sessionId;
+          this.onSessionChange?.(data.sessionId);
+          console.log("[ClaudeAgentClient] Session ID:", data.sessionId);
+        }
+        return { type: "session", content: "", sessionId: data.sessionId };
+      case "done":
+        // Also capture session ID from done event if present
+        if (data.sessionId && !this.settings.sessionId) {
+          this.settings.sessionId = data.sessionId;
+          this.onSessionChange?.(data.sessionId);
+        }
+        return { type: "done", content: "", sessionId: data.sessionId };
+      default:
+        return { type: "text", content: "" };
+    }
+  }
+
+  /**
+   * Update settings
+   */
+  updateSettings(settings: ClaudeAgentSettings): void {
+    this.settings = settings;
+  }
+}
