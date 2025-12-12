@@ -20,12 +20,13 @@ app.get("/health", (req, res) => {
  * Uses MCP servers configured in ~/.claude/ or vault's .claude/
  */
 app.post("/chat", async (req, res) => {
-  const { message, systemPrompt, sessionId, workingDirectory } = req.body;
+  const { message, systemPrompt, sessionId, workingDirectory, activeFile } = req.body;
 
   console.log("[Proxy] Received chat request:", {
     message,
     sessionId: sessionId || "new session",
-    workingDirectory: workingDirectory || "default"
+    workingDirectory: workingDirectory || "default",
+    activeFile: activeFile?.path || "none"
   });
 
   if (!message) {
@@ -43,11 +44,21 @@ app.post("/chat", async (req, res) => {
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   };
 
+  const buildSystemPrompt = () => {
+    let prompt = systemPrompt || `You are a helpful assistant that answers questions about the user's Obsidian vault.
+Use available MCP tools to search and read notes when needed.
+Be concise and helpful.`;
+
+    if (activeFile) {
+      prompt += `\n\n## Current Context\nThe user is currently viewing: **${activeFile.path}**\nUse MCP tools to read this file if relevant to their question.`;
+    }
+
+    return prompt;
+  };
+
   const buildQueryOptions = (resumeSessionId) => ({
     model: "claude-sonnet-4-5",
-    systemPrompt: systemPrompt || `You are a helpful assistant that answers questions about the user's Obsidian vault.
-Use available MCP tools to search and read notes when needed.
-Be concise and helpful.`,
+    systemPrompt: buildSystemPrompt(),
     permissionMode: "bypassPermissions",
     maxTurns: 10,
     settingSources: ["user", "project", "local"],

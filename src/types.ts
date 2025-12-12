@@ -6,6 +6,12 @@ export interface ChatMessage {
   toolName?: string;
 }
 
+export interface ActiveFileContext {
+  path: string;      // Relative path from vault root
+  name: string;      // Filename with extension
+  extension: string; // File extension (e.g., "md")
+}
+
 export interface ClaudeAgentSettings {
   systemPrompt: string;
   showDebugInfo: boolean;

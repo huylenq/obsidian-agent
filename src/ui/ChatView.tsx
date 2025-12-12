@@ -1,9 +1,11 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import { useAtomValue } from "jotai";
-import { ItemView, WorkspaceLeaf } from "obsidian";
+import { App, ItemView, WorkspaceLeaf } from "obsidian";
 import { createRoot, Root } from "react-dom/client";
+import { ActiveFileContext } from "@/types";
 import { ChatInput } from "./ChatInput";
 import { ChatMessages } from "./ChatMessages";
+import { ActiveFileChip } from "./ActiveFileChip";
 import {
   addMessage,
   updateStreamingMessage,
@@ -20,13 +22,50 @@ export const CHAT_VIEW_TYPE = "claude-agent-chat";
 
 interface ChatContainerProps {
   plugin: ClaudeAgentPlugin;
+  app: App;
 }
 
-function ChatContainer({ plugin }: ChatContainerProps) {
+function getActiveFileContext(app: App): ActiveFileContext | undefined {
+  const activeFile = app.workspace.getActiveFile();
+  if (!activeFile) return undefined;
+
+  return {
+    path: activeFile.path,
+    name: activeFile.name,
+    extension: activeFile.extension,
+  };
+}
+
+function ChatContainer({ plugin, app }: ChatContainerProps) {
   const isLoading = useAtomValue(isLoadingAtom, { store: chatStore });
+  const [activeFile, setActiveFile] = useState<ActiveFileContext | undefined>(
+    getActiveFileContext(app)
+  );
+  const [isContextCleared, setIsContextCleared] = useState(false);
+
+  // Update active file when workspace active leaf changes
+  useEffect(() => {
+    const updateActiveFile = () => {
+      const newActiveFile = getActiveFileContext(app);
+      setActiveFile(newActiveFile);
+      setIsContextCleared(false); // Reset cleared state when file changes
+    };
+
+    app.workspace.on("active-leaf-change", updateActiveFile);
+    return () => {
+      app.workspace.off("active-leaf-change", updateActiveFile);
+    };
+  }, [app]);
+
+  const handleClearContext = useCallback(() => {
+    setIsContextCleared(true);
+  }, []);
 
   const handleSend = useCallback(
     async (message: string) => {
+      // Capture active file before sending (use state, respect cleared flag)
+      const fileContext = isContextCleared ? undefined : activeFile;
+
       // Add user message
       addMessage({
         id: generateMessageId(),
@@ -38,6 +77,9 @@ function ChatContainer({ plugin }: ChatContainerProps) {
       setLoading(true);
       setError(null);
       clearStreamingMessage();
+
+      // Reset cleared state after sending
+      setIsContextCleared(false);
 
       try {
         // Ensure client is initialized
@@ -53,7 +95,7 @@ function ChatContainer({ plugin }: ChatContainerProps) {
         let fullResponse = "";
 
         // Stream the response
-        for await (const chunk of plugin.claudeClient.chat(message)) {
+        for await (const chunk of plugin.claudeClient.chat(message, fileContext)) {
           switch (chunk.type) {
             case "text":
               // chunk.content is the full accumulated text, not a delta
@@ -101,13 +143,20 @@ function ChatContainer({ plugin }: ChatContainerProps) {
         setLoading(false);
       }
     },
-    [plugin]
+    [plugin, activeFile, isContextCleared]
   );
+
+  const showChip = activeFile && !isContextCleared;
 
   return (
     <div className="claude-agent-container">
       <ChatMessages />
-      <ChatInput onSend={handleSend} disabled={isLoading} />
+      <div className="claude-agent-input-area">
+        {showChip && (
+          <ActiveFileChip activeFile={activeFile} onClear={handleClearContext} />
+        )}
+        <ChatInput onSend={handleSend} disabled={isLoading} />
+      </div>
     </div>
   );
 }
@@ -139,7 +188,7 @@ export class ClaudeAgentChatView extends ItemView {
 
     // Create React root and render
     this.root = createRoot(container);
-    this.root.render(<ChatContainer plugin={this.plugin} />);
+    this.root.render(<ChatContainer plugin={this.plugin} app={this.plugin.app} />);
   }
 
   async onClose(): Promise<void> {
