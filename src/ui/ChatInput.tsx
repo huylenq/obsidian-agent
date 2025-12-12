@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { App } from "obsidian";
+import { App, setIcon } from "obsidian";
 import { MentionAutocomplete } from "./MentionAutocomplete";
 import { searchVaultFiles, FileSearchResult } from "@/utils/fileSearch";
 
@@ -60,6 +60,13 @@ export function ChatInput({ onSend, disabled, app }: ChatInputProps) {
   });
   const [selectedIndex, setSelectedIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const sendIconRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (sendIconRef.current) {
+      setIcon(sendIconRef.current, "corner-down-left");
+    }
+  }, []);
 
   const searchResults = useMemo(() => {
     if (!mentionState.isActive || !mentionState.query) return [];
@@ -191,8 +198,9 @@ export function ChatInput({ onSend, disabled, app }: ChatInputProps) {
           className="claude-agent-send-button"
           onClick={handleSubmit}
           disabled={disabled || !input.trim()}
+          aria-label="Send"
         >
-          Send
+          <span ref={sendIconRef} />
         </button>
       </div>
     </div>

@@ -15,11 +15,33 @@ const FILES_TO_DEPLOY = [
     'styles.css'
 ];
 
+// Directories to deploy (recursive copy)
+const DIRS_TO_DEPLOY = [
+    'server'
+];
+
 // Ensure target directories exist
 function ensureDir(dir) {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
         console.log(`Created directory: ${dir}`);
+    }
+}
+
+// Recursively copy a directory
+function copyDirRecursive(src, dest) {
+    ensureDir(dest);
+    const entries = fs.readdirSync(src, { withFileTypes: true });
+
+    for (const entry of entries) {
+        const srcPath = path.join(src, entry.name);
+        const destPath = path.join(dest, entry.name);
+
+        if (entry.isDirectory()) {
+            copyDirRecursive(srcPath, destPath);
+        } else {
+            fs.copyFileSync(srcPath, destPath);
+        }
     }
 }
 
@@ -36,6 +58,19 @@ function deployToDirectory(targetDir) {
             console.log(`Deployed ${file} to ${targetPath}`);
         } else {
             console.warn(`Warning: ${file} not found in build directory`);
+        }
+    });
+
+    // Deploy directories
+    DIRS_TO_DEPLOY.forEach(dir => {
+        const sourcePath = path.join(__dirname, dir);
+        const targetPath = path.join(targetDir, dir);
+
+        if (fs.existsSync(sourcePath)) {
+            copyDirRecursive(sourcePath, targetPath);
+            console.log(`Deployed ${dir}/ to ${targetPath}`);
+        } else {
+            console.warn(`Warning: ${dir}/ not found in build directory`);
         }
     });
 }

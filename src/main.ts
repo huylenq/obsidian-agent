@@ -1,12 +1,18 @@
 import { Notice, Plugin } from "obsidian";
+import { spawn, ChildProcess } from "child_process";
+import * as path from "path";
 import { ClaudeAgentSettings, DEFAULT_SETTINGS } from "./types";
 import { ClaudeAgentSettingTab } from "./settings";
 import { ClaudeAgentChatView, CHAT_VIEW_TYPE } from "./ui/ChatView";
 import { ClaudeAgentClient } from "./claude/client";
 
+const PROXY_PORT = 27182;
+const PROXY_URL = `http://localhost:${PROXY_PORT}`;
+
 export default class ClaudeAgentPlugin extends Plugin {
   settings: ClaudeAgentSettings = DEFAULT_SETTINGS;
   claudeClient: ClaudeAgentClient | null = null;
+  private serverProcess: ChildProcess | null = null;
 
   async onload(): Promise<void> {
     console.log("Loading Claude Agent plugin...");
@@ -58,13 +64,111 @@ export default class ClaudeAgentPlugin extends Plugin {
   async onunload(): Promise<void> {
     console.log("Unloading Claude Agent plugin...");
     this.claudeClient = null;
+    this.stopServer();
   }
 
   /**
-   * Initialize the Claude client
+   * Start the proxy server as a child process
+   */
+  private startServer(): void {
+    if (this.serverProcess) {
+      console.log("[ClaudeAgent] Server already running");
+      return;
+    }
+
+    const vaultPath = (this.app.vault.adapter as any).basePath;
+    const pluginDir = path.join(vaultPath, ".obsidian", "plugins", this.manifest.id);
+    const serverDir = path.join(pluginDir, "server");
+
+    console.log(`[ClaudeAgent] Starting proxy server from ${serverDir}`);
+
+    this.serverProcess = spawn("node", ["index.js"], {
+      cwd: serverDir,
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: false,
+    });
+
+    this.serverProcess.stdout?.on("data", (data) => {
+      console.log(`[ClaudeAgent Server] ${data.toString().trim()}`);
+    });
+
+    this.serverProcess.stderr?.on("data", (data) => {
+      console.error(`[ClaudeAgent Server Error] ${data.toString().trim()}`);
+    });
+
+    this.serverProcess.on("error", (err) => {
+      console.error("[ClaudeAgent] Failed to start server:", err);
+      this.serverProcess = null;
+    });
+
+    this.serverProcess.on("exit", (code) => {
+      console.log(`[ClaudeAgent] Server exited with code ${code}`);
+      this.serverProcess = null;
+    });
+  }
+
+  /**
+   * Stop the proxy server
+   */
+  private stopServer(): void {
+    if (this.serverProcess) {
+      console.log("[ClaudeAgent] Stopping proxy server...");
+      this.serverProcess.kill();
+      this.serverProcess = null;
+    }
+  }
+
+  /**
+   * Wait for the server to be ready (health check with retries)
+   */
+  private async waitForServer(maxRetries = 30, intervalMs = 200): Promise<boolean> {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const response = await fetch(`${PROXY_URL}/health`);
+        if (response.ok) {
+          console.log(`[ClaudeAgent] Server ready after ${i + 1} attempts`);
+          return true;
+        }
+      } catch {
+        // Server not ready yet
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    return false;
+  }
+
+  /**
+   * Check if server is already running
+   */
+  private async isServerRunning(): Promise<boolean> {
+    try {
+      const response = await fetch(`${PROXY_URL}/health`);
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Initialize the Claude client (auto-starts server if needed)
    */
   private async initializeClient(): Promise<void> {
     try {
+      // Check if server is already running (e.g., manually started or from another vault)
+      const serverAlreadyRunning = await this.isServerRunning();
+
+      if (!serverAlreadyRunning) {
+        console.log("[ClaudeAgent] Server not running, starting...");
+        this.startServer();
+
+        const serverReady = await this.waitForServer();
+        if (!serverReady) {
+          throw new Error("Failed to start proxy server. Check console for details.");
+        }
+      } else {
+        console.log("[ClaudeAgent] Server already running (external)");
+      }
+
       // Create the Claude client with vault path for working directory
       const vaultPath = (this.app.vault.adapter as any).basePath;
       this.claudeClient = new ClaudeAgentClient(this.settings, vaultPath);
