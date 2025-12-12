@@ -136,6 +136,11 @@ Be concise and helpful.`;
           }
           break;
 
+        case "user":
+          // User messages from conversation history replay - safe to ignore
+          console.log("[Proxy] User message (history replay)");
+          break;
+
         default:
           console.log("[Proxy] Unknown message type:", msg.type);
       }
