@@ -41,10 +41,3 @@ The agent uses MCP servers configured in:
 - `<vault>/.claude/settings.json` (project settings)
 
 Set via `settingSources: ["user", "project"]` and `workingDirectory` pointing to the vault path.
-
-## Session Management
-
-- Session IDs captured from SDK's `system.init` message
-- Stored in plugin settings for persistence across reloads
-- Passed via `resume` option for conversation continuity
-- "Clear Chat History" command resets session
