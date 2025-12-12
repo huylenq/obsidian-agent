@@ -57,7 +57,7 @@ Be concise and helpful.`;
   };
 
   const buildQueryOptions = (resumeSessionId) => ({
-    model: "claude-sonnet-4-5",
+    model: "claude-haiku-4-5",
     systemPrompt: buildSystemPrompt(),
     permissionMode: "bypassPermissions",
     maxTurns: 10,
