@@ -6,6 +6,7 @@ import { ActiveFileContext } from "@/types";
 import { ChatInput } from "./ChatInput";
 import { ChatMessages } from "./ChatMessages";
 import { ActiveFileChip } from "./ActiveFileChip";
+import { FileSearchResult } from "@/utils/fileSearch";
 import {
   addMessage,
   updateStreamingMessage,
@@ -62,7 +63,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   }, []);
 
   const handleSend = useCallback(
-    async (message: string) => {
+    async (message: string, mentionedFiles: FileSearchResult[]) => {
       // Capture active file before sending (use state, respect cleared flag)
       const fileContext = isContextCleared ? undefined : activeFile;
 
@@ -95,7 +96,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         let fullResponse = "";
 
         // Stream the response
-        for await (const chunk of plugin.claudeClient.chat(message, fileContext)) {
+        for await (const chunk of plugin.claudeClient.chat(message, fileContext, mentionedFiles)) {
           switch (chunk.type) {
             case "text":
               // chunk.content is the full accumulated text, not a delta
@@ -155,7 +156,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         {showChip && (
           <ActiveFileChip activeFile={activeFile} onClear={handleClearContext} />
         )}
-        <ChatInput onSend={handleSend} disabled={isLoading} />
+        <ChatInput onSend={handleSend} disabled={isLoading} app={app} />
       </div>
     </div>
   );

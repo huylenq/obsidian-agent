@@ -34,6 +34,15 @@ cd server && pnpm start
 # Obsidian: Enable plugin, click chat icon
 ```
 
+## Reloading
+
+Once done a meaningful change, do:
+
+```bash
+pnpm build && pnpm run deploy
+```
+
+
 ## MCP Integration
 
 The agent uses MCP servers configured in:

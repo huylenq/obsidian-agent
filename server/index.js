@@ -20,13 +20,14 @@ app.get("/health", (req, res) => {
  * Uses MCP servers configured in ~/.claude/ or vault's .claude/
  */
 app.post("/chat", async (req, res) => {
-  const { message, systemPrompt, sessionId, workingDirectory, activeFile } = req.body;
+  const { message, systemPrompt, sessionId, workingDirectory, activeFile, mentionedFiles } = req.body;
 
   console.log("[Proxy] Received chat request:", {
     message,
     sessionId: sessionId || "new session",
     workingDirectory: workingDirectory || "default",
-    activeFile: activeFile?.path || "none"
+    activeFile: activeFile?.path || "none",
+    mentionedFiles: mentionedFiles?.map(f => f.path) || []
   });
 
   if (!message) {
@@ -51,6 +52,11 @@ Be concise and helpful.`;
 
     if (activeFile) {
       prompt += `\n\n## Current Context\nThe user is currently viewing: **${activeFile.path}**\nUse MCP tools to read this file if relevant to their question.`;
+    }
+
+    if (mentionedFiles && mentionedFiles.length > 0) {
+      const fileList = mentionedFiles.map(f => `- ${f.path}`).join("\n");
+      prompt += `\n\n## Referenced Files\nThe user has explicitly mentioned the following files (using @[[path]] syntax). Use MCP tools to read these files as they are likely central to their question:\n${fileList}`;
     }
 
     return prompt;

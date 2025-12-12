@@ -1,4 +1,5 @@
 import { ClaudeAgentSettings, ActiveFileContext } from "@/types";
+import { FileSearchResult } from "@/utils/fileSearch";
 
 const PROXY_URL = "http://localhost:27182";
 
@@ -67,9 +68,13 @@ export class ClaudeAgentClient {
   /**
    * Send a message and stream the response
    */
-  async *chat(message: string, activeFile?: ActiveFileContext): AsyncGenerator<ChatResponse> {
+  async *chat(
+    message: string,
+    activeFile?: ActiveFileContext,
+    mentionedFiles?: FileSearchResult[]
+  ): AsyncGenerator<ChatResponse> {
     try {
-      console.log("[ClaudeAgentClient] Sending chat with workingDirectory:", this.vaultPath, "activeFile:", activeFile?.path);
+      console.log("[ClaudeAgentClient] Sending chat with workingDirectory:", this.vaultPath, "activeFile:", activeFile?.path, "mentionedFiles:", mentionedFiles?.length || 0);
       const response = await fetch(`${PROXY_URL}/chat`, {
         method: "POST",
         headers: {
@@ -81,6 +86,7 @@ export class ClaudeAgentClient {
           sessionId: this.settings.sessionId || undefined,
           workingDirectory: this.vaultPath,
           activeFile,
+          mentionedFiles,
         }),
       });
 
