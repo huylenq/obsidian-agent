@@ -16,6 +16,7 @@ import {
   isLoadingAtom,
   chatStore,
   generateMessageId,
+  clearMessages,
 } from "@/state/chatState";
 import type ClaudeAgentPlugin from "@/main";
 
@@ -43,6 +44,18 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     getActiveFileContext(app)
   );
   const [isContextCleared, setIsContextCleared] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(
+    plugin.claudeClient?.getSessionId() ?? null
+  );
+
+  // Subscribe to session ID changes
+  useEffect(() => {
+    if (plugin.claudeClient) {
+      plugin.claudeClient.setOnSessionChange((newSessionId) => {
+        setSessionId(newSessionId);
+      });
+    }
+  }, [plugin.claudeClient]);
 
   // Update active file when workspace active leaf changes
   useEffect(() => {
@@ -61,6 +74,12 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   const handleClearContext = useCallback(() => {
     setIsContextCleared(true);
   }, []);
+
+  const handleNewChat = useCallback(() => {
+    plugin.claudeClient?.clearSession();
+    clearMessages();
+    setSessionId(null);
+  }, [plugin.claudeClient]);
 
   const handleSend = useCallback(
     async (message: string, mentionedFiles: FileSearchResult[]) => {
@@ -153,6 +172,39 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
 
   return (
     <div className="claude-agent-container">
+      <div className="claude-agent-header">
+        <span className="claude-agent-session-info">
+          {sessionId ? (
+            <span className="claude-agent-session-id" title={sessionId ?? undefined}>
+              Session: {sessionId}
+            </span>
+          ) : (
+            <span className="claude-agent-session-id claude-agent-session-new">
+              New session
+            </span>
+          )}
+        </span>
+        <button
+          className="claude-agent-new-chat-button"
+          onClick={handleNewChat}
+          disabled={isLoading}
+          title="Start new chat"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+      </div>
       <ChatMessages />
       <div className="claude-agent-input-area">
         {showChip && (
