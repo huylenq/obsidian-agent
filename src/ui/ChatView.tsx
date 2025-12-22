@@ -1,8 +1,8 @@
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect, useRef } from "react";
 import { useAtomValue } from "jotai";
 import { App, ItemView, WorkspaceLeaf } from "obsidian";
 import { createRoot, Root } from "react-dom/client";
-import { ActiveFileContext } from "@/types";
+import { ActiveFileContext, ClaudeModel } from "@/types";
 import { ChatInput } from "./ChatInput";
 import { ChatMessages } from "./ChatMessages";
 import { ActiveFileChip } from "./ActiveFileChip";
@@ -18,6 +18,7 @@ import {
   generateMessageId,
   clearMessages,
   messagesAtom,
+  modelAtom,
 } from "@/state/chatState";
 import { ChatMessage } from "@/types";
 import type ClaudeAgentPlugin from "@/main";
@@ -49,6 +50,23 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   const [sessionId, setSessionId] = useState<string | null>(
     plugin.claudeClient?.getSessionId() ?? null
   );
+  const model = useAtomValue(modelAtom, { store: chatStore });
+  const modelSelectRef = useRef<HTMLSelectElement>(null);
+
+  // Listen for command to open model selector
+  useEffect(() => {
+    const handleOpenSelector = () => {
+      modelSelectRef.current?.focus();
+      modelSelectRef.current?.showPicker?.();
+    };
+    window.addEventListener("claude-agent:open-model-selector", handleOpenSelector);
+    return () => window.removeEventListener("claude-agent:open-model-selector", handleOpenSelector);
+  }, []);
+
+  // Sync model atom with plugin settings on mount
+  useEffect(() => {
+    chatStore.set(modelAtom, plugin.settings.model);
+  }, [plugin.settings.model]);
 
   // Subscribe to session ID changes (also saves settings for persistence)
   useEffect(() => {
@@ -123,6 +141,14 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     clearMessages();
     setSessionId(null);
   }, [plugin.claudeClient]);
+
+  const handleModelChange = useCallback((newModel: ClaudeModel) => {
+    chatStore.set(modelAtom, newModel);
+    plugin.settings.model = newModel;
+    plugin.saveSettings();
+    // Return focus to input
+    window.dispatchEvent(new CustomEvent("claude-agent:focus-input"));
+  }, [plugin]);
 
   const handleSend = useCallback(
     async (message: string, mentionedFiles: FileSearchResult[]) => {
@@ -219,7 +245,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         <span className="claude-agent-session-info">
           {sessionId ? (
             <span className="claude-agent-session-id" title={sessionId ?? undefined}>
-              Session: {sessionId}
+              {sessionId}
             </span>
           ) : (
             <span className="claude-agent-session-id claude-agent-session-new">
@@ -254,6 +280,19 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           <ActiveFileChip activeFile={activeFile} onClear={handleClearContext} />
         )}
         <ChatInput onSend={handleSend} disabled={isLoading} app={app} />
+        <div className="claude-agent-input-footer">
+          <select
+            ref={modelSelectRef}
+            className="claude-agent-model-select"
+            value={model}
+            onChange={(e) => handleModelChange(e.target.value as ClaudeModel)}
+            disabled={isLoading}
+          >
+            <option value="haiku">Haiku</option>
+            <option value="sonnet">Sonnet</option>
+            <option value="opus">Opus</option>
+          </select>
+        </div>
       </div>
     </div>
   );

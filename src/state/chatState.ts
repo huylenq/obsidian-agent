@@ -1,11 +1,14 @@
 import { atom, createStore } from "jotai";
-import { ChatMessage } from "@/types";
+import { ChatMessage, ClaudeModel } from "@/types";
 
 // Create a dedicated store for the chat state
 export const chatStore = createStore();
 
 // Messages atom
 export const messagesAtom = atom<ChatMessage[]>([]);
+
+// Model atom (for keyboard shortcut sync)
+export const modelAtom = atom<ClaudeModel>("haiku");
 
 // Loading state atom
 export const isLoadingAtom = atom<boolean>(false);

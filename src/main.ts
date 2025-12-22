@@ -55,6 +55,16 @@ export default class ClaudeAgentPlugin extends Plugin {
       },
     });
 
+    // Add command to open model selector
+    this.addCommand({
+      id: "open-model-selector",
+      name: "Open Model Selector",
+      callback: () => {
+        // Dispatch custom event for ChatView to handle
+        window.dispatchEvent(new CustomEvent("claude-agent:open-model-selector"));
+      },
+    });
+
     // Add settings tab
     this.addSettingTab(new ClaudeAgentSettingTab(this.app, this));
 

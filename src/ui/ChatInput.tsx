@@ -88,6 +88,13 @@ export function ChatInput({ onSend, disabled, app }: ChatInputProps) {
     textareaRef.current?.focus();
   }, []);
 
+  // Listen for focus requests (e.g., after model selection)
+  useEffect(() => {
+    const handleFocus = () => textareaRef.current?.focus();
+    window.addEventListener("claude-agent:focus-input", handleFocus);
+    return () => window.removeEventListener("claude-agent:focus-input", handleFocus);
+  }, []);
+
   const handleSelect = useCallback(
     (file: FileSearchResult) => {
       if (!textareaRef.current) return;

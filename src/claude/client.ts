@@ -94,6 +94,7 @@ export class ClaudeAgentClient {
               workingDirectory: this.vaultPath,
               activeFile,
               mentionedFiles,
+              model: this.settings.model,
             }),
           });
           break; // Success, exit retry loop

@@ -12,10 +12,13 @@ export interface ActiveFileContext {
   extension: string; // File extension (e.g., "md")
 }
 
+export type ClaudeModel = "haiku" | "sonnet" | "opus";
+
 export interface ClaudeAgentSettings {
   systemPrompt: string;
   showDebugInfo: boolean;
   sessionId: string | null;
+  model: ClaudeModel;
 }
 
 export const DEFAULT_SETTINGS: ClaudeAgentSettings = {
@@ -24,4 +27,5 @@ Use the available MCP tools to search and read notes when needed.
 Be concise and accurate.`,
   showDebugInfo: false,
   sessionId: null,
+  model: "haiku",
 };

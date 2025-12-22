@@ -113,7 +113,7 @@ app.post("/history", (req, res) => {
  * Uses MCP servers configured in ~/.claude/ or vault's .claude/
  */
 app.post("/chat", async (req, res) => {
-  const { message, systemPrompt, sessionId, workingDirectory, activeFile, mentionedFiles } = req.body;
+  const { message, systemPrompt, sessionId, workingDirectory, activeFile, mentionedFiles, model } = req.body;
 
   console.log("[Proxy] Received chat request:", {
     message,
@@ -156,7 +156,7 @@ Be concise and helpful.`;
   };
 
   const buildQueryOptions = (resumeSessionId) => ({
-    model: "haiku",
+    model: model || "haiku",
     systemPrompt: buildSystemPrompt(),
     permissionMode: "bypassPermissions",
     maxTurns: 10,
