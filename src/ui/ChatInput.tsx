@@ -180,7 +180,6 @@ export function ChatInput({ onSend, disabled, app }: ChatInputProps) {
           results={searchResults}
           selectedIndex={selectedIndex}
           onSelect={handleSelect}
-          position={{ top: 4, left: 0 }}
         />
       )}
       <div className="claude-agent-input-container">

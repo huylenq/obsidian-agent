@@ -6,14 +6,12 @@ interface MentionAutocompleteProps {
   results: FileSearchResult[];
   selectedIndex: number;
   onSelect: (file: FileSearchResult) => void;
-  position: { top: number; left: number };
 }
 
 export function MentionAutocomplete({
   results,
   selectedIndex,
   onSelect,
-  position,
 }: MentionAutocompleteProps) {
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -30,7 +28,6 @@ export function MentionAutocomplete({
   return (
     <div
       className="claude-agent-mention-autocomplete"
-      style={{ bottom: position.top, left: position.left }}
       ref={listRef}
     >
       {results.map((file, index) => (
