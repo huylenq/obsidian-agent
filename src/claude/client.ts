@@ -75,20 +75,40 @@ export class ClaudeAgentClient {
   ): AsyncGenerator<ChatResponse> {
     try {
       console.log("[ClaudeAgentClient] Sending chat with workingDirectory:", this.vaultPath, "activeFile:", activeFile?.path, "mentionedFiles:", mentionedFiles?.length || 0);
-      const response = await fetch(`${PROXY_URL}/chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          message,
-          systemPrompt: this.settings.systemPrompt,
-          sessionId: this.settings.sessionId || undefined,
-          workingDirectory: this.vaultPath,
-          activeFile,
-          mentionedFiles,
-        }),
-      });
+
+      // Retry logic for transient connection issues
+      let response: Response | null = null;
+      let lastError: Error | null = null;
+
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          response = await fetch(`${PROXY_URL}/chat`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              message,
+              systemPrompt: this.settings.systemPrompt,
+              sessionId: this.settings.sessionId || undefined,
+              workingDirectory: this.vaultPath,
+              activeFile,
+              mentionedFiles,
+            }),
+          });
+          break; // Success, exit retry loop
+        } catch (e) {
+          lastError = e instanceof Error ? e : new Error(String(e));
+          console.warn(`[ClaudeAgentClient] Fetch attempt ${attempt} failed:`, lastError.message);
+          if (attempt < 3) {
+            await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+          }
+        }
+      }
+
+      if (!response) {
+        throw lastError || new Error("Failed to connect to proxy server");
+      }
 
       if (!response.ok) {
         const error = await response.text();

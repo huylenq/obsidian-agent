@@ -83,13 +83,15 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       setIsContextCleared(false);
 
       try {
+        // Wait for plugin initialization to complete (handles race with view restoration)
+        if (plugin.initializationPromise) {
+          await plugin.initializationPromise;
+        }
+
         // Ensure client is initialized
         if (!plugin.claudeClient) {
           throw new Error(
-            "Claude client is not initialized. Please check that:\n" +
-            "1. Copilot plugin is installed and configured\n" +
-            "2. Copilot has indexed your vault (run 'Index vault for QA')\n" +
-            "3. An embedding API key is configured in Copilot"
+            "Claude client is not initialized. Please check that the proxy server is running."
           );
         }
 

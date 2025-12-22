@@ -14,6 +14,9 @@ export default class ClaudeAgentPlugin extends Plugin {
   claudeClient: ClaudeAgentClient | null = null;
   private serverProcess: ChildProcess | null = null;
 
+  // Promise that resolves when initialization is complete
+  initializationPromise: Promise<void> | null = null;
+
   async onload(): Promise<void> {
     console.log("Loading Claude Agent plugin...");
 
@@ -55,8 +58,9 @@ export default class ClaudeAgentPlugin extends Plugin {
     // Add settings tab
     this.addSettingTab(new ClaudeAgentSettingTab(this.app, this));
 
-    // Initialize the client
-    await this.initializeClient();
+    // Initialize the client - store promise so views can await it
+    this.initializationPromise = this.initializeClient();
+    await this.initializationPromise;
 
     console.log("Claude Agent plugin loaded");
   }
@@ -101,8 +105,8 @@ export default class ClaudeAgentPlugin extends Plugin {
       this.serverProcess = null;
     });
 
-    this.serverProcess.on("exit", (code) => {
-      console.log(`[ClaudeAgent] Server exited with code ${code}`);
+    this.serverProcess.on("exit", (code, signal) => {
+      console.error(`[ClaudeAgent] ⚠️ SERVER DIED! Exit code: ${code}, signal: ${signal}`);
       this.serverProcess = null;
     });
   }
@@ -150,24 +154,56 @@ export default class ClaudeAgentPlugin extends Plugin {
   }
 
   /**
+   * Kill any process using our port (handles orphans from crashed sessions)
+   */
+  private async killProcessOnPort(): Promise<void> {
+    return new Promise((resolve) => {
+      // Use lsof to find and kill process on our port
+      const killer = spawn("sh", ["-c", `lsof -ti:${PROXY_PORT} | xargs kill -9 2>/dev/null || true`]);
+      killer.on("close", () => {
+        resolve();
+      });
+      killer.on("error", () => {
+        resolve(); // Ignore errors, just proceed
+      });
+    });
+  }
+
+  /**
+   * Ensure we have a fresh server instance that we control.
+   * This prevents the flip-flop bug where orphaned servers cause alternating failures.
+   */
+  private async ensureFreshServer(): Promise<void> {
+    // Kill our tracked server process if any
+    this.stopServer();
+
+    // Forcefully kill ANY process on our port (handles orphans, zombies, TIME_WAIT issues)
+    console.log("[ClaudeAgent] Killing any process on port", PROXY_PORT);
+    await this.killProcessOnPort();
+
+    // Wait for port to be fully released
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // Start fresh server
+    console.log("[ClaudeAgent] Starting fresh server...");
+    this.startServer();
+
+    const serverReady = await this.waitForServer();
+    if (!serverReady) {
+      throw new Error("Failed to start proxy server. Check console for details.");
+    }
+    console.log("[ClaudeAgent] ✅ Server started and health check passed");
+  }
+
+  /**
    * Initialize the Claude client (auto-starts server if needed)
    */
   private async initializeClient(): Promise<void> {
     try {
-      // Check if server is already running (e.g., manually started or from another vault)
-      const serverAlreadyRunning = await this.isServerRunning();
-
-      if (!serverAlreadyRunning) {
-        console.log("[ClaudeAgent] Server not running, starting...");
-        this.startServer();
-
-        const serverReady = await this.waitForServer();
-        if (!serverReady) {
-          throw new Error("Failed to start proxy server. Check console for details.");
-        }
-      } else {
-        console.log("[ClaudeAgent] Server already running (external)");
-      }
+      // Always start fresh - kill any existing server first
+      // This prevents the flip-flop bug where we detect a dying server
+      // from previous session but don't track it for cleanup
+      await this.ensureFreshServer();
 
       // Create the Claude client with vault path for working directory
       const vaultPath = (this.app.vault.adapter as any).basePath;

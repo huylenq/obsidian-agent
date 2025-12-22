@@ -63,7 +63,7 @@ Be concise and helpful.`;
   };
 
   const buildQueryOptions = (resumeSessionId) => ({
-    model: "claude-haiku-4-5",
+    model: "haiku",
     systemPrompt: buildSystemPrompt(),
     permissionMode: "bypassPermissions",
     maxTurns: 10,
