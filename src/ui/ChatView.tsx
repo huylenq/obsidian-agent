@@ -22,6 +22,7 @@ import {
 } from "@/state/chatState";
 import { ChatMessage } from "@/types";
 import type ClaudeAgentPlugin from "@/main";
+import { initializeCommands, commandRegistry, CommandContext } from "@/commands";
 
 export const CHAT_VIEW_TYPE = "claude-agent-chat";
 
@@ -141,6 +142,49 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     clearMessages();
     setSessionId(null);
   }, [plugin.claudeClient]);
+
+  // Initialize slash commands
+  useEffect(() => {
+    initializeCommands();
+  }, []);
+
+  const handleCommand = useCallback(
+    async (commandName: string, args: string) => {
+      const command = commandRegistry.get(commandName);
+
+      if (!command) {
+        setError(`Unknown command: /${commandName}`);
+        return;
+      }
+
+      const context: CommandContext = {
+        plugin,
+        app,
+        clearMessages,
+      };
+
+      try {
+        const result = await command.execute(context, args);
+        if (!result.silent && result.message) {
+          addMessage({
+            id: generateMessageId(),
+            role: "assistant",
+            content: result.message,
+            timestamp: Date.now(),
+          });
+        }
+        // Update local session state if it was a clear command
+        if (commandName === "clear" || commandName === "new" || commandName === "reset") {
+          setSessionId(null);
+        }
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Command failed";
+        setError(errorMessage);
+      }
+    },
+    [plugin, app]
+  );
 
   const handleModelChange = useCallback((newModel: ClaudeModel) => {
     chatStore.set(modelAtom, newModel);
@@ -279,7 +323,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         {showChip && (
           <ActiveFileChip activeFile={activeFile} onClear={handleClearContext} />
         )}
-        <ChatInput onSend={handleSend} disabled={isLoading} app={app} />
+        <ChatInput onSend={handleSend} onCommand={handleCommand} disabled={isLoading} app={app} />
         <div className="claude-agent-input-footer">
           <select
             ref={modelSelectRef}

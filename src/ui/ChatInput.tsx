@@ -1,10 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { App, setIcon } from "obsidian";
 import { MentionAutocomplete } from "./MentionAutocomplete";
+import { CommandAutocomplete } from "./CommandAutocomplete";
 import { searchVaultFiles, FileSearchResult } from "@/utils/fileSearch";
+import { parseInput, commandRegistry, SlashCommand } from "@/commands";
 
 interface ChatInputProps {
   onSend: (message: string, mentionedFiles: FileSearchResult[]) => void;
+  onCommand: (commandName: string, args: string) => void;
   disabled: boolean;
   app: App;
 }
@@ -12,6 +15,11 @@ interface ChatInputProps {
 interface MentionState {
   isActive: boolean;
   startIndex: number;
+  query: string;
+}
+
+interface CommandState {
+  isActive: boolean;
   query: string;
 }
 
@@ -51,7 +59,26 @@ function getCurrentMention(text: string, cursorPos: number): MentionState {
   return { isActive: true, startIndex, query };
 }
 
-export function ChatInput({ onSend, disabled, app }: ChatInputProps) {
+/**
+ * Detect if user is typing a command (/ at start of input)
+ */
+function getCommandState(text: string): CommandState {
+  // Command must start at beginning of input
+  if (!text.startsWith("/")) {
+    return { isActive: false, query: "" };
+  }
+
+  // Check if there's a space (command is complete, now typing args)
+  if (text.includes(" ")) {
+    return { isActive: false, query: "" };
+  }
+
+  // Extract the partial command name (without the /)
+  const query = text.slice(1);
+  return { isActive: true, query };
+}
+
+export function ChatInput({ onSend, onCommand, disabled, app }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [mentionState, setMentionState] = useState<MentionState>({
     isActive: false,
@@ -59,6 +86,11 @@ export function ChatInput({ onSend, disabled, app }: ChatInputProps) {
     query: "",
   });
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [commandState, setCommandState] = useState<CommandState>({
+    isActive: false,
+    query: "",
+  });
+  const [commandSelectedIndex, setCommandSelectedIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendIconRef = useRef<HTMLSpanElement>(null);
 
@@ -73,9 +105,24 @@ export function ChatInput({ onSend, disabled, app }: ChatInputProps) {
     return searchVaultFiles(app, mentionState.query, 8);
   }, [app, mentionState.isActive, mentionState.query]);
 
+  const filteredCommands = useMemo(() => {
+    if (!commandState.isActive) return [];
+    const allCommands = commandRegistry.getAll();
+    if (!commandState.query) return allCommands;
+    return allCommands.filter(
+      (cmd) =>
+        cmd.name.startsWith(commandState.query.toLowerCase()) ||
+        cmd.aliases?.some((a) => a.startsWith(commandState.query.toLowerCase()))
+    );
+  }, [commandState.isActive, commandState.query]);
+
   useEffect(() => {
     setSelectedIndex(0);
   }, [searchResults]);
+
+  useEffect(() => {
+    setCommandSelectedIndex(0);
+  }, [filteredCommands]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -119,24 +166,51 @@ export function ChatInput({ onSend, disabled, app }: ChatInputProps) {
     [input, mentionState.startIndex]
   );
 
+  const handleCommandSelect = useCallback(
+    (command: SlashCommand) => {
+      const newInput = `/${command.name} `;
+      setInput(newInput);
+      setCommandState({ isActive: false, query: "" });
+
+      requestAnimationFrame(() => {
+        if (textareaRef.current) {
+          textareaRef.current.setSelectionRange(newInput.length, newInput.length);
+          textareaRef.current.focus();
+        }
+      });
+    },
+    []
+  );
+
   const handleSubmit = useCallback(() => {
     const trimmed = input.trim();
-    if (trimmed && !disabled) {
-      const mentionedPaths = extractMentionedPaths(trimmed);
-      const files = app.vault.getFiles();
-      const mentionedFiles: FileSearchResult[] = mentionedPaths
-        .map((path) => {
-          const file = files.find((f) => f.path === path);
-          if (!file) return null;
-          return { path: file.path, name: file.name, extension: file.extension };
-        })
-        .filter((f): f is FileSearchResult => f !== null);
+    if (!trimmed || disabled) return;
 
-      onSend(trimmed, mentionedFiles);
+    const parsed = parseInput(trimmed);
+
+    if (parsed.isCommand) {
+      onCommand(parsed.commandName!, parsed.args || "");
       setInput("");
       setMentionState({ isActive: false, startIndex: -1, query: "" });
+      setCommandState({ isActive: false, query: "" });
+      return;
     }
-  }, [input, disabled, app, onSend]);
+
+    const mentionedPaths = extractMentionedPaths(trimmed);
+    const files = app.vault.getFiles();
+    const mentionedFiles: FileSearchResult[] = mentionedPaths
+      .map((path) => {
+        const file = files.find((f) => f.path === path);
+        if (!file) return null;
+        return { path: file.path, name: file.name, extension: file.extension };
+      })
+      .filter((f): f is FileSearchResult => f !== null);
+
+    onSend(trimmed, mentionedFiles);
+    setInput("");
+    setMentionState({ isActive: false, startIndex: -1, query: "" });
+    setCommandState({ isActive: false, query: "" });
+  }, [input, disabled, app, onSend, onCommand]);
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -144,12 +218,37 @@ export function ChatInput({ onSend, disabled, app }: ChatInputProps) {
       const cursorPos = e.target.selectionStart;
       setInput(newValue);
       setMentionState(getCurrentMention(newValue, cursorPos));
+      setCommandState(getCommandState(newValue));
     },
     []
   );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      // Handle command autocomplete
+      if (commandState.isActive && filteredCommands.length > 0) {
+        switch (e.key) {
+          case "ArrowDown":
+            e.preventDefault();
+            setCommandSelectedIndex((i) => Math.min(i + 1, filteredCommands.length - 1));
+            return;
+          case "ArrowUp":
+            e.preventDefault();
+            setCommandSelectedIndex((i) => Math.max(i - 1, 0));
+            return;
+          case "Enter":
+          case "Tab":
+            e.preventDefault();
+            handleCommandSelect(filteredCommands[commandSelectedIndex]);
+            return;
+          case "Escape":
+            e.preventDefault();
+            setCommandState({ isActive: false, query: "" });
+            return;
+        }
+      }
+
+      // Handle mention autocomplete
       if (mentionState.isActive && searchResults.length > 0) {
         switch (e.key) {
           case "ArrowDown":
@@ -177,11 +276,28 @@ export function ChatInput({ onSend, disabled, app }: ChatInputProps) {
         handleSubmit();
       }
     },
-    [mentionState.isActive, searchResults, selectedIndex, handleSelect, handleSubmit]
+    [
+      commandState.isActive,
+      filteredCommands,
+      commandSelectedIndex,
+      handleCommandSelect,
+      mentionState.isActive,
+      searchResults,
+      selectedIndex,
+      handleSelect,
+      handleSubmit,
+    ]
   );
 
   return (
     <div className="claude-agent-input-wrapper">
+      {commandState.isActive && filteredCommands.length > 0 && (
+        <CommandAutocomplete
+          commands={filteredCommands}
+          selectedIndex={commandSelectedIndex}
+          onSelect={handleCommandSelect}
+        />
+      )}
       {mentionState.isActive && searchResults.length > 0 && (
         <MentionAutocomplete
           results={searchResults}
