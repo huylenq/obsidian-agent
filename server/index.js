@@ -1,6 +1,9 @@
 import express from "express";
 import cors from "cors";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { readFileSync, existsSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
 
 const PORT = process.env.PORT || 27182;
 const app = express();
@@ -13,6 +16,96 @@ app.use(express.json({ limit: "10mb" }));
  */
 app.get("/health", (req, res) => {
   res.json({ status: "ok" });
+});
+
+/**
+ * Get session history from transcript file
+ * Claude Code stores transcripts at ~/.claude/projects/{encoded-path}/{session-id}.jsonl
+ */
+app.post("/history", (req, res) => {
+  const { sessionId, workingDirectory } = req.body;
+
+  if (!sessionId) {
+    return res.status(400).json({ error: "sessionId is required" });
+  }
+
+  console.log("[Proxy] Fetching history for session:", sessionId);
+
+  try {
+    // Encode the working directory path the same way Claude Code does
+    // Claude Code replaces /, spaces, and ~ with dashes
+    // e.g., /Users/huy/Library/Mobile Documents/iCloud~md~obsidian/Documents/IWE
+    //    -> -Users-huy-Library-Mobile-Documents-iCloud-md-obsidian-Documents-IWE
+    const encodedPath = workingDirectory
+      ? workingDirectory.replace(/[\/\s~]/g, "-")
+      : "";
+
+    const claudeDir = join(homedir(), ".claude", "projects");
+
+    // Try to find the transcript file
+    let transcriptPath = join(claudeDir, encodedPath, `${sessionId}.jsonl`);
+
+    if (!existsSync(transcriptPath)) {
+      console.log("[Proxy] Transcript file not found at:", transcriptPath);
+      return res.json({ messages: [] });
+    }
+
+    console.log("[Proxy] Reading transcript from:", transcriptPath);
+
+    const content = readFileSync(transcriptPath, "utf-8");
+    const lines = content.trim().split("\n");
+
+    const messages = [];
+
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line);
+
+        // Only process user and assistant messages
+        if (entry.type === "user" || entry.type === "assistant") {
+          let textContent = "";
+
+          // Parse the nested message JSON
+          if (entry.message) {
+            const msg = typeof entry.message === "string"
+              ? JSON.parse(entry.message)
+              : entry.message;
+
+            if (msg.content) {
+              if (typeof msg.content === "string") {
+                textContent = msg.content;
+              } else if (Array.isArray(msg.content)) {
+                // Extract text from content blocks
+                for (const block of msg.content) {
+                  if (block.type === "text") {
+                    textContent += block.text;
+                  }
+                }
+              }
+            }
+          }
+
+          if (textContent) {
+            messages.push({
+              role: entry.type,
+              content: textContent,
+              timestamp: entry.timestamp || Date.now(),
+            });
+          }
+        }
+      } catch (parseError) {
+        // Skip malformed lines
+        console.log("[Proxy] Skipping malformed line");
+      }
+    }
+
+    console.log("[Proxy] Found", messages.length, "messages in history");
+    res.json({ messages });
+
+  } catch (error) {
+    console.error("[Proxy] Error reading history:", error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 /**
@@ -143,8 +236,9 @@ Be concise and helpful.`;
           break;
 
         case "user":
-          // User messages from conversation history replay - safe to ignore
-          console.log("[Proxy] User message (history replay)");
+          // User messages from conversation history replay - ignore
+          // History is loaded via /history endpoint from transcript files
+          console.log("[Proxy] User message (history replay, ignored)");
           break;
 
         default:

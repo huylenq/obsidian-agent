@@ -17,7 +17,9 @@ import {
   chatStore,
   generateMessageId,
   clearMessages,
+  messagesAtom,
 } from "@/state/chatState";
+import { ChatMessage } from "@/types";
 import type ClaudeAgentPlugin from "@/main";
 
 export const CHAT_VIEW_TYPE = "claude-agent-chat";
@@ -48,14 +50,55 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     plugin.claudeClient?.getSessionId() ?? null
   );
 
-  // Subscribe to session ID changes
+  // Subscribe to session ID changes (also saves settings for persistence)
   useEffect(() => {
     if (plugin.claudeClient) {
       plugin.claudeClient.setOnSessionChange((newSessionId) => {
         setSessionId(newSessionId);
+        // Important: Also save to disk so session persists across restarts
+        plugin.saveSettings();
       });
     }
   }, [plugin.claudeClient]);
+
+  // Load history from transcript when view mounts with existing session
+  useEffect(() => {
+    const loadHistory = async () => {
+      // Wait for plugin initialization
+      if (plugin.initializationPromise) {
+        await plugin.initializationPromise;
+      }
+
+      if (!plugin.claudeClient) return;
+
+      const currentSessionId = plugin.claudeClient.getSessionId();
+      if (!currentSessionId) return;
+
+      // Check if we already have messages (don't reload if already populated)
+      const existingMessages = chatStore.get(messagesAtom);
+      if (existingMessages.length > 0) return;
+
+      console.log("[ChatView] Loading history for session:", currentSessionId);
+
+      try {
+        const historyMessages = await plugin.claudeClient.fetchHistory();
+        if (historyMessages.length > 0) {
+          const chatMessages: ChatMessage[] = historyMessages.map((msg) => ({
+            id: generateMessageId(),
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.timestamp,
+          }));
+          chatStore.set(messagesAtom, chatMessages);
+          console.log("[ChatView] Loaded", chatMessages.length, "history messages");
+        }
+      } catch (error) {
+        console.warn("[ChatView] Failed to load history:", error);
+      }
+    };
+
+    loadHistory();
+  }, [plugin]);
 
   // Update active file when workspace active leaf changes
   useEffect(() => {

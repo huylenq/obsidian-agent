@@ -189,4 +189,42 @@ export class ClaudeAgentClient {
   updateSettings(settings: ClaudeAgentSettings): void {
     this.settings = settings;
   }
+
+  /**
+   * Fetch session history from transcript file
+   * Returns array of messages or empty array if no history
+   */
+  async fetchHistory(): Promise<Array<{ role: "user" | "assistant"; content: string; timestamp: number }>> {
+    const sessionId = this.settings.sessionId;
+    if (!sessionId) {
+      return [];
+    }
+
+    try {
+      console.log("[ClaudeAgentClient] Fetching history for session:", sessionId);
+
+      const response = await fetch(`${PROXY_URL}/history`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionId,
+          workingDirectory: this.vaultPath,
+        }),
+      });
+
+      if (!response.ok) {
+        console.warn("[ClaudeAgentClient] Failed to fetch history:", response.status);
+        return [];
+      }
+
+      const data = await response.json();
+      console.log("[ClaudeAgentClient] Fetched", data.messages?.length || 0, "history messages");
+      return data.messages || [];
+    } catch (error) {
+      console.warn("[ClaudeAgentClient] Error fetching history:", error);
+      return [];
+    }
+  }
 }

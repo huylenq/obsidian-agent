@@ -48,3 +48,12 @@ export function clearMessages(): void {
   chatStore.set(streamingMessageAtom, "");
   chatStore.set(errorAtom, null);
 }
+
+/**
+ * Prepend recovered history messages to the chat
+ * Used when resuming a session to restore conversation history
+ */
+export function prependHistoryMessages(historyMessages: ChatMessage[]): void {
+  const currentMessages = chatStore.get(messagesAtom);
+  chatStore.set(messagesAtom, [...historyMessages, ...currentMessages]);
+}

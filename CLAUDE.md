@@ -27,20 +27,17 @@ An Obsidian plugin that provides chat with your vault using Claude Agent SDK.
 
 ## Running
 
-```bash
-# Terminal 1: Start proxy server
-cd server && pnpm start
+The plugin auto-starts the proxy server as a child process. Just enable the plugin in Obsidian and click the chat icon.
 
-# Obsidian: Enable plugin, click chat icon
-```
+## Development
 
-## Reloading
-
-Once done a meaningful change, do:
+After making changes:
 
 ```bash
 pnpm build && pnpm run deploy
 ```
+
+Then reload Obsidian (or disable/enable the plugin) to pick up changes.
 
 
 ## MCP Integration
