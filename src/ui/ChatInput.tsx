@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { App, setIcon } from "obsidian";
+import { App, setIcon, TFile, TFolder } from "obsidian";
 import { MentionAutocomplete } from "./MentionAutocomplete";
 import { CommandAutocomplete } from "./CommandAutocomplete";
-import { searchVaultFiles, FileSearchResult } from "@/utils/fileSearch";
+import { searchVaultItems, FileSearchResult } from "@/utils/fileSearch";
 import { parseInput, commandRegistry, SlashCommand } from "@/commands";
 
 interface ChatInputProps {
@@ -102,7 +102,7 @@ export function ChatInput({ onSend, onCommand, disabled, app }: ChatInputProps) 
 
   const searchResults = useMemo(() => {
     if (!mentionState.isActive || !mentionState.query) return [];
-    return searchVaultFiles(app, mentionState.query, 8);
+    return searchVaultItems(app, mentionState.query, 8);
   }, [app, mentionState.isActive, mentionState.query]);
 
   const filteredCommands = useMemo(() => {
@@ -197,12 +197,18 @@ export function ChatInput({ onSend, onCommand, disabled, app }: ChatInputProps) 
     }
 
     const mentionedPaths = extractMentionedPaths(trimmed);
-    const files = app.vault.getFiles();
+    const allItems = app.vault.getAllLoadedFiles();
     const mentionedFiles: FileSearchResult[] = mentionedPaths
       .map((path) => {
-        const file = files.find((f) => f.path === path);
-        if (!file) return null;
-        return { path: file.path, name: file.name, extension: file.extension };
+        const item = allItems.find((f) => f.path === path);
+        if (!item) return null;
+        const isFolder = item instanceof TFolder;
+        return {
+          path: item.path,
+          name: item.name,
+          extension: isFolder ? "" : (item as TFile).extension,
+          type: isFolder ? "folder" : "file",
+        } as FileSearchResult;
       })
       .filter((f): f is FileSearchResult => f !== null);
 
@@ -309,7 +315,7 @@ export function ChatInput({ onSend, onCommand, disabled, app }: ChatInputProps) 
         <textarea
           ref={textareaRef}
           className="claude-agent-input"
-          placeholder="Ask about your vault... Use @ to mention files"
+          placeholder="Ask about your vault... Use @ to mention files or folders"
           value={input}
           onChange={handleChange}
           onKeyDown={handleKeyDown}

@@ -53,9 +53,9 @@ function MentionItem({ file, isSelected, onClick }: MentionItemProps) {
 
   useEffect(() => {
     if (iconRef.current) {
-      setIcon(iconRef.current, getFileIcon(file.extension));
+      setIcon(iconRef.current, getItemIcon(file));
     }
-  }, [file.extension]);
+  }, [file.type, file.extension]);
 
   const parentPath = getParentPath(file.path);
 
@@ -76,8 +76,10 @@ function MentionItem({ file, isSelected, onClick }: MentionItemProps) {
   );
 }
 
-function getFileIcon(extension: string): string {
-  switch (extension) {
+function getItemIcon(item: FileSearchResult): string {
+  if (item.type === "folder") return "folder";
+
+  switch (item.extension) {
     case "md":
       return "file-text";
     case "ts":
