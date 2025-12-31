@@ -1,11 +1,12 @@
 import React, { useCallback, useState, useEffect, useRef } from "react";
 import { useAtomValue } from "jotai";
-import { App, ItemView, WorkspaceLeaf } from "obsidian";
+import { App, ItemView, WorkspaceLeaf, MarkdownView } from "obsidian";
 import { createRoot, Root } from "react-dom/client";
-import { ActiveFileContext, ClaudeModel } from "@/types";
+import { ActiveFileContext, ClaudeModel, SelectionContext } from "@/types";
 import { ChatInput } from "./ChatInput";
 import { ChatMessages } from "./ChatMessages";
 import { ActiveFileChip } from "./ActiveFileChip";
+import { SelectionChip } from "./SelectionChip";
 import { FileSearchResult } from "@/utils/fileSearch";
 import {
   addMessage,
@@ -42,12 +43,35 @@ function getActiveFileContext(app: App): ActiveFileContext | undefined {
   };
 }
 
+function getSelectionContext(app: App): SelectionContext | undefined {
+  const view = app.workspace.getActiveViewOfType(MarkdownView);
+  const editor = view?.editor;
+  const selection = editor?.getSelection();
+
+  if (!selection || selection.trim() === "") return undefined;
+
+  const file = view?.file;
+  if (!file) return undefined;
+
+  const from = editor?.getCursor("from");
+  const to = editor?.getCursor("to");
+
+  return {
+    text: selection,
+    filePath: file.path,
+    fileName: file.name,
+    startLine: from?.line !== undefined ? from.line + 1 : undefined,
+    endLine: to?.line !== undefined ? to.line + 1 : undefined,
+  };
+}
+
 function ChatContainer({ plugin, app }: ChatContainerProps) {
   const isLoading = useAtomValue(isLoadingAtom, { store: chatStore });
   const [activeFile, setActiveFile] = useState<ActiveFileContext | undefined>(
     getActiveFileContext(app)
   );
   const [isContextCleared, setIsContextCleared] = useState(false);
+  const [selection, setSelection] = useState<SelectionContext | undefined>(undefined);
   const [sessionId, setSessionId] = useState<string | null>(
     plugin.claudeClient?.getSessionId() ?? null
   );
@@ -133,8 +157,36 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     };
   }, [app]);
 
+  // Poll for selection changes (live updating)
+  useEffect(() => {
+    const checkSelection = () => {
+      const newSelection = getSelectionContext(app);
+      setSelection((prev) => {
+        // Only update if selection text changed
+        if (prev?.text !== newSelection?.text || prev?.filePath !== newSelection?.filePath) {
+          return newSelection;
+        }
+        return prev;
+      });
+    };
+
+    // Initial check
+    checkSelection();
+
+    // Poll every 200ms for selection changes
+    const intervalId = setInterval(checkSelection, 200);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [app]);
+
   const handleClearContext = useCallback(() => {
     setIsContextCleared(true);
+  }, []);
+
+  const handleClearSelection = useCallback(() => {
+    setSelection(undefined);
   }, []);
 
   const handleNewChat = useCallback(() => {
@@ -196,8 +248,9 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
 
   const handleSend = useCallback(
     async (message: string, mentionedFiles: FileSearchResult[]) => {
-      // Capture active file before sending (use state, respect cleared flag)
+      // Capture context before sending
       const fileContext = isContextCleared ? undefined : activeFile;
+      const selectionContext = selection;
 
       // Add user message
       addMessage({
@@ -213,6 +266,8 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
 
       // Reset cleared state after sending
       setIsContextCleared(false);
+      // Auto-clear selection after sending
+      setSelection(undefined);
 
       try {
         // Wait for plugin initialization to complete (handles race with view restoration)
@@ -230,7 +285,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         let fullResponse = "";
 
         // Stream the response
-        for await (const chunk of plugin.claudeClient.chat(message, fileContext, mentionedFiles)) {
+        for await (const chunk of plugin.claudeClient.chat(message, fileContext, mentionedFiles, selectionContext)) {
           switch (chunk.type) {
             case "text":
               // chunk.content is the full accumulated text, not a delta
@@ -278,10 +333,11 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         setLoading(false);
       }
     },
-    [plugin, activeFile, isContextCleared]
+    [plugin, activeFile, isContextCleared, selection]
   );
 
-  const showChip = activeFile && !isContextCleared;
+  const showFileChip = activeFile && !isContextCleared;
+  const showSelectionChip = selection !== undefined;
 
   return (
     <div className="claude-agent-container">
@@ -320,8 +376,15 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       </div>
       <ChatMessages />
       <div className="claude-agent-input-area">
-        {showChip && (
-          <ActiveFileChip activeFile={activeFile} onClear={handleClearContext} />
+        {(showFileChip || showSelectionChip) && (
+          <div className="claude-agent-context-chips">
+            {showFileChip && (
+              <ActiveFileChip activeFile={activeFile} onClear={handleClearContext} />
+            )}
+            {showSelectionChip && (
+              <SelectionChip selection={selection} onClear={handleClearSelection} />
+            )}
+          </div>
         )}
         <ChatInput onSend={handleSend} onCommand={handleCommand} disabled={isLoading} app={app} />
         <div className="claude-agent-input-footer">

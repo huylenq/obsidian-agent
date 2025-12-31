@@ -12,6 +12,14 @@ export interface ActiveFileContext {
   extension: string; // File extension (e.g., "md")
 }
 
+export interface SelectionContext {
+  text: string;       // The selected text content
+  filePath: string;   // Path of file containing selection
+  fileName: string;   // Name of file containing selection
+  startLine?: number; // Line where selection starts (1-indexed)
+  endLine?: number;   // Line where selection ends (1-indexed)
+}
+
 export type ClaudeModel = "haiku" | "sonnet" | "opus";
 
 export interface ClaudeAgentSettings {

@@ -113,13 +113,14 @@ app.post("/history", (req, res) => {
  * Uses MCP servers configured in ~/.claude/ or vault's .claude/
  */
 app.post("/chat", async (req, res) => {
-  const { message, systemPrompt, sessionId, workingDirectory, activeFile, mentionedFiles, model } = req.body;
+  const { message, systemPrompt, sessionId, workingDirectory, activeFile, mentionedFiles, selection, model } = req.body;
 
   console.log("[Proxy] Received chat request:", {
     message,
     sessionId: sessionId || "new session",
     workingDirectory: workingDirectory || "default",
     activeFile: activeFile?.path || "none",
+    selection: selection ? `${selection.text.slice(0, 50)}... (from ${selection.filePath})` : "none",
     mentionedFiles: mentionedFiles?.map(f => f.path) || []
   });
 
@@ -145,6 +146,15 @@ Be concise and helpful.`;
 
     if (activeFile) {
       prompt += `\n\n## Current Context\nThe user is currently viewing: **${activeFile.path}**\nUse MCP tools to read this file if relevant to their question.`;
+    }
+
+    if (selection && selection.text) {
+      const lineInfo = selection.startLine
+        ? selection.startLine === selection.endLine
+          ? ` (line ${selection.startLine})`
+          : ` (lines ${selection.startLine}-${selection.endLine})`
+        : "";
+      prompt += `\n\n## Selected Text\nThe user has selected the following text from **${selection.filePath}**${lineInfo}:\n\`\`\`\n${selection.text}\n\`\`\`\nThis selection is likely central to their question. Address it directly.`;
     }
 
     if (mentionedFiles && mentionedFiles.length > 0) {

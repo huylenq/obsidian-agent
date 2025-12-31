@@ -1,4 +1,4 @@
-import { ClaudeAgentSettings, ActiveFileContext } from "@/types";
+import { ClaudeAgentSettings, ActiveFileContext, SelectionContext } from "@/types";
 import { FileSearchResult } from "@/utils/fileSearch";
 
 const PROXY_URL = "http://localhost:27182";
@@ -71,10 +71,11 @@ export class ClaudeAgentClient {
   async *chat(
     message: string,
     activeFile?: ActiveFileContext,
-    mentionedFiles?: FileSearchResult[]
+    mentionedFiles?: FileSearchResult[],
+    selection?: SelectionContext
   ): AsyncGenerator<ChatResponse> {
     try {
-      console.log("[ClaudeAgentClient] Sending chat with workingDirectory:", this.vaultPath, "activeFile:", activeFile?.path, "mentionedFiles:", mentionedFiles?.length || 0);
+      console.log("[ClaudeAgentClient] Sending chat with workingDirectory:", this.vaultPath, "activeFile:", activeFile?.path, "mentionedFiles:", mentionedFiles?.length || 0, "selection:", selection?.text?.slice(0, 50) || "none");
 
       // Retry logic for transient connection issues
       let response: Response | null = null;
@@ -94,6 +95,7 @@ export class ClaudeAgentClient {
               workingDirectory: this.vaultPath,
               activeFile,
               mentionedFiles,
+              selection,
               model: this.settings.model,
             }),
           });
