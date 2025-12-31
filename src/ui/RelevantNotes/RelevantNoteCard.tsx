@@ -30,6 +30,8 @@ export function RelevantNoteCard({
 
   const similarityPercent = Math.round(note.finalScore * 100);
 
+  const cleanedPreview = stripMetadata(note.content);
+
   return (
     <div className={`claude-agent-relevant-note-card ${note.category}`}>
       <div className="claude-agent-relevant-note-header">
@@ -40,7 +42,7 @@ export function RelevantNoteCard({
         >
           {note.title}
         </span>
-        <div className="claude-agent-relevant-note-badges">
+        <div className="claude-agent-relevant-note-actions">
           {(note.hasOutgoingLink || note.hasBacklink) && (
             <span
               ref={linkIconRef}
@@ -57,22 +59,23 @@ export function RelevantNoteCard({
           <span className={`claude-agent-similarity-badge ${note.category}`}>
             {similarityPercent}%
           </span>
+          <button
+            className="claude-agent-add-to-chat-icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddToChat();
+            }}
+            title="Add to chat"
+          >
+            <span ref={addIconRef} />
+          </button>
         </div>
       </div>
-      <div className="claude-agent-relevant-note-preview">
-        {truncate(note.content, 150)}
-      </div>
-      <button
-        className="claude-agent-add-to-chat-button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onAddToChat();
-        }}
-        title="Add to chat as @mention"
-      >
-        <span ref={addIconRef} />
-        <span>Add to Chat</span>
-      </button>
+      {cleanedPreview && (
+        <div className="claude-agent-relevant-note-preview">
+          {truncate(cleanedPreview, 100)}
+        </div>
+      )}
     </div>
   );
 }
@@ -80,4 +83,32 @@ export function RelevantNoteCard({
 function truncate(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength).trim() + "...";
+}
+
+/**
+ * Strip frontmatter, metadata, and other noise from note content
+ * to show a clean preview of actual content.
+ */
+function stripMetadata(content: string): string {
+  let cleaned = content;
+
+  // Remove YAML frontmatter (--- ... ---)
+  cleaned = cleaned.replace(/^---[\s\S]*?---\s*/m, "");
+
+  // Remove NOTE TITLE: [[...]] pattern (Copilot index artifact)
+  cleaned = cleaned.replace(/NOTE TITLE:\s*\[\[[^\]]*\]\]\s*/gi, "");
+
+  // Remove NOTE BLOCK CONTENT: prefix
+  cleaned = cleaned.replace(/NOTE BLOCK CONTENT:\s*/gi, "");
+
+  // Remove METADATA:{...} JSON blocks
+  cleaned = cleaned.replace(/METADATA:\s*\{[^}]*\}\.{0,3}\s*/gi, "");
+
+  // Remove standalone [[wikilinks]] at the start
+  cleaned = cleaned.replace(/^\[\[[^\]]*\]\]\s*/m, "");
+
+  // Collapse multiple newlines/whitespace
+  cleaned = cleaned.replace(/\s+/g, " ").trim();
+
+  return cleaned;
 }

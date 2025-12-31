@@ -40,6 +40,42 @@ pnpm build && pnpm run deploy
 Then reload Obsidian (or disable/enable the plugin) to pick up changes.
 
 
+## Relevant Notes (Vector Search)
+
+Reuses obsidian-copilot's existing vector index instead of building our own.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Copilot Index (read-only)                                      │
+│  .obsidian/copilot-index-chunk-{hash}-{0..N}.json               │
+│  └─ docs.docs[id] = { path, title, content, embedding[1536] }   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  CopilotIndexReader (src/embeddings/VectorStore.ts)             │
+│  - Parses JSON directly (no Orama dependency)                   │
+│  - Brute-force cosine similarity search O(n)                    │
+│  - Deduplicates chunks by path, keeps highest similarity        │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  rankNotes (src/embeddings/search.ts)                           │
+│  - 70% similarity + 30% link weight (outgoing links, backlinks) │
+│  - Uses app.metadataCache for link graph                        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key files:**
+- `src/embeddings/VectorStore.ts` - CopilotIndexReader class
+- `src/embeddings/search.ts` - Ranking with link weighting
+- `src/ui/RelevantNotes/` - UI components
+
+**Modes:**
+- Current file: finds notes similar to active file's embedding
+- Chat context: (planned) embed recent messages for search
+
 ## MCP Integration
 
 The agent uses MCP servers configured in:
