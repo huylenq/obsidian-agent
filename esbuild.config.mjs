@@ -58,7 +58,7 @@ const context = await esbuild.context({
     global: "window",
     "process.env.NODE_ENV": prod ? '"production"' : '"development"',
   },
-  minify: prod,
+  minify: false,
 });
 
 if (prod) {

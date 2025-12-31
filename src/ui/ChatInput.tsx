@@ -5,11 +5,16 @@ import { CommandAutocomplete } from "./CommandAutocomplete";
 import { searchVaultItems, FileSearchResult } from "@/utils/fileSearch";
 import { parseInput, commandRegistry, SlashCommand } from "@/commands";
 
+export interface ChatInputHandle {
+  insertMention: (path: string) => void;
+}
+
 interface ChatInputProps {
   onSend: (message: string, mentionedFiles: FileSearchResult[]) => void;
   onCommand: (commandName: string, args: string) => void;
   disabled: boolean;
   app: App;
+  onRef?: (handle: ChatInputHandle) => void;
 }
 
 interface MentionState {
@@ -78,7 +83,7 @@ function getCommandState(text: string): CommandState {
   return { isActive: true, query };
 }
 
-export function ChatInput({ onSend, onCommand, disabled, app }: ChatInputProps) {
+export function ChatInput({ onSend, onCommand, disabled, app, onRef }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [mentionState, setMentionState] = useState<MentionState>({
     isActive: false,
@@ -141,6 +146,28 @@ export function ChatInput({ onSend, onCommand, disabled, app }: ChatInputProps) 
     window.addEventListener("claude-agent:focus-input", handleFocus);
     return () => window.removeEventListener("claude-agent:focus-input", handleFocus);
   }, []);
+
+  // Expose insertMention function via onRef callback
+  const insertMention = useCallback((path: string) => {
+    const mention = `@"${path}" `;
+    setInput((prev) => {
+      const newValue = prev + mention;
+      // Focus and move cursor after the mention
+      requestAnimationFrame(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          textareaRef.current.setSelectionRange(newValue.length, newValue.length);
+        }
+      });
+      return newValue;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (onRef) {
+      onRef({ insertMention });
+    }
+  }, [onRef, insertMention]);
 
   const handleSelect = useCallback(
     (file: FileSearchResult) => {

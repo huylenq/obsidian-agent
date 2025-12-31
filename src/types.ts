@@ -37,3 +37,39 @@ Be concise and accurate.`,
   sessionId: null,
   model: "haiku",
 };
+
+// ============================================================================
+// Relevant Notes Types (uses Copilot's existing index)
+// ============================================================================
+
+export type SearchMode = "currentFile" | "chatContext";
+
+export type SimilarityCategory = "high" | "medium" | "low";
+
+export interface RelevantNote {
+  path: string;           // Note path in vault
+  title: string;          // Note title (first H1 or filename)
+  content: string;        // Preview content (truncated)
+  similarity: number;     // Raw similarity score (0-1)
+}
+
+export interface RankedNote extends RelevantNote {
+  finalScore: number;                // Weighted score (similarity + links)
+  category: SimilarityCategory;      // high (>0.7), medium (0.55-0.7), low (<0.55)
+  hasOutgoingLink?: boolean;         // Current file links to this note
+  hasBacklink?: boolean;             // This note links to current file
+}
+
+export interface RelevantNotesSettings {
+  enabled: boolean;
+  minSimilarity: number;
+  maxResults: number;
+  triggerMode: SearchMode | "both";
+}
+
+export const DEFAULT_RELEVANT_NOTES_SETTINGS: RelevantNotesSettings = {
+  enabled: true,
+  minSimilarity: 0.4,
+  maxResults: 10,
+  triggerMode: "both",
+};

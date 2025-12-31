@@ -2,11 +2,12 @@ import React, { useCallback, useState, useEffect, useRef } from "react";
 import { useAtomValue } from "jotai";
 import { App, ItemView, WorkspaceLeaf, MarkdownView } from "obsidian";
 import { createRoot, Root } from "react-dom/client";
-import { ActiveFileContext, ClaudeModel, SelectionContext } from "@/types";
-import { ChatInput } from "./ChatInput";
+import { ActiveFileContext, ClaudeModel, SelectionContext, RelevantNote } from "@/types";
+import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatMessages } from "./ChatMessages";
 import { ActiveFileChip } from "./ActiveFileChip";
 import { SelectionChip } from "./SelectionChip";
+import { RelevantNotes } from "./RelevantNotes";
 import { FileSearchResult } from "@/utils/fileSearch";
 import {
   addMessage,
@@ -21,6 +22,14 @@ import {
   messagesAtom,
   modelAtom,
 } from "@/state/chatState";
+import {
+  setRelevantNotes,
+  setSearchingNotes,
+  setIndexAvailable,
+  setRelevantNotesError,
+  searchModeAtom,
+} from "@/state/relevantNotesState";
+import { CopilotIndexReader, rankNotes } from "@/embeddings";
 import { ChatMessage } from "@/types";
 import type ClaudeAgentPlugin from "@/main";
 import { initializeCommands, commandRegistry, CommandContext } from "@/commands";
@@ -76,7 +85,10 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     plugin.claudeClient?.getSessionId() ?? null
   );
   const model = useAtomValue(modelAtom, { store: chatStore });
+  const searchMode = useAtomValue(searchModeAtom, { store: chatStore });
   const modelSelectRef = useRef<HTMLSelectElement>(null);
+  const indexReaderRef = useRef<CopilotIndexReader | null>(null);
+  const [inputRef, setInputRef] = useState<ChatInputHandle | null>(null);
 
   // Listen for command to open model selector
   useEffect(() => {
@@ -199,6 +211,72 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   useEffect(() => {
     initializeCommands();
   }, []);
+
+  // Initialize Copilot index reader
+  useEffect(() => {
+    const initIndex = async () => {
+      const reader = new CopilotIndexReader(app);
+      const success = await reader.initialize();
+      indexReaderRef.current = reader;
+      setIndexAvailable(success);
+      if (success) {
+        console.log("[ChatView] Copilot index loaded successfully");
+      }
+    };
+    initIndex();
+  }, [app]);
+
+  // Search for relevant notes when active file changes or search mode changes
+  const searchRelevantNotes = useCallback(async () => {
+    const reader = indexReaderRef.current;
+    if (!reader || !reader.isInitialized()) return;
+
+    setSearchingNotes(true);
+    setRelevantNotesError(null);
+
+    try {
+      let results: RelevantNote[] = [];
+      if (searchMode === "currentFile" && activeFile) {
+        // Search based on current file
+        results = await reader.searchSimilarToPath(activeFile.path, {
+          minSimilarity: 0.4,
+          limit: 10,
+        });
+      } else if (searchMode === "chatContext") {
+        // For chat context mode, we'd need to get embeddings for chat messages
+        // For now, fall back to current file if available
+        if (activeFile) {
+          results = await reader.searchSimilarToPath(activeFile.path, {
+            minSimilarity: 0.4,
+            limit: 10,
+          });
+        }
+      }
+
+      // Rank results with link weighting
+      const ranked = rankNotes(results, activeFile?.path ?? null, app);
+      setRelevantNotes(ranked);
+    } catch (error) {
+      console.error("[ChatView] Error searching relevant notes:", error);
+      setRelevantNotesError("Failed to search for relevant notes");
+    } finally {
+      setSearchingNotes(false);
+    }
+  }, [activeFile, searchMode, app]);
+
+  // Trigger search when active file changes
+  useEffect(() => {
+    if (activeFile && searchMode === "currentFile") {
+      searchRelevantNotes();
+    }
+  }, [activeFile, searchMode, searchRelevantNotes]);
+
+  // Handle adding a note to chat as @mention
+  const handleAddNoteToChat = useCallback((notePath: string) => {
+    if (inputRef?.insertMention) {
+      inputRef.insertMention(notePath);
+    }
+  }, [inputRef]);
 
   const handleCommand = useCallback(
     async (commandName: string, args: string) => {
@@ -374,6 +452,11 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           </svg>
         </button>
       </div>
+      <RelevantNotes
+        app={app}
+        onAddToChat={handleAddNoteToChat}
+        onRefresh={searchRelevantNotes}
+      />
       <ChatMessages />
       <div className="claude-agent-input-area">
         {(showFileChip || showSelectionChip) && (
@@ -386,7 +469,13 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
             )}
           </div>
         )}
-        <ChatInput onSend={handleSend} onCommand={handleCommand} disabled={isLoading} app={app} />
+        <ChatInput
+          onSend={handleSend}
+          onCommand={handleCommand}
+          disabled={isLoading}
+          app={app}
+          onRef={setInputRef}
+        />
         <div className="claude-agent-input-footer">
           <select
             ref={modelSelectRef}
