@@ -174,8 +174,18 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   // Poll for selection changes (live updating)
   useEffect(() => {
     const checkSelection = () => {
+      const activeView = app.workspace.getActiveViewOfType(MarkdownView);
+      const editorHasFocus = activeView?.containerEl.contains(document.activeElement);
+
       const newSelection = getSelectionContext(app);
+
       setSelection((prev) => {
+        // If new selection is empty but editor doesn't have focus,
+        // keep the previous selection (user just clicked away to chat)
+        if (!newSelection && !editorHasFocus && prev) {
+          return prev;
+        }
+
         // Only update if selection text changed
         if (prev?.text !== newSelection?.text || prev?.filePath !== newSelection?.filePath) {
           return newSelection;

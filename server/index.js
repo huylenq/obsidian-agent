@@ -1,11 +1,29 @@
 import express from "express";
 import cors from "cors";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, appendFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 
 const PORT = process.env.PORT || 27182;
+const LOG_FILE = join(homedir(), ".claude-agent-proxy.log");
+
+// Initialize log file
+writeFileSync(LOG_FILE, `\n=== Server started at ${new Date().toISOString()} ===\n`);
+
+function log(...args) {
+  const timestamp = new Date().toISOString();
+  const message = `[${timestamp}] ${args.map(a => typeof a === "object" ? JSON.stringify(a) : a).join(" ")}\n`;
+  appendFileSync(LOG_FILE, message);
+  console.log(...args);
+}
+
+function logError(...args) {
+  const timestamp = new Date().toISOString();
+  const message = `[${timestamp}] ERROR: ${args.map(a => typeof a === "object" ? JSON.stringify(a) : a).join(" ")}\n`;
+  appendFileSync(LOG_FILE, message);
+  console.error(...args);
+}
 const app = express();
 
 app.use(cors());
@@ -29,7 +47,7 @@ app.post("/history", (req, res) => {
     return res.status(400).json({ error: "sessionId is required" });
   }
 
-  console.log("[Proxy] Fetching history for session:", sessionId);
+  log("[Proxy] Fetching history for session:", sessionId);
 
   try {
     // Encode the working directory path the same way Claude Code does
@@ -46,11 +64,11 @@ app.post("/history", (req, res) => {
     let transcriptPath = join(claudeDir, encodedPath, `${sessionId}.jsonl`);
 
     if (!existsSync(transcriptPath)) {
-      console.log("[Proxy] Transcript file not found at:", transcriptPath);
+      log("[Proxy] Transcript file not found at:", transcriptPath);
       return res.json({ messages: [] });
     }
 
-    console.log("[Proxy] Reading transcript from:", transcriptPath);
+    log("[Proxy] Reading transcript from:", transcriptPath);
 
     const content = readFileSync(transcriptPath, "utf-8");
     const lines = content.trim().split("\n");
@@ -95,15 +113,15 @@ app.post("/history", (req, res) => {
         }
       } catch (parseError) {
         // Skip malformed lines
-        console.log("[Proxy] Skipping malformed line");
+        log("[Proxy] Skipping malformed line");
       }
     }
 
-    console.log("[Proxy] Found", messages.length, "messages in history");
+    log("[Proxy] Found", messages.length, "messages in history");
     res.json({ messages });
 
   } catch (error) {
-    console.error("[Proxy] Error reading history:", error);
+    logError("[Proxy] Error reading history:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -115,7 +133,7 @@ app.post("/history", (req, res) => {
 app.post("/chat", async (req, res) => {
   const { message, systemPrompt, sessionId, workingDirectory, activeFile, mentionedFiles, selection, model } = req.body;
 
-  console.log("[Proxy] Received chat request:", {
+  log("[Proxy] Received chat request:", {
     message,
     sessionId: sessionId || "new session",
     workingDirectory: workingDirectory || "default",
@@ -135,7 +153,7 @@ app.post("/chat", async (req, res) => {
 
   const sendEvent = (type, data) => {
     const event = { type, ...data };
-    console.log("[Proxy] Sending event:", event);
+    log("[Proxy] Sending event:", event);
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   };
 
@@ -176,7 +194,7 @@ Be concise and helpful.`;
   });
 
   const runQuery = async (resumeSessionId) => {
-    console.log("[Proxy] Starting query with cwd:", workingDirectory, resumeSessionId ? `(resuming ${resumeSessionId})` : "(new session)");
+    log("[Proxy] Starting query with cwd:", workingDirectory, resumeSessionId ? `(resuming ${resumeSessionId})` : "(new session)");
 
     const response = query({
       prompt: message,
@@ -220,24 +238,24 @@ Be concise and helpful.`;
           break;
 
         case "error":
-          console.error("[Proxy] Error message:", msg);
+          logError("[Proxy] Error message:", msg);
           sendEvent("error", {
             content: msg.error?.message || msg.error || JSON.stringify(msg)
           });
           break;
 
         case "system":
-          console.log("[Proxy] System message:", msg.subtype);
+          log("[Proxy] System message:", msg.subtype);
           // Capture session ID on init
           if (msg.subtype === "init" && msg.session_id) {
             currentSessionId = msg.session_id;
-            console.log("[Proxy] Session ID:", currentSessionId);
+            log("[Proxy] Session ID:", currentSessionId);
             sendEvent("session", { sessionId: currentSessionId });
           }
           break;
 
         case "result":
-          console.log("[Proxy] Result:", msg.subtype);
+          log("[Proxy] Result:", msg.subtype);
           if (msg.subtype?.startsWith("error")) {
             sendEvent("error", {
               content: msg.error_message || `Error: ${msg.subtype}`
@@ -248,11 +266,11 @@ Be concise and helpful.`;
         case "user":
           // User messages from conversation history replay - ignore
           // History is loaded via /history endpoint from transcript files
-          console.log("[Proxy] User message (history replay, ignored)");
+          log("[Proxy] User message (history replay, ignored)");
           break;
 
         default:
-          console.log("[Proxy] Unknown message type:", msg.type);
+          log("[Proxy] Unknown message type:", msg.type);
       }
     }
 
@@ -265,15 +283,15 @@ Be concise and helpful.`;
   } catch (error) {
     // If session resume fails (exit code 1), retry without session
     if (sessionId && error.message?.includes("exited with code 1")) {
-      console.log("[Proxy] Session resume failed, starting fresh session");
+      log("[Proxy] Session resume failed, starting fresh session");
       try {
         await runQuery(null);
       } catch (retryError) {
-        console.error("[Proxy] Retry failed:", retryError);
+        logError("[Proxy] Retry failed:", retryError);
         sendEvent("error", { content: retryError.message || "Unknown error" });
       }
     } else {
-      console.error("[Proxy] Chat error:", error);
+      logError("[Proxy] Chat error:", error);
       sendEvent("error", { content: error.message || "Unknown error" });
     }
   } finally {
@@ -282,6 +300,6 @@ Be concise and helpful.`;
 });
 
 app.listen(PORT, () => {
-  console.log(`[Claude Agent Proxy] Running on http://localhost:${PORT}`);
-  console.log(`[Claude Agent Proxy] Health check: http://localhost:${PORT}/health`);
+  log(`[Claude Agent Proxy] Running on http://localhost:${PORT}`);
+  log(`[Claude Agent Proxy] Health check: http://localhost:${PORT}/health`);
 });
