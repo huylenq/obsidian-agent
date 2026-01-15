@@ -23,6 +23,11 @@ export default class ClaudeAgentPlugin extends Plugin {
     // Load settings
     await this.loadSettings();
 
+    // IMPORTANT: Create the initialization promise BEFORE registering views.
+    // This prevents a race condition where Obsidian restores a view before
+    // initializationPromise is assigned, causing "client not initialized" errors.
+    this.initializationPromise = this.initializeClient();
+
     // Register the chat view
     this.registerView(CHAT_VIEW_TYPE, (leaf) => new ClaudeAgentChatView(leaf, this));
 
@@ -67,10 +72,6 @@ export default class ClaudeAgentPlugin extends Plugin {
 
     // Add settings tab
     this.addSettingTab(new ClaudeAgentSettingTab(this.app, this));
-
-    // Initialize the client - store promise so views can await it
-    this.initializationPromise = this.initializeClient();
-    await this.initializationPromise;
 
     console.log("Claude Agent plugin loaded");
   }
