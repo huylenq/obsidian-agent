@@ -8,7 +8,6 @@ import { ChatMessages } from "./ChatMessages";
 import { ActiveFileChip } from "./ActiveFileChip";
 import { SelectionChip } from "./SelectionChip";
 import { RelevantNotes } from "./RelevantNotes";
-import { ResizeHandle } from "./ResizeHandle";
 import { FileSearchResult } from "@/utils/fileSearch";
 import {
   addMessage,
@@ -90,7 +89,6 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   const modelSelectRef = useRef<HTMLSelectElement>(null);
   const indexReaderRef = useRef<CopilotIndexReader | null>(null);
   const [inputRef, setInputRef] = useState<ChatInputHandle | null>(null);
-  const [relevantNotesHeight, setRelevantNotesHeight] = useState(200);
 
   // Listen for command to open model selector
   useEffect(() => {
@@ -429,10 +427,6 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   const showFileChip = activeFile && !isContextCleared;
   const showSelectionChip = selection !== undefined;
 
-  const handleRelevantNotesResize = useCallback((delta: number) => {
-    setRelevantNotesHeight((h) => Math.max(100, Math.min(500, h + delta)));
-  }, []);
-
   return (
     <div className="claude-agent-container">
       <div className="claude-agent-header">
@@ -468,17 +462,11 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           </svg>
         </button>
       </div>
-      <div
-        className="claude-agent-relevant-notes-wrapper"
-        style={{ height: relevantNotesHeight }}
-      >
-        <RelevantNotes
-          app={app}
-          onAddToChat={handleAddNoteToChat}
-          onRefresh={searchRelevantNotes}
-        />
-      </div>
-      <ResizeHandle onResize={handleRelevantNotesResize} />
+      <RelevantNotes
+        app={app}
+        onAddToChat={handleAddNoteToChat}
+        onRefresh={searchRelevantNotes}
+      />
       <ChatMessages />
       <div className="claude-agent-input-area">
         {(showFileChip || showSelectionChip) && (

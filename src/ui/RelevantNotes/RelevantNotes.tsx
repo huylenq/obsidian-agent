@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { setIcon, type App } from "obsidian";
 import { useAtomValue } from "jotai";
 import { chatStore } from "@/state/chatState";
@@ -12,11 +12,26 @@ import {
 } from "@/state/relevantNotesState";
 import type { SearchMode } from "@/types";
 import { RelevantNoteCard } from "./RelevantNoteCard";
+import { ResizeHandle } from "../ResizeHandle";
 
 interface RelevantNotesProps {
   app: App;
   onAddToChat: (notePath: string) => void;
   onRefresh: () => void;
+}
+
+// Layout constants (px)
+const HEADER_HEIGHT = 36;
+const CARD_HEIGHT = 50; // padding + content + margin
+const CONTENT_PADDING = 12;
+const RESIZE_HANDLE_HEIGHT = 6;
+const MIN_HEIGHT = 80;
+const MAX_HEIGHT = 350;
+
+function calculateIdealHeight(noteCount: number): number {
+  if (noteCount === 0) return MIN_HEIGHT;
+  const ideal = HEADER_HEIGHT + CONTENT_PADDING + RESIZE_HANDLE_HEIGHT + noteCount * CARD_HEIGHT;
+  return Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, ideal));
 }
 
 export function RelevantNotes({
@@ -25,6 +40,13 @@ export function RelevantNotes({
   onRefresh,
 }: RelevantNotesProps) {
   const [isExpanded, setIsExpanded] = useState(true);
+  const [height, setHeight] = useState(MIN_HEIGHT);
+  const hasManuallyResized = useRef(false);
+
+  const handleResize = useCallback((delta: number) => {
+    hasManuallyResized.current = true;
+    setHeight((h) => Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, h + delta)));
+  }, []);
 
   const notes = useAtomValue(relevantNotesAtom, { store: chatStore });
   const searchMode = useAtomValue(searchModeAtom, { store: chatStore });
@@ -33,6 +55,13 @@ export function RelevantNotes({
   const error = useAtomValue(relevantNotesErrorAtom, { store: chatStore });
 
   const chevronRef = useRef<HTMLSpanElement>(null);
+
+  // Auto-size based on notes count (unless user manually resized)
+  useEffect(() => {
+    if (!hasManuallyResized.current) {
+      setHeight(calculateIdealHeight(notes.length));
+    }
+  }, [notes.length]);
 
   useEffect(() => {
     if (chevronRef.current) {
@@ -64,7 +93,10 @@ export function RelevantNotes({
   }
 
   return (
-    <div className="claude-agent-relevant-notes">
+    <div
+      className="claude-agent-relevant-notes"
+      style={{ height: isExpanded ? height : "auto" }}
+    >
       <div
         className="claude-agent-relevant-notes-header"
         onClick={() => setIsExpanded(!isExpanded)}
@@ -122,32 +154,35 @@ export function RelevantNotes({
       </div>
 
       {isExpanded && (
-        <div className="claude-agent-relevant-notes-content">
-          {error && (
-            <div className="claude-agent-relevant-notes-error">{error}</div>
-          )}
+        <>
+          <div className="claude-agent-relevant-notes-content">
+            {error && (
+              <div className="claude-agent-relevant-notes-error">{error}</div>
+            )}
 
-          {isSearching && (
-            <div className="claude-agent-relevant-notes-loading">
-              Searching...
-            </div>
-          )}
+            {isSearching && (
+              <div className="claude-agent-relevant-notes-loading">
+                Searching...
+              </div>
+            )}
 
-          {!isSearching && notes.length === 0 && !error && (
-            <div className="claude-agent-relevant-notes-empty">
-              No relevant notes found
-            </div>
-          )}
+            {!isSearching && notes.length === 0 && !error && (
+              <div className="claude-agent-relevant-notes-empty">
+                No relevant notes found
+              </div>
+            )}
 
-          {notes.map((note) => (
-            <RelevantNoteCard
-              key={note.path}
-              note={note}
-              onAddToChat={() => onAddToChat(note.path)}
-              onOpen={() => handleOpenNote(note.path)}
-            />
-          ))}
-        </div>
+            {notes.map((note) => (
+              <RelevantNoteCard
+                key={note.path}
+                note={note}
+                onAddToChat={() => onAddToChat(note.path)}
+                onOpen={() => handleOpenNote(note.path)}
+              />
+            ))}
+          </div>
+          <ResizeHandle onResize={handleResize} />
+        </>
       )}
     </div>
   );
