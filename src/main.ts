@@ -265,6 +265,8 @@ export default class ClaudeAgentPlugin extends Plugin {
 
     if (leaf) {
       workspace.revealLeaf(leaf);
+      // Focus the chat input after revealing (uses existing event listener in ChatInput)
+      window.dispatchEvent(new CustomEvent("claude-agent:focus-input"));
     }
   }
 
