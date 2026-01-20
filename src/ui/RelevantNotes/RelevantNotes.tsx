@@ -155,23 +155,19 @@ export function RelevantNotes({
 
       {isExpanded && (
         <>
-          <div className="claude-agent-relevant-notes-content">
+          <div className={`claude-agent-relevant-notes-content ${isSearching ? "searching" : ""}`}>
             {error && (
               <div className="claude-agent-relevant-notes-error">{error}</div>
             )}
 
-            {isSearching && (
-              <div className="claude-agent-relevant-notes-loading">
-                Searching...
-              </div>
-            )}
-
+            {/* Show empty state only when not searching and no notes */}
             {!isSearching && notes.length === 0 && !error && (
               <div className="claude-agent-relevant-notes-empty">
                 No relevant notes found
               </div>
             )}
 
+            {/* Always show notes if we have them, even during search (with opacity) */}
             {notes.map((note) => (
               <RelevantNoteCard
                 key={note.path}

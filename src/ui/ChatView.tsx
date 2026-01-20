@@ -28,6 +28,7 @@ import {
   setIndexAvailable,
   setRelevantNotesError,
   searchModeAtom,
+  indexAvailableAtom,
 } from "@/state/relevantNotesState";
 import { CopilotIndexReader, rankNotes } from "@/embeddings";
 import { ChatMessage } from "@/types";
@@ -86,6 +87,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   );
   const model = useAtomValue(modelAtom, { store: chatStore });
   const searchMode = useAtomValue(searchModeAtom, { store: chatStore });
+  const indexAvailable = useAtomValue(indexAvailableAtom, { store: chatStore });
   const modelSelectRef = useRef<HTMLSelectElement>(null);
   const indexReaderRef = useRef<CopilotIndexReader | null>(null);
   const [inputRef, setInputRef] = useState<ChatInputHandle | null>(null);
@@ -274,12 +276,12 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     }
   }, [activeFile, searchMode, app]);
 
-  // Trigger search when active file changes
+  // Trigger search when active file changes or index becomes available
   useEffect(() => {
-    if (activeFile && searchMode === "currentFile") {
+    if (indexAvailable && activeFile && searchMode === "currentFile") {
       searchRelevantNotes();
     }
-  }, [activeFile, searchMode, searchRelevantNotes]);
+  }, [activeFile, searchMode, indexAvailable, searchRelevantNotes]);
 
   // Handle adding a note to chat as @mention
   const handleAddNoteToChat = useCallback((notePath: string) => {
