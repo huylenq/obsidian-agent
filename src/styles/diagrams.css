@@ -27,11 +27,22 @@
   filter: invert(0.88) hue-rotate(180deg);
 }
 
-/* Copy DOT button */
-.claude-agent-dot-copy {
+/* Action buttons (Copy DOT / Copy SVG) */
+.claude-agent-dot-buttons {
   position: absolute;
   top: 6px;
   right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.claude-agent-dot-diagram:hover .claude-agent-dot-buttons {
+  opacity: 1;
+}
+
+.claude-agent-dot-btn {
   padding: 4px 8px;
   font-size: 11px;
   border: none;
@@ -39,15 +50,9 @@
   background-color: var(--background-modifier-hover);
   color: var(--text-muted);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s;
 }
 
-.claude-agent-dot-diagram:hover .claude-agent-dot-copy {
-  opacity: 1;
-}
-
-.claude-agent-dot-copy:hover {
+.claude-agent-dot-btn:hover {
   background-color: var(--interactive-accent);
   color: var(--text-on-accent);
 }

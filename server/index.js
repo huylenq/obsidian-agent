@@ -209,7 +209,7 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
     model: model || "haiku",
     systemPrompt: buildSystemPrompt(),
     permissionMode: "bypassPermissions",
-    maxTurns: 10,
+    maxTurns: 100,
     settingSources: ["user", "project", "local"],
     cwd: workingDirectory,
     ...(resumeSessionId && { resume: resumeSessionId }),
