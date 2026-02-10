@@ -1,0 +1,87 @@
+/* DOT/Graphviz diagrams and LaTeX/MathJax click-to-copy */
+
+.claude-agent-dot-diagram {
+  position: relative;
+  background-color: var(--background-secondary);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 8px 0;
+  overflow-x: auto;
+}
+
+.claude-agent-dot-diagram svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.claude-agent-dot-diagram text {
+  font-family: var(--font-text);
+  font-size: 0.85em;
+}
+
+/* Dark mode: invert the SVG so all colors adapt automatically.
+   hue-rotate(180deg) compensates for the hue shift from inversion,
+   keeping blues blue-ish, reds red-ish, etc. */
+.theme-dark .claude-agent-dot-diagram svg {
+  filter: invert(0.88) hue-rotate(180deg);
+}
+
+/* Copy DOT button */
+.claude-agent-dot-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  border: none;
+  border-radius: 4px;
+  background-color: var(--background-modifier-hover);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.claude-agent-dot-diagram:hover .claude-agent-dot-copy {
+  opacity: 1;
+}
+
+.claude-agent-dot-copy:hover {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+/* Error state */
+.claude-agent-dot-diagram.dot-error {
+  border: 1px solid var(--text-error);
+  background-color: rgba(var(--color-red-rgb, 255, 0, 0), 0.05);
+}
+
+.claude-agent-dot-error-msg {
+  color: var(--text-error);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.claude-agent-dot-diagram.dot-error pre {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* LaTeX/MathJax - Click to copy LaTeX source */
+
+.claude-agent-message-content mjx-container {
+  pointer-events: auto !important;
+  cursor: pointer;
+}
+
+.claude-agent-message-content mjx-container * {
+  pointer-events: auto !important;
+}
+
+.claude-agent-message-content .katex {
+  pointer-events: auto !important;
+  cursor: pointer;
+}

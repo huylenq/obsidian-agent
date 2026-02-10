@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { MarkdownRenderer, Component, App } from "obsidian";
+import { renderDotBlocks } from "./dotRenderer";
 
 // Obsidian exposes `app` as a global
 declare const app: App;
@@ -33,16 +34,20 @@ export function MarkdownContent({ content, className }: MarkdownContentProps) {
     // This preserves the line breaks that Claude sends
     const formattedContent = content.replace(/\n/g, "  \n");
 
-    // Render markdown
+    // Render markdown, then post-process DOT code blocks into SVG
+    let cancelled = false;
     MarkdownRenderer.render(
       app,
       formattedContent,
       container,
       "",
       componentRef.current
-    );
+    ).then(() => {
+      if (!cancelled) renderDotBlocks(container);
+    });
 
     return () => {
+      cancelled = true;
       // Cleanup on unmount
       if (componentRef.current) {
         componentRef.current.unload();

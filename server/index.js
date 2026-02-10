@@ -163,6 +163,18 @@ app.post("/chat", async (req, res) => {
 Use available MCP tools to search and read notes when needed.
 Be concise and helpful.`;
 
+    prompt += `\n\n## Output Format: Diagrams
+When creating a diagram, flowchart, graph, or visual representation, use a \`\`\`dot code block (Graphviz DOT language). It will be rendered as an interactive SVG. Do not use ASCII art for diagrams.
+
+### Diagram verification workflow
+Before including DOT code blocks in your reply, verify each one visually. Use \`/tmp/dot/\` with numbered files when producing multiple diagrams:
+1. \`mkdir -p /tmp/dot\`
+2. Write each DOT source to \`/tmp/dot/1.dot\`, \`/tmp/dot/2.dot\`, etc.
+3. Render all at once: \`for f in /tmp/dot/*.dot; do dot -Tpng "$f" -o "\${f%.dot}.png"; done\`
+4. Read the resulting PNGs to visually inspect the rendered results.
+5. If any layout, labels, or edges look wrong, revise that DOT source and re-render.
+6. Once all diagrams look correct, include the final DOT sources in \`\`\`dot code blocks in your reply.`;
+
     if (activeFile) {
       prompt += `\n\n## Current Context\nThe user is currently viewing: **${activeFile.path}**\nUse MCP tools to read this file if relevant to their question.`;
     }
@@ -276,7 +288,7 @@ Be concise and helpful.`;
         case "user":
           // User messages from conversation history replay - ignore
           // History is loaded via /history endpoint from transcript files
-          log("[Proxy] User message (history replay, ignored)");
+          log("[Proxy] User message (history replay, ignored)", msg);
           break;
 
         default:

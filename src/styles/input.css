@@ -1,0 +1,130 @@
+/* Input area, textarea, send button, model select, notes checkbox */
+
+.claude-agent-input-area {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--background-modifier-border);
+  background-color: var(--background-primary);
+  padding: 12px 16px;
+}
+
+.claude-agent-input-container {
+  display: flex;
+  padding: 12px 16px;
+  gap: 8px;
+  border-top: 1px solid var(--background-modifier-border);
+  background-color: var(--background-primary);
+}
+
+/* Override input container padding when inside input-area */
+.claude-agent-input-area .claude-agent-input-container {
+  padding: 0;
+  border-top: none;
+}
+
+.claude-agent-input-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.claude-agent-input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 14px;
+  resize: none;
+  min-height: 40px;
+  max-height: 200px;
+}
+
+.claude-agent-input:focus {
+  outline: none;
+  border-color: var(--interactive-accent);
+}
+
+.claude-agent-send-button {
+  padding: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.claude-agent-send-button:hover {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.claude-agent-send-button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.claude-agent-send-button:disabled:hover {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+/* Footer controls */
+
+.claude-agent-input-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.claude-agent-model-select {
+  padding: 2px 6px;
+  font-size: 11px;
+  border: none;
+  border-radius: 4px;
+  background-color: var(--background-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.claude-agent-model-select:hover {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.claude-agent-model-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.claude-agent-include-notes-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.claude-agent-include-notes-label:hover {
+  color: var(--text-normal);
+}
+
+.claude-agent-include-notes-checkbox {
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--interactive-accent);
+}
+
+.claude-agent-include-notes-checkbox:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

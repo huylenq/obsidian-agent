@@ -1,0 +1,93 @@
+/* Message bubbles, content, loading animation */
+
+.claude-agent-message {
+  padding: 0 16px;
+  border-radius: 8px;
+  max-width: 85%;
+  word-wrap: break-word;
+}
+
+.claude-agent-message.user {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  align-self: flex-end;
+  margin-left: auto;
+}
+
+.claude-agent-message.assistant {
+  background-color: var(--background-secondary);
+  color: var(--text-normal);
+  align-self: flex-start;
+}
+
+.claude-agent-message.error {
+  background-color: var(--background-modifier-error);
+  color: var(--text-error);
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+.claude-agent-message-content {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.claude-agent-message.tool-call {
+  background-color: var(--background-modifier-border);
+  font-size: 0.85em;
+  opacity: 0.8;
+  font-family: var(--font-monospace);
+}
+
+.claude-agent-source {
+  font-size: 0.8em;
+  color: var(--text-muted);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.claude-agent-source a {
+  color: var(--text-accent);
+}
+
+/* Loading indicator */
+
+.claude-agent-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  color: var(--text-muted);
+}
+
+.claude-agent-loading-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.claude-agent-loading-dot {
+  width: 6px;
+  height: 6px;
+  background-color: var(--text-muted);
+  border-radius: 50%;
+  animation: claude-agent-bounce 1.4s infinite ease-in-out both;
+}
+
+.claude-agent-loading-dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.claude-agent-loading-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes claude-agent-bounce {
+  0%, 80%, 100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
+}

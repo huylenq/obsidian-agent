@@ -1,0 +1,9 @@
+/* Claude Agent Plugin Styles */
+
+@import "./layout.css";
+@import "./messages.css";
+@import "./input.css";
+@import "./context-chips.css";
+@import "./mention.css";
+@import "./relevant-notes.css";
+@import "./diagrams.css";

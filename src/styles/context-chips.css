@@ -1,0 +1,143 @@
+/* Active file chip, selection chip, context chips container */
+
+.claude-agent-context-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Active file chip */
+
+.claude-agent-active-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  font-size: 12px;
+  width: fit-content;
+}
+
+.claude-agent-active-file-icon {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.claude-agent-active-file-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.claude-agent-active-file-name {
+  color: var(--text-normal);
+  font-weight: 500;
+}
+
+.claude-agent-active-file-label {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.claude-agent-active-file-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin-left: 2px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.claude-agent-active-file-clear svg {
+  width: 12px;
+  height: 12px;
+}
+
+.claude-agent-active-file-clear:hover {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+/* Selection chip */
+
+.claude-agent-selection-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background-color: var(--background-secondary);
+  border: 1px solid var(--interactive-accent);
+  border-radius: 6px;
+  font-size: 12px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.claude-agent-selection-icon {
+  display: flex;
+  align-items: center;
+  color: var(--interactive-accent);
+  flex-shrink: 0;
+}
+
+.claude-agent-selection-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.claude-agent-selection-preview {
+  color: var(--text-normal);
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.claude-agent-selection-lines {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font-monospace);
+  flex-shrink: 0;
+}
+
+.claude-agent-selection-label {
+  color: var(--interactive-accent);
+  font-size: 11px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.claude-agent-selection-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin-left: 2px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.claude-agent-selection-clear svg {
+  width: 12px;
+  height: 12px;
+}
+
+.claude-agent-selection-clear:hover {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
