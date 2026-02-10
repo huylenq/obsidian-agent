@@ -131,7 +131,7 @@ app.post("/history", (req, res) => {
  * Uses MCP servers configured in ~/.claude/ or vault's .claude/
  */
 app.post("/chat", async (req, res) => {
-  const { message, systemPrompt, sessionId, workingDirectory, activeFile, mentionedFiles, selection, model } = req.body;
+  const { message, systemPrompt, sessionId, workingDirectory, activeFile, mentionedFiles, selection, model, relevantNotes } = req.body;
 
   log("[Proxy] Received chat request:", {
     message,
@@ -139,7 +139,8 @@ app.post("/chat", async (req, res) => {
     workingDirectory: workingDirectory || "default",
     activeFile: activeFile?.path || "none",
     selection: selection ? `${selection.text.slice(0, 50)}... (from ${selection.filePath})` : "none",
-    mentionedFiles: mentionedFiles?.map(f => f.path) || []
+    mentionedFiles: mentionedFiles?.map(f => f.path) || [],
+    relevantNotes: relevantNotes?.length || 0
   });
 
   if (!message) {
@@ -178,6 +179,15 @@ Be concise and helpful.`;
     if (mentionedFiles && mentionedFiles.length > 0) {
       const fileList = mentionedFiles.map(f => `- ${f.path}`).join("\n");
       prompt += `\n\n## Referenced Files\nThe user has explicitly mentioned the following files (using @[[path]] syntax). Use MCP tools to read these files as they are likely central to their question:\n${fileList}`;
+    }
+
+    if (relevantNotes && relevantNotes.length > 0) {
+      const notesList = relevantNotes.map(note => {
+        const preview = note.content.slice(0, 200).replace(/\n/g, " ").trim();
+        const truncated = note.content.length > 200 ? preview + "..." : preview;
+        return `- **${note.title}** (${note.path}): ${truncated}`;
+      }).join("\n");
+      prompt += `\n\n## Relevant Notes (auto-included based on similarity)\nThe following notes are semantically related to the current context. Consider them when answering:\n${notesList}`;
     }
 
     return prompt;

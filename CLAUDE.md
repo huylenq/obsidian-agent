@@ -34,7 +34,7 @@ The plugin auto-starts the proxy server as a child process. Just enable the plug
 After making changes:
 
 ```bash
-pnpm build && pnpm run deploy
+pnpm run deploy
 ```
 
 Then reload Obsidian (or disable/enable the plugin) to pick up changes.

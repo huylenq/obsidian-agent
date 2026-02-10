@@ -27,6 +27,7 @@ export interface ClaudeAgentSettings {
   showDebugInfo: boolean;
   sessionId: string | null;
   model: ClaudeModel;
+  includeRelevantNotes: boolean;
 }
 
 export const DEFAULT_SETTINGS: ClaudeAgentSettings = {
@@ -36,6 +37,7 @@ Be concise and accurate.`,
   showDebugInfo: false,
   sessionId: null,
   model: "haiku",
+  includeRelevantNotes: true,
 };
 
 // ============================================================================

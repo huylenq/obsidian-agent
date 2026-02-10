@@ -4,6 +4,7 @@ import * as path from "path";
 import { ClaudeAgentSettings, DEFAULT_SETTINGS } from "./types";
 import { ClaudeAgentSettingTab } from "./settings";
 import { ClaudeAgentChatView, CHAT_VIEW_TYPE } from "./ui/ChatView";
+import { RelevantNotesView, RELEVANT_NOTES_VIEW_TYPE } from "./ui/RelevantNotesView";
 import { ClaudeAgentClient } from "./claude/client";
 
 const PROXY_PORT = 27182;
@@ -31,6 +32,9 @@ export default class ClaudeAgentPlugin extends Plugin {
     // Register the chat view
     this.registerView(CHAT_VIEW_TYPE, (leaf) => new ClaudeAgentChatView(leaf, this));
 
+    // Register the relevant notes view
+    this.registerView(RELEVANT_NOTES_VIEW_TYPE, (leaf) => new RelevantNotesView(leaf, this));
+
     // Add ribbon icon
     this.addRibbonIcon("message-circle", "Open Claude Agent", () => {
       this.activateChatView();
@@ -42,6 +46,15 @@ export default class ClaudeAgentPlugin extends Plugin {
       name: "Open Claude Agent Chat",
       callback: () => {
         this.activateChatView();
+      },
+    });
+
+    // Add command to open relevant notes
+    this.addCommand({
+      id: "open-relevant-notes",
+      name: "Open Relevant Notes",
+      callback: () => {
+        this.activateRelevantNotesView();
       },
     });
 
@@ -97,10 +110,17 @@ export default class ClaudeAgentPlugin extends Plugin {
 
     console.log(`[ClaudeAgent] Starting proxy server from ${serverDir}`);
 
+    // Use shell to inherit PATH for finding node (macOS GUI apps have minimal PATH)
     this.serverProcess = spawn("node", ["index.js"], {
       cwd: serverDir,
       stdio: ["ignore", "pipe", "pipe"],
       detached: false,
+      shell: true,
+      env: {
+        ...process.env,
+        // Ensure common node install locations are in PATH
+        PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ""}`,
+      },
     });
 
     this.serverProcess.stdout?.on("data", (data) => {
@@ -267,6 +287,31 @@ export default class ClaudeAgentPlugin extends Plugin {
       workspace.revealLeaf(leaf);
       // Focus the chat input after revealing (uses existing event listener in ChatInput)
       window.dispatchEvent(new CustomEvent("claude-agent:focus-input"));
+    }
+  }
+
+  /**
+   * Activate or focus the relevant notes view
+   */
+  async activateRelevantNotesView(): Promise<void> {
+    const { workspace } = this.app;
+
+    let leaf = workspace.getLeavesOfType(RELEVANT_NOTES_VIEW_TYPE)[0];
+
+    if (!leaf) {
+      // Create a new leaf in the right sidebar
+      const rightLeaf = workspace.getRightLeaf(false);
+      if (rightLeaf) {
+        await rightLeaf.setViewState({
+          type: RELEVANT_NOTES_VIEW_TYPE,
+          active: true,
+        });
+        leaf = rightLeaf;
+      }
+    }
+
+    if (leaf) {
+      workspace.revealLeaf(leaf);
     }
   }
 

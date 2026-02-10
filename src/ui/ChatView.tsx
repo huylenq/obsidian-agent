@@ -2,12 +2,11 @@ import React, { useCallback, useState, useEffect, useRef } from "react";
 import { useAtomValue } from "jotai";
 import { App, ItemView, WorkspaceLeaf, MarkdownView } from "obsidian";
 import { createRoot, Root } from "react-dom/client";
-import { ActiveFileContext, ClaudeModel, SelectionContext, RelevantNote } from "@/types";
+import { ActiveFileContext, ClaudeModel, SelectionContext } from "@/types";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatMessages } from "./ChatMessages";
 import { ActiveFileChip } from "./ActiveFileChip";
 import { SelectionChip } from "./SelectionChip";
-import { RelevantNotes } from "./RelevantNotes";
 import { FileSearchResult } from "@/utils/fileSearch";
 import {
   addMessage,
@@ -23,14 +22,10 @@ import {
   modelAtom,
 } from "@/state/chatState";
 import {
-  setRelevantNotes,
-  setSearchingNotes,
-  setIndexAvailable,
-  setRelevantNotesError,
-  searchModeAtom,
-  indexAvailableAtom,
+  relevantNotesAtom,
+  includeRelevantNotesAtom,
+  setIncludeRelevantNotes,
 } from "@/state/relevantNotesState";
-import { CopilotIndexReader, rankNotes } from "@/embeddings";
 import { ChatMessage } from "@/types";
 import type ClaudeAgentPlugin from "@/main";
 import { initializeCommands, commandRegistry, CommandContext } from "@/commands";
@@ -86,10 +81,9 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     plugin.claudeClient?.getSessionId() ?? null
   );
   const model = useAtomValue(modelAtom, { store: chatStore });
-  const searchMode = useAtomValue(searchModeAtom, { store: chatStore });
-  const indexAvailable = useAtomValue(indexAvailableAtom, { store: chatStore });
+  const relevantNotes = useAtomValue(relevantNotesAtom, { store: chatStore });
+  const includeRelevantNotes = useAtomValue(includeRelevantNotesAtom, { store: chatStore });
   const modelSelectRef = useRef<HTMLSelectElement>(null);
-  const indexReaderRef = useRef<CopilotIndexReader | null>(null);
   const [inputRef, setInputRef] = useState<ChatInputHandle | null>(null);
 
   // Listen for command to open model selector
@@ -106,6 +100,11 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   useEffect(() => {
     chatStore.set(modelAtom, plugin.settings.model);
   }, [plugin.settings.model]);
+
+  // Sync includeRelevantNotes atom with plugin settings on mount
+  useEffect(() => {
+    setIncludeRelevantNotes(plugin.settings.includeRelevantNotes);
+  }, [plugin.settings.includeRelevantNotes]);
 
   // Subscribe to session ID changes (also saves settings for persistence)
   useEffect(() => {
@@ -224,70 +223,24 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     initializeCommands();
   }, []);
 
-  // Initialize Copilot index reader
+  // Listen for "add note to chat" events from RelevantNotesView
   useEffect(() => {
-    const initIndex = async () => {
-      const reader = new CopilotIndexReader(app);
-      const success = await reader.initialize();
-      indexReaderRef.current = reader;
-      setIndexAvailable(success);
-      if (success) {
-        console.log("[ChatView] Copilot index loaded successfully");
+    const handleAddNoteToChat = (event: CustomEvent<{ notePath: string }>) => {
+      if (inputRef?.insertMention) {
+        inputRef.insertMention(event.detail.notePath);
       }
     };
-    initIndex();
-  }, [app]);
 
-  // Search for relevant notes when active file changes or search mode changes
-  const searchRelevantNotes = useCallback(async () => {
-    const reader = indexReaderRef.current;
-    if (!reader || !reader.isInitialized()) return;
-
-    setSearchingNotes(true);
-    setRelevantNotesError(null);
-
-    try {
-      let results: RelevantNote[] = [];
-      if (searchMode === "currentFile" && activeFile) {
-        // Search based on current file
-        results = await reader.searchSimilarToPath(activeFile.path, {
-          minSimilarity: 0.4,
-          limit: 10,
-        });
-      } else if (searchMode === "chatContext") {
-        // For chat context mode, we'd need to get embeddings for chat messages
-        // For now, fall back to current file if available
-        if (activeFile) {
-          results = await reader.searchSimilarToPath(activeFile.path, {
-            minSimilarity: 0.4,
-            limit: 10,
-          });
-        }
-      }
-
-      // Rank results with link weighting
-      const ranked = rankNotes(results, activeFile?.path ?? null, app);
-      setRelevantNotes(ranked);
-    } catch (error) {
-      console.error("[ChatView] Error searching relevant notes:", error);
-      setRelevantNotesError("Failed to search for relevant notes");
-    } finally {
-      setSearchingNotes(false);
-    }
-  }, [activeFile, searchMode, app]);
-
-  // Trigger search when active file changes or index becomes available
-  useEffect(() => {
-    if (indexAvailable && activeFile && searchMode === "currentFile") {
-      searchRelevantNotes();
-    }
-  }, [activeFile, searchMode, indexAvailable, searchRelevantNotes]);
-
-  // Handle adding a note to chat as @mention
-  const handleAddNoteToChat = useCallback((notePath: string) => {
-    if (inputRef?.insertMention) {
-      inputRef.insertMention(notePath);
-    }
+    window.addEventListener(
+      "claude-agent:add-note-to-chat",
+      handleAddNoteToChat as EventListener
+    );
+    return () => {
+      window.removeEventListener(
+        "claude-agent:add-note-to-chat",
+        handleAddNoteToChat as EventListener
+      );
+    };
   }, [inputRef]);
 
   const handleCommand = useCallback(
@@ -336,6 +289,12 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     window.dispatchEvent(new CustomEvent("claude-agent:focus-input"));
   }, [plugin]);
 
+  const handleIncludeNotesChange = useCallback((enabled: boolean) => {
+    setIncludeRelevantNotes(enabled);
+    plugin.settings.includeRelevantNotes = enabled;
+    plugin.saveSettings();
+  }, [plugin]);
+
   const handleSend = useCallback(
     async (message: string, mentionedFiles: FileSearchResult[]) => {
       // Capture context before sending
@@ -372,10 +331,15 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           );
         }
 
+        // Get high-match relevant notes if enabled
+        const highMatchNotes = includeRelevantNotes
+          ? relevantNotes.filter(note => note.category === "high" || note.finalScore > 0.7)
+          : undefined;
+
         let fullResponse = "";
 
         // Stream the response
-        for await (const chunk of plugin.claudeClient.chat(message, fileContext, mentionedFiles, selectionContext)) {
+        for await (const chunk of plugin.claudeClient.chat(message, fileContext, mentionedFiles, selectionContext, highMatchNotes)) {
           switch (chunk.type) {
             case "text":
               // chunk.content is the full accumulated text, not a delta
@@ -423,7 +387,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         setLoading(false);
       }
     },
-    [plugin, activeFile, isContextCleared, selection]
+    [plugin, activeFile, isContextCleared, selection, includeRelevantNotes, relevantNotes]
   );
 
   const showFileChip = activeFile && !isContextCleared;
@@ -464,11 +428,6 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           </svg>
         </button>
       </div>
-      <RelevantNotes
-        app={app}
-        onAddToChat={handleAddNoteToChat}
-        onRefresh={searchRelevantNotes}
-      />
       <ChatMessages />
       <div className="claude-agent-input-area">
         {(showFileChip || showSelectionChip) && (
@@ -500,6 +459,16 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
             <option value="sonnet">Sonnet</option>
             <option value="opus">Opus</option>
           </select>
+          <label className="claude-agent-include-notes-label">
+            <input
+              type="checkbox"
+              className="claude-agent-include-notes-checkbox"
+              checked={includeRelevantNotes}
+              onChange={(e) => handleIncludeNotesChange(e.target.checked)}
+              disabled={isLoading}
+            />
+            <span>Include relevances</span>
+          </label>
         </div>
       </div>
     </div>

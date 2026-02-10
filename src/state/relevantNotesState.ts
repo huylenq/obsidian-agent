@@ -21,6 +21,9 @@ export const indexAvailableAtom = atom<boolean>(false);
 // Error state for relevant notes
 export const relevantNotesErrorAtom = atom<string | null>(null);
 
+// Whether to include relevant notes in prompt context (checkbox state)
+export const includeRelevantNotesAtom = atom<boolean>(true);
+
 // Actions
 export function setRelevantNotes(notes: RankedNote[]): void {
   chatStore.set(relevantNotesAtom, notes);
@@ -45,4 +48,8 @@ export function setRelevantNotesError(error: string | null): void {
 export function clearRelevantNotes(): void {
   chatStore.set(relevantNotesAtom, []);
   chatStore.set(relevantNotesErrorAtom, null);
+}
+
+export function setIncludeRelevantNotes(enabled: boolean): void {
+  chatStore.set(includeRelevantNotesAtom, enabled);
 }
