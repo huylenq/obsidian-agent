@@ -1,9 +1,17 @@
+export interface CompactMetadata {
+  preTokens: number;
+  trigger: "manual" | "auto";
+  summary?: string;
+  sdkSummary?: string;
+}
+
 export interface ChatMessage {
   id: string;
-  role: "user" | "assistant" | "tool";
+  role: "user" | "assistant" | "tool" | "compact_boundary";
   content: string;
   timestamp: number;
   toolName?: string;
+  compactMetadata?: CompactMetadata;
 }
 
 export interface ActiveFileContext {

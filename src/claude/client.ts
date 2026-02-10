@@ -4,10 +4,15 @@ import { FileSearchResult } from "@/utils/fileSearch";
 const PROXY_URL = "http://localhost:27182";
 
 export interface ChatResponse {
-  type: "text" | "tool_call" | "tool_result" | "error" | "done" | "session";
+  type: "text" | "tool_call" | "tool_result" | "error" | "done" | "session" | "compact_boundary";
   content: string;
   toolName?: string;
   sessionId?: string;
+  compactMetadata?: {
+    preTokens: number;
+    trigger: "manual" | "auto";
+    summary?: string;
+  };
 }
 
 /**
@@ -158,7 +163,7 @@ export class ClaudeAgentClient {
   /**
    * Parse proxy server message into ChatResponse
    */
-  private parseProxyMessage(data: { type: string; content?: string; toolName?: string; sessionId?: string }): ChatResponse {
+  private parseProxyMessage(data: { type: string; content?: string; toolName?: string; sessionId?: string; preTokens?: number; trigger?: string; summary?: string }): ChatResponse {
     switch (data.type) {
       case "text":
         return { type: "text", content: data.content || "" };
@@ -168,6 +173,16 @@ export class ClaudeAgentClient {
         return { type: "tool_result", content: `Result from: ${data.toolName}`, toolName: data.toolName };
       case "error":
         return { type: "error", content: data.content || "Unknown error" };
+      case "compact_boundary":
+        return {
+          type: "compact_boundary",
+          content: "",
+          compactMetadata: {
+            preTokens: data.preTokens || 0,
+            trigger: (data.trigger as "manual" | "auto") || "manual",
+            summary: data.summary,
+          },
+        };
       case "session":
         // Store session ID for conversation continuity
         if (data.sessionId) {

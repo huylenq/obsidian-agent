@@ -26,7 +26,7 @@ import {
   includeRelevantNotesAtom,
   setIncludeRelevantNotes,
 } from "@/state/relevantNotesState";
-import { ChatMessage } from "@/types";
+import { ChatMessage, CompactMetadata } from "@/types";
 import type ClaudeAgentPlugin from "@/main";
 import { initializeCommands, commandRegistry, CommandContext } from "@/commands";
 
@@ -139,11 +139,12 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       try {
         const historyMessages = await plugin.claudeClient.fetchHistory();
         if (historyMessages.length > 0) {
-          const chatMessages: ChatMessage[] = historyMessages.map((msg) => ({
+          const chatMessages: ChatMessage[] = historyMessages.map((msg: { role: string; content: string; timestamp: number; compactMetadata?: CompactMetadata }) => ({
             id: generateMessageId(),
-            role: msg.role,
+            role: msg.role as ChatMessage["role"],
             content: msg.content,
             timestamp: msg.timestamp,
+            ...(msg.compactMetadata && { compactMetadata: msg.compactMetadata }),
           }));
           chatStore.set(messagesAtom, chatMessages);
           console.log("[ChatView] Loaded", chatMessages.length, "history messages");
@@ -243,71 +244,21 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     };
   }, [inputRef]);
 
-  const handleCommand = useCallback(
-    async (commandName: string, args: string) => {
-      const command = commandRegistry.get(commandName);
-
-      if (!command) {
-        setError(`Unknown command: /${commandName}`);
-        return;
-      }
-
-      const context: CommandContext = {
-        plugin,
-        app,
-        clearMessages,
-      };
-
-      try {
-        const result = await command.execute(context, args);
-        if (!result.silent && result.message) {
-          addMessage({
-            id: generateMessageId(),
-            role: "assistant",
-            content: result.message,
-            timestamp: Date.now(),
-          });
-        }
-        // Update local session state if it was a clear command
-        if (commandName === "clear" || commandName === "new" || commandName === "reset") {
-          setSessionId(null);
-        }
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Command failed";
-        setError(errorMessage);
-      }
-    },
-    [plugin, app]
-  );
-
-  const handleModelChange = useCallback((newModel: ClaudeModel) => {
-    chatStore.set(modelAtom, newModel);
-    plugin.settings.model = newModel;
-    plugin.saveSettings();
-    // Return focus to input
-    window.dispatchEvent(new CustomEvent("claude-agent:focus-input"));
-  }, [plugin]);
-
-  const handleIncludeNotesChange = useCallback((enabled: boolean) => {
-    setIncludeRelevantNotes(enabled);
-    plugin.settings.includeRelevantNotes = enabled;
-    plugin.saveSettings();
-  }, [plugin]);
-
   const handleSend = useCallback(
     async (message: string, mentionedFiles: FileSearchResult[]) => {
       // Capture context before sending
       const fileContext = isContextCleared ? undefined : activeFile;
       const selectionContext = selection;
 
-      // Add user message
-      addMessage({
-        id: generateMessageId(),
-        role: "user",
-        content: message,
-        timestamp: Date.now(),
-      });
+      // Add user message (skip slash commands — they're internal)
+      if (!message.startsWith("/")) {
+        addMessage({
+          id: generateMessageId(),
+          role: "user",
+          content: message,
+          timestamp: Date.now(),
+        });
+      }
 
       setLoading(true);
       setError(null);
@@ -360,13 +311,28 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
               }
               break;
 
+            case "compact_boundary":
+              addMessage({
+                id: generateMessageId(),
+                role: "compact_boundary",
+                content: "",
+                timestamp: Date.now(),
+                compactMetadata: {
+                  preTokens: chunk.compactMetadata?.preTokens || 0,
+                  trigger: chunk.compactMetadata?.trigger || "manual",
+                  summary: chunk.compactMetadata?.summary,
+                },
+              });
+              break;
+
             case "error":
               setError(chunk.content);
               break;
 
             case "done":
               // Add the complete assistant message
-              if (fullResponse) {
+              // Skip trivial SDK acknowledgments (e.g. "Compacted" from /compact)
+              if (fullResponse && !/^compacted$/i.test(fullResponse.trim())) {
                 clearStreamingMessage();
                 addMessage({
                   id: generateMessageId(),
@@ -374,6 +340,8 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
                   content: fullResponse,
                   timestamp: Date.now(),
                 });
+              } else {
+                clearStreamingMessage();
               }
               break;
           }
@@ -389,6 +357,64 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     },
     [plugin, activeFile, isContextCleared, selection, includeRelevantNotes, relevantNotes]
   );
+
+  const handleCommand = useCallback(
+    async (commandName: string, args: string) => {
+      // /compact routes through the chat pipeline (needs SSE streaming for compact_boundary)
+      if (commandName === "compact") {
+        await handleSend("/compact", []);
+        return;
+      }
+
+      const command = commandRegistry.get(commandName);
+
+      if (!command) {
+        setError(`Unknown command: /${commandName}`);
+        return;
+      }
+
+      const context: CommandContext = {
+        plugin,
+        app,
+        clearMessages,
+      };
+
+      try {
+        const result = await command.execute(context, args);
+        if (!result.silent && result.message) {
+          addMessage({
+            id: generateMessageId(),
+            role: "assistant",
+            content: result.message,
+            timestamp: Date.now(),
+          });
+        }
+        // Update local session state if it was a clear command
+        if (commandName === "clear" || commandName === "new" || commandName === "reset") {
+          setSessionId(null);
+        }
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Command failed";
+        setError(errorMessage);
+      }
+    },
+    [plugin, app, handleSend]
+  );
+
+  const handleModelChange = useCallback((newModel: ClaudeModel) => {
+    chatStore.set(modelAtom, newModel);
+    plugin.settings.model = newModel;
+    plugin.saveSettings();
+    // Return focus to input
+    window.dispatchEvent(new CustomEvent("claude-agent:focus-input"));
+  }, [plugin]);
+
+  const handleIncludeNotesChange = useCallback((enabled: boolean) => {
+    setIncludeRelevantNotes(enabled);
+    plugin.settings.includeRelevantNotes = enabled;
+    plugin.saveSettings();
+  }, [plugin]);
 
   const showFileChip = activeFile && !isContextCleared;
   const showSelectionChip = selection !== undefined;

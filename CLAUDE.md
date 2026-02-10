@@ -82,4 +82,24 @@ The agent uses MCP servers configured in:
 - `~/.claude/settings.json` (user settings)
 - `<vault>/.claude/settings.json` (project settings)
 
-Set via `settingSources: ["user", "project"]` and `workingDirectory` pointing to the vault path.
+Set via `settingSources: ["user", "project", "local"]` and `workingDirectory` pointing to the vault path.
+
+## Compaction
+
+Long conversations are managed via the Agent SDK's compaction feature. The `/compact` slash command triggers it.
+
+**Flow:** `/compact` → proxy sends to SDK → SDK summarizes internally and emits `compact_boundary` → proxy reads transcript segment, generates a synthetic summary via Haiku (cwd: `/tmp/claude-agent-compact-summaries`), persists to sidecar file → client renders collapsible boundary divider with summary.
+
+**Key details:**
+- Synthetic summaries stored at `~/.claude/projects/{encoded-path}/{sessionId}.summaries.json`
+- Throwaway Haiku sessions for summarization use `/tmp/claude-agent-compact-summaries` as cwd to avoid polluting the main project's transcripts
+- UI groups messages by compact boundaries — compacted groups are collapsed by default, expandable on click
+- SDK injects a synthetic user message after `compact_boundary` in the transcript containing its own detailed summary — captured as `sdkSummary` and rendered with markdown in the boundary UI
+- History endpoint filters compaction artifacts from transcript: `/compact` command, SDK's "Compacted" acknowledgment, `<local-command-caveat>` system injections
+
+## Slash Commands
+
+Registered in `src/commands/builtins/` and initialized in `src/commands/index.ts`. Autocomplete triggers when typing `/` in the chat input.
+
+- `/clear` (aliases: `/new`, `/reset`) — start fresh session
+- `/compact` — compact conversation context (routes through chat pipeline, not a local command)

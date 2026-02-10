@@ -1,12 +1,13 @@
 import express from "express";
 import cors from "cors";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { readFileSync, existsSync, appendFileSync, writeFileSync } from "fs";
+import { readFileSync, existsSync, appendFileSync, writeFileSync, mkdirSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 
 const PORT = process.env.PORT || 27182;
 const LOG_FILE = join(homedir(), ".claude-agent-proxy.log");
+const COMPACT_SUMMARY_CWD = "/tmp/claude-agent-compact-summaries";
 
 // Initialize log file
 writeFileSync(LOG_FILE, `\n=== Server started at ${new Date().toISOString()} ===\n`);
@@ -24,6 +25,130 @@ function logError(...args) {
   appendFileSync(LOG_FILE, message);
   console.error(...args);
 }
+
+// ============================================================================
+// Transcript & summary helpers
+// ============================================================================
+
+function encodePath(workingDirectory) {
+  return workingDirectory ? workingDirectory.replace(/[\/\s~]/g, "-") : "";
+}
+
+function getTranscriptPath(workingDirectory, sessionId) {
+  return join(homedir(), ".claude", "projects", encodePath(workingDirectory), `${sessionId}.jsonl`);
+}
+
+function getSummariesPath(workingDirectory, sessionId) {
+  return join(homedir(), ".claude", "projects", encodePath(workingDirectory), `${sessionId}.summaries.json`);
+}
+
+/** Extract text content from a transcript entry's message field */
+function extractTextFromEntry(entry) {
+  if (!entry.message) return "";
+  const msg = typeof entry.message === "string" ? JSON.parse(entry.message) : entry.message;
+  if (!msg.content) return "";
+  if (typeof msg.content === "string") return msg.content;
+  if (Array.isArray(msg.content)) {
+    return msg.content
+      .filter(block => block.type === "text")
+      .map(block => block.text)
+      .join("");
+  }
+  return "";
+}
+
+/** Read user/assistant messages from the latest segment (after last compact_boundary) */
+function readLatestSegmentMessages(transcriptPath) {
+  if (!existsSync(transcriptPath)) return [];
+  const content = readFileSync(transcriptPath, "utf-8");
+  const lines = content.trim().split("\n");
+
+  let segment = [];
+  for (const line of lines) {
+    try {
+      const entry = JSON.parse(line);
+      if (entry.type === "system" && entry.subtype === "compact_boundary") {
+        segment = []; // reset — only keep messages after the latest boundary
+      } else if (entry.type === "user" || entry.type === "assistant") {
+        const text = extractTextFromEntry(entry);
+        if (text) segment.push({ role: entry.type, content: text });
+      }
+    } catch { /* skip malformed */ }
+  }
+  return segment;
+}
+
+/** Generate a compact summary via Agent SDK with a throwaway /tmp session */
+async function generateCompactSummary(messages) {
+  if (messages.length === 0) return null;
+
+  // Cap at 30 messages, truncate each to 300 chars
+  const capped = messages.slice(-30);
+  const conversationText = capped
+    .map(m => `${m.role === "user" ? "User" : "Assistant"}: ${m.content.slice(0, 300)}`)
+    .join("\n\n");
+
+  const prompt = `Summarize this conversation in 2-3 concise bullet points using the bullet character. Focus on topics discussed and key outcomes. Be very brief — no preamble.\n\nConversation:\n${conversationText}`;
+
+  mkdirSync(COMPACT_SUMMARY_CWD, { recursive: true });
+
+  try {
+    log("[Proxy] Generating compact summary...");
+    const response = query({
+      prompt,
+      options: {
+        model: "haiku",
+        maxTurns: 1,
+        permissionMode: "bypassPermissions",
+        cwd: COMPACT_SUMMARY_CWD,
+        systemPrompt: "You are a conversation summarizer. Output only bullet points, nothing else. Use the bullet character for each point.",
+      },
+    });
+
+    let summary = "";
+    for await (const msg of response) {
+      if (msg.type === "assistant") {
+        if (typeof msg.content === "string") {
+          summary = msg.content;
+        } else if (Array.isArray(msg.content)) {
+          for (const block of msg.content) {
+            if (block.type === "text") summary += block.text;
+          }
+        }
+        if (msg.message?.content && Array.isArray(msg.message.content)) {
+          for (const block of msg.message.content) {
+            if (block.type === "text") summary += block.text;
+          }
+        }
+      }
+    }
+
+    const trimmed = summary.trim();
+    log("[Proxy] Compact summary generated:", trimmed.slice(0, 200));
+    return trimmed || null;
+  } catch (error) {
+    logError("[Proxy] Failed to generate compact summary:", error);
+    return null;
+  }
+}
+
+function loadSummaries(summariesPath) {
+  if (!existsSync(summariesPath)) return [];
+  try {
+    return JSON.parse(readFileSync(summariesPath, "utf-8"));
+  } catch { return []; }
+}
+
+function appendSummary(summariesPath, entry) {
+  const summaries = loadSummaries(summariesPath);
+  summaries.push(entry);
+  writeFileSync(summariesPath, JSON.stringify(summaries, null, 2));
+}
+
+// ============================================================================
+// Express app
+// ============================================================================
+
 const app = express();
 
 app.use(cors());
@@ -50,18 +175,7 @@ app.post("/history", (req, res) => {
   log("[Proxy] Fetching history for session:", sessionId);
 
   try {
-    // Encode the working directory path the same way Claude Code does
-    // Claude Code replaces /, spaces, and ~ with dashes
-    // e.g., /Users/huy/Library/Mobile Documents/iCloud~md~obsidian/Documents/IWE
-    //    -> -Users-huy-Library-Mobile-Documents-iCloud-md-obsidian-Documents-IWE
-    const encodedPath = workingDirectory
-      ? workingDirectory.replace(/[\/\s~]/g, "-")
-      : "";
-
-    const claudeDir = join(homedir(), ".claude", "projects");
-
-    // Try to find the transcript file
-    let transcriptPath = join(claudeDir, encodedPath, `${sessionId}.jsonl`);
+    const transcriptPath = getTranscriptPath(workingDirectory, sessionId);
 
     if (!existsSync(transcriptPath)) {
       log("[Proxy] Transcript file not found at:", transcriptPath);
@@ -74,46 +188,68 @@ app.post("/history", (req, res) => {
     const lines = content.trim().split("\n");
 
     const messages = [];
+    let captureNextUserForBoundary = false;
 
     for (const line of lines) {
       try {
         const entry = JSON.parse(line);
 
-        // Only process user and assistant messages
-        if (entry.type === "user" || entry.type === "assistant") {
-          let textContent = "";
-
-          // Parse the nested message JSON
-          if (entry.message) {
-            const msg = typeof entry.message === "string"
-              ? JSON.parse(entry.message)
-              : entry.message;
-
-            if (msg.content) {
-              if (typeof msg.content === "string") {
-                textContent = msg.content;
-              } else if (Array.isArray(msg.content)) {
-                // Extract text from content blocks
-                for (const block of msg.content) {
-                  if (block.type === "text") {
-                    textContent += block.text;
-                  }
-                }
+        if (entry.type === "system" && entry.subtype === "compact_boundary") {
+          messages.push({
+            role: "compact_boundary",
+            content: "",
+            timestamp: entry.timestamp || Date.now(),
+            compactMetadata: {
+              preTokens: entry.compact_metadata?.pre_tokens || 0,
+              trigger: entry.compact_metadata?.trigger || "manual",
+            },
+          });
+          // The SDK injects a synthetic user message after compact_boundary
+          // containing its internal context summary — capture it for the boundary UI
+          captureNextUserForBoundary = true;
+        } else if (entry.type === "user" || entry.type === "assistant") {
+          if (captureNextUserForBoundary && entry.type === "user") {
+            captureNextUserForBoundary = false;
+            const textContent = extractTextFromEntry(entry);
+            if (textContent) {
+              // Attach to the most recent compact_boundary
+              const lastBoundary = messages.findLast(m => m.role === "compact_boundary");
+              if (lastBoundary) {
+                lastBoundary.compactMetadata.sdkSummary = textContent;
               }
             }
+            continue;
           }
+          captureNextUserForBoundary = false;
+          const textContent = extractTextFromEntry(entry);
+          if (!textContent) continue;
 
-          if (textContent) {
-            messages.push({
-              role: entry.type,
-              content: textContent,
-              timestamp: entry.timestamp || Date.now(),
-            });
-          }
+          // Filter out compaction artifacts from transcript
+          if (entry.type === "user" && /^\/compact\b/.test(textContent.trim())) continue;
+          if (entry.type === "assistant" && /^compacted$/i.test(textContent.trim())) continue;
+          // Skip system-injected local-command caveats
+          if (textContent.includes("<local-command-caveat>")) continue;
+
+          messages.push({
+            role: entry.type,
+            content: textContent,
+            timestamp: entry.timestamp || Date.now(),
+          });
         }
       } catch (parseError) {
         // Skip malformed lines
         log("[Proxy] Skipping malformed line");
+      }
+    }
+
+    // Attach saved summaries to compact_boundary entries
+    const summariesPath = getSummariesPath(workingDirectory, sessionId);
+    const summaries = loadSummaries(summariesPath);
+    let summaryIdx = 0;
+    for (const msg of messages) {
+      if (msg.role === "compact_boundary" && summaryIdx < summaries.length) {
+        msg.compactMetadata.summary = summaries[summaryIdx].summary;
+        summaryIdx++;
       }
     }
 
@@ -273,6 +409,29 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
             currentSessionId = msg.session_id;
             log("[Proxy] Session ID:", currentSessionId);
             sendEvent("session", { sessionId: currentSessionId });
+          }
+          // Forward compact boundary events to client (with synthetic summary)
+          if (msg.subtype === "compact_boundary") {
+            log("[Proxy] Compact boundary:", msg.compact_metadata);
+            const preTokens = msg.compact_metadata?.pre_tokens || 0;
+            const trigger = msg.compact_metadata?.trigger || "manual";
+
+            // Generate synthetic summary from the compacted segment
+            const transcriptPath = getTranscriptPath(workingDirectory, currentSessionId);
+            const segmentMessages = readLatestSegmentMessages(transcriptPath);
+            const summary = await generateCompactSummary(segmentMessages);
+
+            // Persist summary to sidecar file
+            if (summary && currentSessionId) {
+              const summariesPath = getSummariesPath(workingDirectory, currentSessionId);
+              appendSummary(summariesPath, { timestamp: Date.now(), preTokens, summary });
+            }
+
+            sendEvent("compact_boundary", {
+              preTokens,
+              trigger,
+              ...(summary && { summary }),
+            });
           }
           break;
 
