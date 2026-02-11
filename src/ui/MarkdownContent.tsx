@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import { MarkdownRenderer, Component, App } from "obsidian";
 import { renderDotBlocks } from "./dotRenderer";
 
@@ -16,6 +16,20 @@ interface MarkdownContentProps {
 export function MarkdownContent({ content, className }: MarkdownContentProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
+
+  // Handle clicks on internal links (wiki-style [[links]])
+  const handleClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    const link = target.closest("a.internal-link");
+    if (!link) return;
+
+    event.preventDefault();
+    const href = link.getAttribute("data-href") || link.getAttribute("href");
+    if (!href) return;
+
+    // Open the linked note in Obsidian
+    app.workspace.openLinkText(href, "", event.ctrlKey || event.metaKey);
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -56,5 +70,5 @@ export function MarkdownContent({ content, className }: MarkdownContentProps) {
     };
   }, [content]);
 
-  return <div ref={containerRef} className={className} />;
+  return <div ref={containerRef} className={className} onClick={handleClick} />;
 }

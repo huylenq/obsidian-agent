@@ -118,15 +118,22 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
     if (activeFile) buildAndSetGraph();
   }, [dataSettingsKey]);
 
-  // Handle node click — open the note
-  const handleNodeClick = useCallback((node: GraphNode) => {
-    app.workspace.openLinkText(node.id, "");
+  // Handle node click — open the note (cmd-click or middle-click opens in new tab)
+  const handleNodeClick = useCallback((node: GraphNode, newTab?: boolean) => {
+    app.workspace.openLinkText(node.id, "", newTab ?? false);
   }, [app]);
 
   // Handle node hover
   const handleNodeHover = useCallback((node: GraphNode | null, x: number, y: number) => {
     setHoveredNode(node);
     setTooltipPos({ x, y });
+  }, []);
+
+  // Handle node right-click — add note to chat input
+  const handleNodeContextMenu = useCallback((node: GraphNode) => {
+    window.dispatchEvent(
+      new CustomEvent("claude-agent:add-note-to-chat", { detail: { notePath: node.id } })
+    );
   }, []);
 
   // Handle settings change from controls — update atom and persist
@@ -158,6 +165,7 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
             settings={settings}
             onNodeClick={handleNodeClick}
             onNodeHover={handleNodeHover}
+            onNodeContextMenu={handleNodeContextMenu}
           />
         )}
 

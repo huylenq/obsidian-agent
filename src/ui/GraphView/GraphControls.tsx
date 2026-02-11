@@ -3,6 +3,9 @@
  * Uses native Obsidian CSS classes (.graph-controls, .setting-item, etc.) for
  * consistent look-and-feel. Organized into collapsible sections like the
  * built-in graph view (Filters, Forces).
+ *
+ * The Filters section has a dock/undock button: when undocked, the two filter
+ * sliders float as a compact HUD overlay on the graph canvas.
  */
 
 import React, { useState, useRef, useCallback } from "react";
@@ -71,6 +74,41 @@ function ControlSection({
   );
 }
 
+/** Stepper control: [−] value [+] for small discrete ranges. */
+function Stepper({
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="claude-agent-stepper">
+      <button
+        className="clickable-icon"
+        disabled={value <= min}
+        onClick={() => onChange(Math.max(min, value - 1))}
+        aria-label="Decrease"
+      >
+        <ObsidianIcon name="minus" />
+      </button>
+      <span className="claude-agent-stepper-value">{value}</span>
+      <button
+        className="clickable-icon"
+        disabled={value >= max}
+        onClick={() => onChange(Math.min(max, value + 1))}
+        aria-label="Increase"
+      >
+        <ObsidianIcon name="plus" />
+      </button>
+    </div>
+  );
+}
+
 /** Slider that shows a tooltip with the current value on hover, matching Obsidian's built-in graph controls. */
 function SliderWithTooltip({
   value,
@@ -91,7 +129,10 @@ function SliderWithTooltip({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const display = formatValue ? formatValue(value) : String(value);
-  // Position tooltip above thumb: percentage across the track
+  // The range thumb center travels from thumbRadius to (trackWidth - thumbRadius),
+  // not 0% to 100%. Compensate so the tooltip follows the thumb precisely.
+  // Obsidian's range thumb is ~20px wide.
+  const THUMB = 20; // px
   const pct = (value - min) / (max - min);
 
   const onPointerEnter = useCallback(() => setHovering(true), []);
@@ -118,10 +159,11 @@ function SliderWithTooltip({
           style={{
             position: "absolute",
             bottom: "100%",
-            left: `${pct * 100}%`,
+            left: `calc(${THUMB / 2}px + ${pct} * (100% - ${THUMB}px))`,
             transform: "translateX(-50%)",
             marginBottom: 4,
             pointerEvents: "none",
+            whiteSpace: "nowrap",
           }}
         >
           {display}
@@ -131,151 +173,206 @@ function SliderWithTooltip({
   );
 }
 
+/** The filter sliders content, reused in both docked and undocked positions. */
+function FilterSliders({
+  settings,
+  onSettingsChange,
+}: {
+  settings: GraphViewSettings;
+  onSettingsChange: (partial: Partial<GraphViewSettings>) => void;
+}) {
+  return (
+    <>
+      {/* Link depth stepper */}
+      <div className="setting-item">
+        <div className="setting-item-info">
+          <div className="setting-item-name">Depth</div>
+        </div>
+        <div className="setting-item-control claude-agent-stepper-control">
+          <Stepper
+            min={1}
+            max={3}
+            value={settings.linkDepth}
+            onChange={(v) => onSettingsChange({ linkDepth: v as 1 | 2 | 3 })}
+          />
+        </div>
+      </div>
+
+      {/* Similarity threshold slider (inverted: right = lower threshold = more edges) */}
+      <div className="setting-item mod-slider">
+        <div className="setting-item-info">
+          <div className="setting-item-name">Similarity</div>
+        </div>
+        <div className="setting-item-control">
+          <SliderWithTooltip
+            min={0.3}
+            max={0.8}
+            step={0.05}
+            value={1.1 - settings.similarityThreshold}
+            formatValue={(v) => (1.1 - v).toFixed(2)}
+            onChange={(v) => onSettingsChange({ similarityThreshold: 1.1 - v })}
+          />
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** Bare floating sliders overlay — transparent by default, opaque on hover. */
+export function FilterHud({
+  settings,
+  onSettingsChange,
+}: {
+  settings: GraphViewSettings;
+  onSettingsChange: (partial: Partial<GraphViewSettings>) => void;
+}) {
+  return (
+    <div className="claude-agent-graph-filter-hud">
+      <FilterSliders settings={settings} onSettingsChange={onSettingsChange} />
+    </div>
+  );
+}
+
 export function GraphControls({ settings, onSettingsChange, onRefresh, isLoading }: GraphControlsProps) {
   const [open, setOpen] = useState(false);
+  const filtersUndocked = settings.floatSliders;
 
   return (
-    <div className={`graph-controls${open ? "" : " is-close"}`}>
-      {/* Gear button (visible when closed) */}
-      <div
-        className="graph-controls-button mod-open clickable-icon"
-        onClick={() => setOpen(true)}
-        aria-label="Open graph settings"
-      >
-        <ObsidianIcon name="settings" />
+    <>
+      <div className={`graph-controls${open ? "" : " is-close"}`}>
+        {/* Gear button (visible when closed) */}
+        <div
+          className="graph-controls-button mod-open clickable-icon"
+          onClick={() => setOpen(true)}
+          aria-label="Open graph settings"
+        >
+          <ObsidianIcon name="settings" />
+        </div>
+
+        {/* Close button (visible when open) */}
+        <div
+          className="graph-controls-button mod-close clickable-icon"
+          onClick={() => setOpen(false)}
+          aria-label="Close graph settings"
+        >
+          <ObsidianIcon name="x" />
+        </div>
+
+        {/* Refresh button (in reset position, visible when open) */}
+        <div
+          className={`graph-controls-button mod-reset clickable-icon${isLoading ? " mod-animate" : ""}`}
+          onClick={onRefresh}
+          aria-label="Refresh graph"
+        >
+          <ObsidianIcon name="refresh-cw" />
+        </div>
+
+        {/* ── Filters section ── */}
+        <ControlSection title="Filters" defaultOpen>
+          {!filtersUndocked && (
+            <FilterSliders settings={settings} onSettingsChange={onSettingsChange} />
+          )}
+
+          {/* Show link edges toggle */}
+          <div className="setting-item mod-toggle">
+            <div className="setting-item-info">
+              <div className="setting-item-name">Link edges</div>
+            </div>
+            <div className="setting-item-control">
+              <div
+                className={`checkbox-container${settings.showLinkEdges ? " is-enabled" : ""}`}
+                onClick={() => onSettingsChange({ showLinkEdges: !settings.showLinkEdges })}
+              />
+            </div>
+          </div>
+
+          {/* Show similarity edges toggle */}
+          <div className="setting-item mod-toggle">
+            <div className="setting-item-info">
+              <div className="setting-item-name">Similarity edges</div>
+            </div>
+            <div className="setting-item-control">
+              <div
+                className={`checkbox-container${settings.showSimilarityEdges ? " is-enabled" : ""}`}
+                onClick={() => onSettingsChange({ showSimilarityEdges: !settings.showSimilarityEdges })}
+              />
+            </div>
+          </div>
+
+          {/* Undock sliders to floating HUD */}
+          <div className="setting-item mod-toggle">
+            <div className="setting-item-info">
+              <div className="setting-item-name">Float sliders</div>
+            </div>
+            <div className="setting-item-control">
+              <div
+                className={`checkbox-container${filtersUndocked ? " is-enabled" : ""}`}
+                onClick={() => onSettingsChange({ floatSliders: !filtersUndocked })}
+              />
+            </div>
+          </div>
+        </ControlSection>
+
+        {/* ── Forces section ── */}
+        <ControlSection title="Forces">
+          {/* Center force */}
+          <div className="setting-item mod-slider">
+            <div className="setting-item-info">
+              <div className="setting-item-name">Center force</div>
+            </div>
+            <div className="setting-item-control">
+              <SliderWithTooltip
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(settings.centerForce * 100)}
+                formatValue={(v) => `${v}%`}
+                onChange={(v) => onSettingsChange({ centerForce: v / 100 })}
+              />
+            </div>
+          </div>
+
+          {/* Repel force */}
+          <div className="setting-item mod-slider">
+            <div className="setting-item-info">
+              <div className="setting-item-name">Repel force</div>
+            </div>
+            <div className="setting-item-control">
+              <SliderWithTooltip
+                min={0}
+                max={500}
+                step={10}
+                value={settings.repelForce}
+                onChange={(v) => onSettingsChange({ repelForce: v })}
+              />
+            </div>
+          </div>
+
+          {/* Link distance */}
+          <div className="setting-item mod-slider">
+            <div className="setting-item-info">
+              <div className="setting-item-name">Link distance</div>
+            </div>
+            <div className="setting-item-control">
+              <SliderWithTooltip
+                min={50}
+                max={500}
+                step={10}
+                value={settings.linkDistance}
+                onChange={(v) => onSettingsChange({ linkDistance: v })}
+              />
+            </div>
+          </div>
+        </ControlSection>
       </div>
 
-      {/* Close button (visible when open) */}
-      <div
-        className="graph-controls-button mod-close clickable-icon"
-        onClick={() => setOpen(false)}
-        aria-label="Close graph settings"
-      >
-        <ObsidianIcon name="x" />
-      </div>
-
-      {/* Refresh button (in reset position, visible when open) */}
-      <div
-        className={`graph-controls-button mod-reset clickable-icon${isLoading ? " mod-animate" : ""}`}
-        onClick={onRefresh}
-        aria-label="Refresh graph"
-      >
-        <ObsidianIcon name="refresh-cw" />
-      </div>
-
-      {/* ── Filters section ── */}
-      <ControlSection title="Filters" defaultOpen>
-        {/* Link depth slider */}
-        <div className="setting-item mod-slider">
-          <div className="setting-item-info">
-            <div className="setting-item-name">Depth</div>
-          </div>
-          <div className="setting-item-control">
-            <SliderWithTooltip
-              min={1}
-              max={3}
-              step={1}
-              value={settings.linkDepth}
-              onChange={(v) => onSettingsChange({ linkDepth: v as 1 | 2 | 3 })}
-            />
-          </div>
-        </div>
-
-        {/* Similarity threshold slider */}
-        <div className="setting-item mod-slider">
-          <div className="setting-item-info">
-            <div className="setting-item-name">Similarity</div>
-          </div>
-          <div className="setting-item-control">
-            <SliderWithTooltip
-              min={0.3}
-              max={0.8}
-              step={0.05}
-              value={settings.similarityThreshold}
-              formatValue={(v) => v.toFixed(2)}
-              onChange={(v) => onSettingsChange({ similarityThreshold: v })}
-            />
-          </div>
-        </div>
-
-        {/* Show link edges toggle */}
-        <div className="setting-item mod-toggle">
-          <div className="setting-item-info">
-            <div className="setting-item-name">Link edges</div>
-          </div>
-          <div className="setting-item-control">
-            <div
-              className={`checkbox-container${settings.showLinkEdges ? " is-enabled" : ""}`}
-              onClick={() => onSettingsChange({ showLinkEdges: !settings.showLinkEdges })}
-            />
-          </div>
-        </div>
-
-        {/* Show similarity edges toggle */}
-        <div className="setting-item mod-toggle">
-          <div className="setting-item-info">
-            <div className="setting-item-name">Similarity edges</div>
-          </div>
-          <div className="setting-item-control">
-            <div
-              className={`checkbox-container${settings.showSimilarityEdges ? " is-enabled" : ""}`}
-              onClick={() => onSettingsChange({ showSimilarityEdges: !settings.showSimilarityEdges })}
-            />
-          </div>
-        </div>
-      </ControlSection>
-
-      {/* ── Forces section ── */}
-      <ControlSection title="Forces">
-        {/* Center force */}
-        <div className="setting-item mod-slider">
-          <div className="setting-item-info">
-            <div className="setting-item-name">Center force</div>
-          </div>
-          <div className="setting-item-control">
-            <SliderWithTooltip
-              min={0}
-              max={100}
-              step={1}
-              value={Math.round(settings.centerForce * 100)}
-              formatValue={(v) => `${v}%`}
-              onChange={(v) => onSettingsChange({ centerForce: v / 100 })}
-            />
-          </div>
-        </div>
-
-        {/* Repel force */}
-        <div className="setting-item mod-slider">
-          <div className="setting-item-info">
-            <div className="setting-item-name">Repel force</div>
-          </div>
-          <div className="setting-item-control">
-            <SliderWithTooltip
-              min={0}
-              max={500}
-              step={10}
-              value={settings.repelForce}
-              onChange={(v) => onSettingsChange({ repelForce: v })}
-            />
-          </div>
-        </div>
-
-        {/* Link distance */}
-        <div className="setting-item mod-slider">
-          <div className="setting-item-info">
-            <div className="setting-item-name">Link distance</div>
-          </div>
-          <div className="setting-item-control">
-            <SliderWithTooltip
-              min={50}
-              max={500}
-              step={10}
-              value={settings.linkDistance}
-              onChange={(v) => onSettingsChange({ linkDistance: v })}
-            />
-          </div>
-        </div>
-      </ControlSection>
-    </div>
+      {/* Floating filter sliders when undocked */}
+      {filtersUndocked && (
+        <FilterHud
+          settings={settings}
+          onSettingsChange={onSettingsChange}
+        />
+      )}
+    </>
   );
 }

@@ -85,6 +85,79 @@
   color: var(--color-green);
 }
 
+/* Floating filter sliders — bare, no chrome, transparent until hovered */
+
+.claude-agent-graph-filter-hud {
+  position: absolute;
+  top: 0;
+  left: var(--size-4-2);
+  z-index: var(--layer-popover);
+  max-width: 560px;
+  opacity: 0.25;
+  transition: opacity 200ms ease;
+  pointer-events: auto;
+  background: transparent;
+}
+
+.claude-agent-graph-filter-hud:hover {
+  opacity: 1;
+}
+
+.claude-agent-graph-filter-hud .setting-item {
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+}
+
+/* Label shrinks to text width, slider fills the rest */
+.claude-agent-graph-filter-hud .setting-item-info {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: none;
+}
+
+.claude-agent-graph-filter-hud .setting-item-control {
+  flex: 1 1 0;
+}
+
+.claude-agent-graph-filter-hud input[type="range"] {
+  width: 100%;
+}
+
+.claude-agent-graph-filter-hud .setting-item-name {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+}
+
+/* Stepper control */
+
+.claude-agent-stepper-control {
+  flex-wrap: nowrap !important;
+}
+
+.claude-agent-stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--size-2-2);
+}
+
+.claude-agent-stepper button {
+  padding: var(--size-2-1);
+}
+
+.claude-agent-stepper button:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+.claude-agent-stepper-value {
+  min-width: 1.5em;
+  text-align: center;
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Empty / error / notice states */
 
 .claude-agent-graph-empty,

@@ -49,8 +49,9 @@ type ForceLink = GraphEdge & SimulationLinkDatum<ForceNode>;
 
 export interface GraphRendererOptions {
   canvas: HTMLCanvasElement;
-  onNodeClick?: (node: GraphNode) => void;
+  onNodeClick?: (node: GraphNode, newTab?: boolean) => void;
   onNodeHover?: (node: GraphNode | null, x: number, y: number) => void;
+  onNodeContextMenu?: (node: GraphNode, event: MouseEvent) => void;
 }
 
 // Animation state for smooth transitions
@@ -82,8 +83,9 @@ export class GraphRenderer {
   private wasDragged = false;
   private animationFrame: number | null = null;
 
-  private onNodeClick?: (node: GraphNode) => void;
+  private onNodeClick?: (node: GraphNode, newTab?: boolean) => void;
   private onNodeHover?: (node: GraphNode | null, x: number, y: number) => void;
+  private onNodeContextMenu?: (node: GraphNode, event: MouseEvent) => void;
 
   private themeObserver: MutationObserver | null = null;
   private forceUpdateTimer: ReturnType<typeof setTimeout> | null = null;
@@ -97,11 +99,15 @@ export class GraphRenderer {
   private lastAnimTime = 0;
   private isAnimating = false;
 
+  // Merged edges: similarity edges that also have a link edge (rendered solid, not dashed)
+  private mergedEdges = new Set<ForceLink>();
+
   constructor(options: GraphRendererOptions) {
     this.canvas = options.canvas;
     this.ctx = this.canvas.getContext("2d")!;
     this.onNodeClick = options.onNodeClick;
     this.onNodeHover = options.onNodeHover;
+    this.onNodeContextMenu = options.onNodeContextMenu;
     this.colors = readThemeColors();
 
     this.setupZoom();
@@ -241,6 +247,41 @@ export class GraphRenderer {
         target: nodeById.get(typeof e.target === "string" ? e.target : e.target.id)!,
       }));
 
+    // Merge overlapping link + similarity edges into a single solid line
+    // with the similarity edge's color. Remove the link edge, keep similarity.
+    this.mergedEdges.clear();
+    if (settings.showLinkEdges && settings.showSimilarityEdges) {
+      // Index similarity edges by canonical node pair
+      const simByPair = new Map<string, ForceLink>();
+      for (const edge of this.edges) {
+        if (edge.type === "similarity") {
+          const src = (edge.source as ForceNode).id;
+          const tgt = (edge.target as ForceNode).id;
+          const pairKey = src < tgt ? `${src}\0${tgt}` : `${tgt}\0${src}`;
+          simByPair.set(pairKey, edge);
+        }
+      }
+
+      // Find link edges that overlap with a similarity edge
+      const linkEdgesToRemove = new Set<ForceLink>();
+      for (const edge of this.edges) {
+        if (edge.type === "link") {
+          const src = (edge.source as ForceNode).id;
+          const tgt = (edge.target as ForceNode).id;
+          const pairKey = src < tgt ? `${src}\0${tgt}` : `${tgt}\0${src}`;
+          const simEdge = simByPair.get(pairKey);
+          if (simEdge) {
+            linkEdgesToRemove.add(edge);
+            this.mergedEdges.add(simEdge);
+          }
+        }
+      }
+
+      if (linkEdgesToRemove.size > 0) {
+        this.edges = this.edges.filter((e) => !linkEdgesToRemove.has(e));
+      }
+    }
+
     // Clear animation state for fresh start
     this.nodeAlphas.clear();
     this.edgeAlphas.clear();
@@ -258,10 +299,15 @@ export class GraphRenderer {
 
   /**
    * Resize the canvas to fill its container.
+   * Adjusts the zoom transform so the graph stays centered after resize.
    */
   resize(): void {
     const rect = this.canvas.parentElement?.getBoundingClientRect();
     if (!rect) return;
+
+    // Compute old canvas center from current transform to detect shift
+    const oldCx = this.canvas.clientWidth / 2;
+    const oldCy = this.canvas.clientHeight / 2;
 
     const dpr = window.devicePixelRatio || 1;
     this.canvas.width = rect.width * dpr;
@@ -269,6 +315,22 @@ export class GraphRenderer {
     this.canvas.style.width = `${rect.width}px`;
     this.canvas.style.height = `${rect.height}px`;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // Shift zoom transform so graph origin tracks the new canvas center
+    const newCx = rect.width / 2;
+    const newCy = rect.height / 2;
+    if (this.zoomBehavior && (oldCx !== 0 || oldCy !== 0)) {
+      const dx = newCx - oldCx;
+      const dy = newCy - oldCy;
+      if (dx !== 0 || dy !== 0) {
+        const t = this.transform;
+        const adjusted = zoomIdentity.translate(t.x + dx, t.y + dy).scale(t.k);
+        select(this.canvas).call(this.zoomBehavior.transform, adjusted);
+        // zoomBehavior.transform fires the "zoom" event which updates this.transform
+        // so no need to set it manually
+      }
+    }
+
     this.draw();
   }
 
@@ -300,13 +362,22 @@ export class GraphRenderer {
   }
 
   /**
+   * Very gentle easing for edge highlights (ease-out quadratic).
+   * Soft, gradual transitions that don't draw attention.
+   */
+  private easeEdge(t: number): number {
+    return 1 - Math.pow(1 - t, 2);
+  }
+
+  /**
    * Step all animations forward by deltaTime (ms).
    * Returns true if any animation is still in progress.
    */
   private stepAnimations(deltaTime: number): boolean {
-    const speed = 0.01; // base transition speed
+    const speed = 0.01; // base transition speed (nodes)
     const fontSizeSpeed = 0.02; // snappier for font size (2x faster)
     const yOffsetSpeed = 0.007; // gentler for position shift (0.7x slower)
+    const edgeSpeed = 0.003; // very gentle for edge highlights (~3x slower than nodes)
     const threshold = 0.001; // snap to target when close enough
     let anyActive = false;
 
@@ -322,9 +393,9 @@ export class GraphRenderer {
       state.current = lerp(state.current, state.target, speed);
     }
 
-    // Animate edge alphas
+    // Animate edge alphas (gentle, separate from nodes)
     for (const state of this.edgeAlphas.values()) {
-      state.current = lerp(state.current, state.target, speed);
+      state.current = lerp(state.current, state.target, edgeSpeed, this.easeEdge.bind(this));
     }
 
     // Animate label font sizes (snappier)
@@ -337,11 +408,11 @@ export class GraphRenderer {
       state.current = lerp(state.current, state.target, yOffsetSpeed, this.easeGentle.bind(this));
     }
 
-    // Animate edge colors (RGB channels)
+    // Animate edge colors (gentle, separate from nodes)
     for (const state of this.edgeColors.values()) {
-      state.current.r = lerp(state.current.r, state.target.r, speed);
-      state.current.g = lerp(state.current.g, state.target.g, speed);
-      state.current.b = lerp(state.current.b, state.target.b, speed);
+      state.current.r = lerp(state.current.r, state.target.r, edgeSpeed, this.easeEdge.bind(this));
+      state.current.g = lerp(state.current.g, state.target.g, edgeSpeed, this.easeEdge.bind(this));
+      state.current.b = lerp(state.current.b, state.target.b, edgeSpeed, this.easeEdge.bind(this));
     }
 
     return anyActive;
@@ -369,7 +440,7 @@ export class GraphRenderer {
       this.getAnimState(this.nodeAlphas, node, targetAlpha).target = targetAlpha;
 
       // Label font size target (snappier animation)
-      const baseFontSize = isCenter ? FONT_SIZE + 1 : FONT_SIZE;
+      const baseFontSize = isCenter ? FONT_SIZE + 2 : FONT_SIZE;
       const targetFontSize = isHovered ? baseFontSize + 3 : baseFontSize;
       const fontState = this.getAnimState(this.labelFontSizes, node, targetFontSize);
       fontState.target = targetFontSize;
@@ -398,7 +469,7 @@ export class GraphRenderer {
       } else if (hoverActive) {
         targetAlpha = 0.12;
       } else {
-        targetAlpha = 0.6;
+        targetAlpha = 0.5;
       }
       this.getAnimState(this.edgeAlphas, edge, targetAlpha).target = targetAlpha;
 
@@ -491,6 +562,8 @@ export class GraphRenderer {
     this.canvas.removeEventListener("mousedown", this.handleMouseDown);
     this.canvas.removeEventListener("mouseup", this.handleMouseUp);
     this.canvas.removeEventListener("click", this.handleClick);
+    this.canvas.removeEventListener("auxclick", this.handleAuxClick);
+    this.canvas.removeEventListener("contextmenu", this.handleContextMenu);
   }
 
   // ========== Private ==========
@@ -583,8 +656,13 @@ export class GraphRenderer {
 
     select(this.canvas).call(this.zoomBehavior);
 
-    // Reset to identity
-    select(this.canvas).call(this.zoomBehavior.transform, zoomIdentity);
+    // Initialize transform with canvas center so graph origin (0,0) appears centered.
+    // This bakes cx/cy into the d3-zoom transform so zoom-to-cursor works correctly.
+    const rect = this.canvas.parentElement?.getBoundingClientRect();
+    const cx = (rect?.width ?? 0) / 2;
+    const cy = (rect?.height ?? 0) / 2;
+    const initialTransform = zoomIdentity.translate(cx, cy);
+    select(this.canvas).call(this.zoomBehavior.transform, initialTransform);
   }
 
   private setupMouseHandlers(): void {
@@ -592,6 +670,8 @@ export class GraphRenderer {
     this.canvas.addEventListener("mousedown", this.handleMouseDown);
     this.canvas.addEventListener("mouseup", this.handleMouseUp);
     this.canvas.addEventListener("click", this.handleClick);
+    this.canvas.addEventListener("auxclick", this.handleAuxClick);
+    this.canvas.addEventListener("contextmenu", this.handleContextMenu);
   }
 
   private observeTheme(): void {
@@ -607,10 +687,8 @@ export class GraphRenderer {
 
   private screenToGraph(sx: number, sy: number): [number, number] {
     const rect = this.canvas.getBoundingClientRect();
-    const cx = rect.width / 2;
-    const cy = rect.height / 2;
-    const gx = (sx - rect.left - cx - this.transform.x) / this.transform.k;
-    const gy = (sy - rect.top - cy - this.transform.y) / this.transform.k;
+    const gx = (sx - rect.left - this.transform.x) / this.transform.k;
+    const gy = (sy - rect.top - this.transform.y) / this.transform.k;
     return [gx, gy];
   }
 
@@ -684,9 +762,25 @@ export class GraphRenderer {
   private handleClick = (e: MouseEvent): void => {
     if (this.wasDragged) return;
     const node = this.findNodeAt(e.clientX, e.clientY);
-    if (node && this.onNodeClick) {
-      this.onNodeClick(node);
+    if (!node) return;
+    if (e.shiftKey && this.onNodeContextMenu) {
+      this.onNodeContextMenu(node, e);
+    } else if (this.onNodeClick) {
+      this.onNodeClick(node, e.metaKey || e.ctrlKey);
     }
+  };
+
+  private handleAuxClick = (e: MouseEvent): void => {
+    if (e.button !== 1) return; // middle-click only
+    const node = this.findNodeAt(e.clientX, e.clientY);
+    if (node && this.onNodeClick) {
+      e.preventDefault();
+      this.onNodeClick(node, true);
+    }
+  };
+
+  private handleContextMenu = (_e: MouseEvent): void => {
+    // No-op: "add to chat" is now shift-click, not right-click
   };
 
   private draw = (): void => {
@@ -697,12 +791,10 @@ export class GraphRenderer {
   private drawFrame(): void {
     const w = this.canvas.width / (window.devicePixelRatio || 1);
     const h = this.canvas.height / (window.devicePixelRatio || 1);
-    const cx = w / 2;
-    const cy = h / 2;
 
     this.ctx.clearRect(0, 0, w, h);
     this.ctx.save();
-    this.ctx.translate(cx + this.transform.x, cy + this.transform.y);
+    this.ctx.translate(this.transform.x, this.transform.y);
     this.ctx.scale(this.transform.k, this.transform.k);
 
     // Draw edges (behind nodes)
@@ -751,32 +843,45 @@ export class GraphRenderer {
     this.ctx.beginPath();
 
     if (edge.type === "similarity") {
-      this.ctx.setLineDash([5, 3]);
+      const isMerged = this.mergedEdges.has(edge);
 
-      // Use animated color
+      // Merged edges (link + similarity) render solid; pure similarity renders dashed
+      if (isMerged) {
+        this.ctx.setLineDash([]);
+      } else {
+        this.ctx.setLineDash([5, 3]);
+      }
+
+      // Use animated color (similarity hue gradient)
       this.ctx.strokeStyle = `rgb(${Math.round(animatedColor.r)}, ${Math.round(animatedColor.g)}, ${Math.round(animatedColor.b)})`;
       this.ctx.globalAlpha = animatedAlpha;
 
       if (hoverActive && connected) {
-        this.ctx.lineWidth = 1.5 + t;
-      } else if (hoverActive) {
-        this.ctx.lineWidth = 0.5 + t * 1.5;
+        this.ctx.lineWidth = 1.5;
+      } else if (isMerged) {
+        this.ctx.lineWidth = 1;
       } else {
-        this.ctx.lineWidth = 0.5 + t * 1.5;
+        this.ctx.lineWidth = 0.5;
       }
 
-      // Slight arc
-      const mx = (source.x + target.x) / 2;
-      const my = (source.y + target.y) / 2;
-      const dx = target.x - source.x;
-      const dy = target.y - source.y;
-      const len = Math.sqrt(dx * dx + dy * dy) || 1;
-      const offset = len * 0.08;
-      const cpx = mx - (dy / len) * offset;
-      const cpy = my + (dx / len) * offset;
+      if (isMerged) {
+        // Straight line for merged edges (same as link edges)
+        this.ctx.moveTo(source.x, source.y);
+        this.ctx.lineTo(target.x, target.y);
+      } else {
+        // Slight arc for pure similarity edges
+        const mx = (source.x + target.x) / 2;
+        const my = (source.y + target.y) / 2;
+        const dx = target.x - source.x;
+        const dy = target.y - source.y;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const offset = len * 0.08;
+        const cpx = mx - (dy / len) * offset;
+        const cpy = my + (dx / len) * offset;
 
-      this.ctx.moveTo(source.x, source.y);
-      this.ctx.quadraticCurveTo(cpx, cpy, target.x, target.y);
+        this.ctx.moveTo(source.x, source.y);
+        this.ctx.quadraticCurveTo(cpx, cpy, target.x, target.y);
+      }
     } else {
       this.ctx.setLineDash([]);
 

@@ -51,6 +51,8 @@ export interface GraphViewSettings {
   centerForce: number;           // 0..1, default 0.5
   repelForce: number;            // 0..500, default 100 (applied as negative internally)
   linkDistance: number;           // 50..500, default 250
+  // UI
+  floatSliders: boolean;         // undock filter sliders to HUD overlay
 }
 
 export const DEFAULT_GRAPH_VIEW_SETTINGS: GraphViewSettings = {
@@ -62,6 +64,7 @@ export const DEFAULT_GRAPH_VIEW_SETTINGS: GraphViewSettings = {
   centerForce: 0.5,
   repelForce: 100,
   linkDistance: 250,
+  floatSliders: false,
 };
 
 export interface ClaudeAgentSettings {

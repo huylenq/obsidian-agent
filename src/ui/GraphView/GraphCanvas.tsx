@@ -7,8 +7,8 @@ import React, { useRef, useEffect, useCallback } from "react";
 import { GraphRenderer } from "@/graph/graphRenderer";
 import type { GraphData, GraphNode, GraphViewSettings } from "@/types";
 
-/** Keys that only affect physics — changes to these don't require a full data rebuild. */
-const PHYSICS_KEYS: (keyof GraphViewSettings)[] = ["centerForce", "repelForce", "linkDistance"];
+/** Keys that only affect physics/UI — changes to these don't require a full data rebuild. */
+const PHYSICS_KEYS: (keyof GraphViewSettings)[] = ["centerForce", "repelForce", "linkDistance", "floatSliders"];
 
 function isPhysicsOnlyChange(prev: GraphViewSettings, next: GraphViewSettings): boolean {
   for (const key of Object.keys(next) as (keyof GraphViewSettings)[]) {
@@ -20,11 +20,12 @@ function isPhysicsOnlyChange(prev: GraphViewSettings, next: GraphViewSettings): 
 interface GraphCanvasProps {
   data: GraphData;
   settings: GraphViewSettings;
-  onNodeClick: (node: GraphNode) => void;
+  onNodeClick: (node: GraphNode, newTab?: boolean) => void;
   onNodeHover: (node: GraphNode | null, x: number, y: number) => void;
+  onNodeContextMenu?: (node: GraphNode, event: MouseEvent) => void;
 }
 
-export function GraphCanvas({ data, settings, onNodeClick, onNodeHover }: GraphCanvasProps) {
+export function GraphCanvas({ data, settings, onNodeClick, onNodeHover, onNodeContextMenu }: GraphCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<GraphRenderer | null>(null);
   const prevSettingsRef = useRef<GraphViewSettings>(settings);
@@ -39,6 +40,7 @@ export function GraphCanvas({ data, settings, onNodeClick, onNodeHover }: GraphC
       canvas,
       onNodeClick,
       onNodeHover,
+      onNodeContextMenu,
     });
     rendererRef.current = renderer;
     renderer.resize();
