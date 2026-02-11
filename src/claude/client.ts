@@ -1,4 +1,4 @@
-import { ClaudeAgentSettings, ActiveFileContext, SelectionContext, RankedNote } from "@/types";
+import { ClaudeAgentSettings, ActiveFileContext, SelectionContext, RankedNote, SessionEntry, SessionStatus } from "@/types";
 import { FileSearchResult } from "@/utils/fileSearch";
 
 const PROXY_URL = "http://localhost:27182";
@@ -200,6 +200,75 @@ export class ClaudeAgentClient {
         return { type: "done", content: "", sessionId: data.sessionId };
       default:
         return { type: "text", content: "" };
+    }
+  }
+
+  /**
+   * Switch to an existing session
+   */
+  switchSession(sessionId: string): void {
+    this.settings.sessionId = sessionId;
+    this.onSessionChange?.(sessionId);
+  }
+
+  /**
+   * Fetch sessions from registry
+   */
+  async fetchSessions(filters?: { status?: SessionStatus | "all"; file?: string }): Promise<SessionEntry[]> {
+    try {
+      const params = new URLSearchParams({ workingDirectory: this.vaultPath });
+      if (filters?.status) params.set("status", filters.status);
+      if (filters?.file) params.set("file", filters.file);
+
+      const response = await fetch(`${PROXY_URL}/sessions?${params}`);
+      if (!response.ok) return [];
+
+      const data = await response.json();
+      return data.sessions || [];
+    } catch (error) {
+      console.warn("[ClaudeAgentClient] Error fetching sessions:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Update a session's status or title
+   */
+  async updateSession(sessionId: string, updates: { status?: SessionStatus; title?: string }): Promise<SessionEntry | null> {
+    try {
+      const response = await fetch(`${PROXY_URL}/sessions/${sessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workingDirectory: this.vaultPath, ...updates }),
+      });
+      if (!response.ok) return null;
+
+      const data = await response.json();
+      return data.session || null;
+    } catch (error) {
+      console.warn("[ClaudeAgentClient] Error updating session:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Trigger one-time migration of JSONL files to registry
+   */
+  async migrateSessionRegistry(): Promise<number> {
+    try {
+      const response = await fetch(`${PROXY_URL}/sessions/migrate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workingDirectory: this.vaultPath }),
+      });
+      if (!response.ok) return 0;
+
+      const data = await response.json();
+      console.log("[ClaudeAgentClient] Migration result:", data.migrated, "sessions");
+      return data.migrated || 0;
+    } catch (error) {
+      console.warn("[ClaudeAgentClient] Migration error:", error);
+      return 0;
     }
   }
 

@@ -83,3 +83,27 @@ export const DEFAULT_RELEVANT_NOTES_SETTINGS: RelevantNotesSettings = {
   maxResults: 10,
   triggerMode: "both",
 };
+
+// ============================================================================
+// Session Management Types
+// ============================================================================
+
+export type SessionStatus = "in_progress" | "done";
+
+export type SessionsMode = "thisFile" | "all";
+
+export interface SessionEntry {
+  id: string;
+  title: string;                // first user message, 80 chars max
+  status: SessionStatus;
+  createdAt: number;
+  updatedAt: number;
+  model: ClaudeModel;
+  messageCount: number;
+  files: string[];              // vault-relative note paths (deduped)
+}
+
+export interface SessionRegistry {
+  version: 1;
+  sessions: SessionEntry[];
+}

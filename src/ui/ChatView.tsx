@@ -85,6 +85,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   const includeRelevantNotes = useAtomValue(includeRelevantNotesAtom, { store: chatStore });
   const modelSelectRef = useRef<HTMLSelectElement>(null);
   const [inputRef, setInputRef] = useState<ChatInputHandle | null>(null);
+  const [sessionTitle, setSessionTitle] = useState<string | null>(null);
 
   // Listen for command to open model selector
   useEffect(() => {
@@ -111,7 +112,6 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     if (plugin.claudeClient) {
       plugin.claudeClient.setOnSessionChange((newSessionId) => {
         setSessionId(newSessionId);
-        // Important: Also save to disk so session persists across restarts
         plugin.saveSettings();
       });
     }
@@ -120,7 +120,6 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   // Load history from transcript when view mounts with existing session
   useEffect(() => {
     const loadHistory = async () => {
-      // Wait for plugin initialization
       if (plugin.initializationPromise) {
         await plugin.initializationPromise;
       }
@@ -130,7 +129,6 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       const currentSessionId = plugin.claudeClient.getSessionId();
       if (!currentSessionId) return;
 
-      // Check if we already have messages (don't reload if already populated)
       const existingMessages = chatStore.get(messagesAtom);
       if (existingMessages.length > 0) return;
 
@@ -162,7 +160,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     const updateActiveFile = () => {
       const newActiveFile = getActiveFileContext(app);
       setActiveFile(newActiveFile);
-      setIsContextCleared(false); // Reset cleared state when file changes
+      setIsContextCleared(false);
     };
 
     app.workspace.on("active-leaf-change", updateActiveFile);
@@ -180,13 +178,9 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       const newSelection = getSelectionContext(app);
 
       setSelection((prev) => {
-        // If new selection is empty but editor doesn't have focus,
-        // keep the previous selection (user just clicked away to chat)
         if (!newSelection && !editorHasFocus && prev) {
           return prev;
         }
-
-        // Only update if selection text changed
         if (prev?.text !== newSelection?.text || prev?.filePath !== newSelection?.filePath) {
           return newSelection;
         }
@@ -194,15 +188,9 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       });
     };
 
-    // Initial check
     checkSelection();
-
-    // Poll every 200ms for selection changes
     const intervalId = setInterval(checkSelection, 200);
-
-    return () => {
-      clearInterval(intervalId);
-    };
+    return () => { clearInterval(intervalId); };
   }, [app]);
 
   const handleClearContext = useCallback(() => {
@@ -217,6 +205,10 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     plugin.claudeClient?.clearSession();
     clearMessages();
     setSessionId(null);
+    setSessionTitle(null);
+    // Notify SessionsView
+    window.dispatchEvent(new CustomEvent("claude-agent:session-changed", { detail: { sessionId: null } }));
+    window.dispatchEvent(new CustomEvent("claude-agent:refresh-sessions"));
   }, [plugin.claudeClient]);
 
   // Initialize slash commands
@@ -244,13 +236,67 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     };
   }, [inputRef]);
 
+  // Listen for "switch session" events from SessionsView
+  useEffect(() => {
+    const handleSwitchSession = async (event: CustomEvent<{ sessionId: string }>) => {
+      const targetSessionId = event.detail.sessionId;
+      if (!plugin.claudeClient) return;
+
+      clearMessages();
+      plugin.claudeClient.switchSession(targetSessionId);
+      setSessionId(targetSessionId);
+
+      // Load history for the switched session
+      try {
+        const historyMessages = await plugin.claudeClient.fetchHistory();
+        if (historyMessages.length > 0) {
+          const chatMessages: ChatMessage[] = historyMessages.map((msg: { role: string; content: string; timestamp: number; compactMetadata?: CompactMetadata }) => ({
+            id: generateMessageId(),
+            role: msg.role as ChatMessage["role"],
+            content: msg.content,
+            timestamp: msg.timestamp,
+            ...(msg.compactMetadata && { compactMetadata: msg.compactMetadata }),
+          }));
+          chatStore.set(messagesAtom, chatMessages);
+        }
+      } catch (error) {
+        console.warn("[ChatView] Failed to load session history:", error);
+      }
+    };
+
+    window.addEventListener("claude-agent:switch-session", handleSwitchSession as EventListener);
+    return () => window.removeEventListener("claude-agent:switch-session", handleSwitchSession as EventListener);
+  }, [plugin.claudeClient]);
+
+  // Resolve session title from registry when sessionId changes
+  useEffect(() => {
+    if (!sessionId || !plugin.claudeClient) {
+      setSessionTitle(null);
+      return;
+    }
+    // Fetch from server — no dependency on sessionsAtom in this view
+    plugin.claudeClient.fetchSessions({ status: "all" }).then((sessions) => {
+      const entry = sessions.find(s => s.id === sessionId);
+      setSessionTitle(entry?.title || null);
+    });
+  }, [sessionId, plugin.claudeClient]);
+
+  const handleMarkDone = useCallback(async () => {
+    if (!plugin.claudeClient || !sessionId) return;
+    await plugin.claudeClient.updateSession(sessionId, { status: "done" });
+    plugin.claudeClient.clearSession();
+    clearMessages();
+    setSessionId(null);
+    setSessionTitle(null);
+    window.dispatchEvent(new CustomEvent("claude-agent:session-changed", { detail: { sessionId: null } }));
+    window.dispatchEvent(new CustomEvent("claude-agent:refresh-sessions"));
+  }, [plugin.claudeClient, sessionId]);
+
   const handleSend = useCallback(
     async (message: string, mentionedFiles: FileSearchResult[]) => {
-      // Capture context before sending
       const fileContext = isContextCleared ? undefined : activeFile;
       const selectionContext = selection;
 
-      // Add user message (skip slash commands — they're internal)
       if (!message.startsWith("/")) {
         addMessage({
           id: generateMessageId(),
@@ -264,42 +310,34 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       setError(null);
       clearStreamingMessage();
 
-      // Reset cleared state after sending
       setIsContextCleared(false);
-      // Auto-clear selection after sending
       setSelection(undefined);
 
       try {
-        // Wait for plugin initialization to complete (handles race with view restoration)
         if (plugin.initializationPromise) {
           await plugin.initializationPromise;
         }
 
-        // Ensure client is initialized
         if (!plugin.claudeClient) {
           throw new Error(
             "Claude client is not initialized. Please check that the proxy server is running."
           );
         }
 
-        // Get high-match relevant notes if enabled
         const highMatchNotes = includeRelevantNotes
           ? relevantNotes.filter(note => note.category === "high" || note.finalScore > 0.7)
           : undefined;
 
         let fullResponse = "";
 
-        // Stream the response
         for await (const chunk of plugin.claudeClient.chat(message, fileContext, mentionedFiles, selectionContext, highMatchNotes)) {
           switch (chunk.type) {
             case "text":
-              // chunk.content is the full accumulated text, not a delta
               fullResponse = chunk.content;
               updateStreamingMessage(fullResponse);
               break;
 
             case "tool_call":
-              // Optionally show tool calls
               if (plugin.settings.showDebugInfo) {
                 addMessage({
                   id: generateMessageId(),
@@ -330,8 +368,6 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
               break;
 
             case "done":
-              // Add the complete assistant message
-              // Skip trivial SDK acknowledgments (e.g. "Compacted" from /compact)
               if (fullResponse && !/^compacted$/i.test(fullResponse.trim())) {
                 clearStreamingMessage();
                 addMessage({
@@ -353,6 +389,9 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         console.error("Chat error:", error);
       } finally {
         setLoading(false);
+        // Notify SessionsView to refresh (new session may have been created)
+        window.dispatchEvent(new CustomEvent("claude-agent:refresh-sessions"));
+        window.dispatchEvent(new CustomEvent("claude-agent:session-changed", { detail: { sessionId: plugin.claudeClient?.getSessionId() ?? null } }));
       }
     },
     [plugin, activeFile, isContextCleared, selection, includeRelevantNotes, relevantNotes]
@@ -360,7 +399,6 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
 
   const handleCommand = useCallback(
     async (commandName: string, args: string) => {
-      // /compact routes through the chat pipeline (needs SSE streaming for compact_boundary)
       if (commandName === "compact") {
         await handleSend("/compact", []);
         return;
@@ -389,9 +427,14 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
             timestamp: Date.now(),
           });
         }
-        // Update local session state if it was a clear command
-        if (commandName === "clear" || commandName === "new" || commandName === "reset") {
+        if (commandName === "clear" || commandName === "new" || commandName === "reset" || commandName === "done") {
           setSessionId(null);
+          setSessionTitle(null);
+          window.dispatchEvent(new CustomEvent("claude-agent:session-changed", { detail: { sessionId: null } }));
+          window.dispatchEvent(new CustomEvent("claude-agent:refresh-sessions"));
+        }
+        if (commandName === "sessions" || commandName === "history") {
+          window.dispatchEvent(new CustomEvent("claude-agent:refresh-sessions"));
         }
       } catch (error) {
         const errorMessage =
@@ -406,7 +449,6 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     chatStore.set(modelAtom, newModel);
     plugin.settings.model = newModel;
     plugin.saveSettings();
-    // Return focus to input
     window.dispatchEvent(new CustomEvent("claude-agent:focus-input"));
   }, [plugin]);
 
@@ -424,8 +466,8 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       <div className="claude-agent-header">
         <span className="claude-agent-session-info">
           {sessionId ? (
-            <span className="claude-agent-session-id" title={sessionId ?? undefined}>
-              {sessionId}
+            <span className="claude-agent-session-title" title={sessionId ?? undefined}>
+              {sessionTitle || sessionId.slice(0, 12)}
             </span>
           ) : (
             <span className="claude-agent-session-id claude-agent-session-new">
@@ -433,6 +475,16 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
             </span>
           )}
         </span>
+        {sessionId && (
+          <button
+            className="claude-agent-done-button"
+            onClick={handleMarkDone}
+            disabled={isLoading}
+            title="Mark session as done and start new"
+          >
+            Done
+          </button>
+        )}
         <button
           className="claude-agent-new-chat-button"
           onClick={handleNewChat}
@@ -526,13 +578,11 @@ export class ClaudeAgentChatView extends ItemView {
     const container = this.containerEl.children[1];
     container.empty();
 
-    // Create React root and render
     this.root = createRoot(container);
     this.root.render(<ChatContainer plugin={this.plugin} app={this.plugin.app} />);
   }
 
   async onClose(): Promise<void> {
-    // Cleanup React root
     if (this.root) {
       this.root.unmount();
       this.root = null;

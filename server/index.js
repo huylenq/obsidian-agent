@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { readFileSync, existsSync, appendFileSync, writeFileSync, mkdirSync } from "fs";
+import { readFileSync, existsSync, appendFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 
@@ -146,6 +146,167 @@ function appendSummary(summariesPath, entry) {
 }
 
 // ============================================================================
+// Session Registry helpers
+// ============================================================================
+
+function getRegistryPath(workingDirectory) {
+  return join(homedir(), ".claude", "projects", encodePath(workingDirectory), "session-registry.json");
+}
+
+function loadRegistry(workingDirectory) {
+  const registryPath = getRegistryPath(workingDirectory);
+  if (!existsSync(registryPath)) return { version: 1, sessions: [] };
+  try {
+    return JSON.parse(readFileSync(registryPath, "utf-8"));
+  } catch { return { version: 1, sessions: [] }; }
+}
+
+function saveRegistry(workingDirectory, registry) {
+  const registryPath = getRegistryPath(workingDirectory);
+  const dir = join(registryPath, "..");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(registryPath, JSON.stringify(registry, null, 2));
+}
+
+function updateSessionEntry(workingDirectory, sessionId, updates) {
+  const registry = loadRegistry(workingDirectory);
+  let entry = registry.sessions.find(s => s.id === sessionId);
+  if (!entry) {
+    entry = {
+      id: sessionId,
+      title: "",
+      status: "in_progress",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      model: "haiku",
+      messageCount: 0,
+      files: [],
+    };
+    registry.sessions.push(entry);
+  }
+
+  if (updates.title !== undefined) entry.title = updates.title;
+  if (updates.status !== undefined) entry.status = updates.status;
+  if (updates.model !== undefined) entry.model = updates.model;
+  if (updates.messageCount !== undefined) entry.messageCount = updates.messageCount;
+  if (updates.updatedAt !== undefined) entry.updatedAt = updates.updatedAt;
+
+  // Merge files (deduplicate)
+  if (updates.files && updates.files.length > 0) {
+    const fileSet = new Set(entry.files);
+    for (const f of updates.files) {
+      if (f) fileSet.add(f);
+    }
+    entry.files = [...fileSet];
+  }
+
+  saveRegistry(workingDirectory, registry);
+  return entry;
+}
+
+/** Collect vault-relative file paths from chat request body */
+function collectFilePaths(body) {
+  const paths = [];
+  if (body.activeFile?.path) paths.push(body.activeFile.path);
+  if (body.mentionedFiles) {
+    for (const f of body.mentionedFiles) {
+      if (f.path) paths.push(f.path);
+    }
+  }
+  if (body.relevantNotes) {
+    for (const n of body.relevantNotes) {
+      if (n.path) paths.push(n.path);
+    }
+  }
+  return [...new Set(paths)];
+}
+
+/** Check if a transcript is a warmup/sidechain session that should be skipped */
+function isWarmupTranscript(transcriptPath) {
+  if (!existsSync(transcriptPath)) return false;
+  const content = readFileSync(transcriptPath, "utf-8");
+  const firstLine = content.split("\n")[0];
+  if (!firstLine) return false;
+  try {
+    const entry = JSON.parse(firstLine);
+    // SDK warmup sessions have isSidechain:true and "Warmup" as first message
+    if (entry.isSidechain) return true;
+    const text = extractTextFromEntry(entry);
+    if (text && /^warmup$/i.test(text.trim())) return true;
+  } catch { /* not parseable, skip */ }
+  return false;
+}
+
+/** Extract first user message title from transcript JSONL */
+function extractTitleFromTranscript(transcriptPath) {
+  if (!existsSync(transcriptPath)) return "";
+  const content = readFileSync(transcriptPath, "utf-8");
+  const lines = content.trim().split("\n");
+  for (const line of lines) {
+    try {
+      const entry = JSON.parse(line);
+      if (entry.type === "user") {
+        const text = extractTextFromEntry(entry);
+        if (text && !text.startsWith("/") && !/^warmup$/i.test(text.trim())) {
+          // Strip markdown, collapse whitespace, truncate to 80 chars
+          const clean = text.replace(/[#*_`\[\]]/g, "").replace(/\s+/g, " ").trim();
+          return clean.slice(0, 80);
+        }
+      }
+    } catch { /* skip malformed */ }
+  }
+  return "";
+}
+
+/** Extract file paths from system prompts in transcript (for migration) */
+function extractFilePathsFromTranscript(transcriptPath) {
+  if (!existsSync(transcriptPath)) return [];
+  const content = readFileSync(transcriptPath, "utf-8");
+  const paths = new Set();
+  // Match "currently viewing: **path**" patterns
+  const viewingRegex = /currently viewing:\s*\*\*([^*]+)\*\*/gi;
+  let match;
+  while ((match = viewingRegex.exec(content)) !== null) {
+    paths.add(match[1].trim());
+  }
+  return [...paths];
+}
+
+/** Count messages in a transcript */
+function countTranscriptMessages(transcriptPath) {
+  if (!existsSync(transcriptPath)) return 0;
+  const content = readFileSync(transcriptPath, "utf-8");
+  const lines = content.trim().split("\n");
+  let count = 0;
+  for (const line of lines) {
+    try {
+      const entry = JSON.parse(line);
+      if (entry.type === "user" || entry.type === "assistant") count++;
+    } catch { /* skip */ }
+  }
+  return count;
+}
+
+/** Get first and last timestamps from transcript */
+function getTranscriptTimestamps(transcriptPath) {
+  if (!existsSync(transcriptPath)) return { first: Date.now(), last: Date.now() };
+  const content = readFileSync(transcriptPath, "utf-8");
+  const lines = content.trim().split("\n");
+  let first = Date.now();
+  let last = 0;
+  for (const line of lines) {
+    try {
+      const entry = JSON.parse(line);
+      if (entry.timestamp) {
+        if (entry.timestamp < first) first = entry.timestamp;
+        if (entry.timestamp > last) last = entry.timestamp;
+      }
+    } catch { /* skip */ }
+  }
+  return { first, last: last || first };
+}
+
+// ============================================================================
 // Express app
 // ============================================================================
 
@@ -159,6 +320,132 @@ app.use(express.json({ limit: "10mb" }));
  */
 app.get("/health", (req, res) => {
   res.json({ status: "ok" });
+});
+
+/**
+ * List sessions from registry
+ * Query params: workingDirectory (required), status (optional: "in_progress"|"done"), file (optional: vault-relative path)
+ */
+app.get("/sessions", (req, res) => {
+  const { workingDirectory, status, file } = req.query;
+
+  if (!workingDirectory) {
+    return res.status(400).json({ error: "workingDirectory is required" });
+  }
+
+  try {
+    const registry = loadRegistry(workingDirectory);
+    let sessions = registry.sessions;
+
+    if (status && status !== "all") {
+      sessions = sessions.filter(s => s.status === status);
+    }
+
+    if (file) {
+      sessions = sessions.filter(s => s.files.includes(file));
+    }
+
+    // Sort by updatedAt descending
+    sessions.sort((a, b) => b.updatedAt - a.updatedAt);
+
+    res.json({ sessions });
+  } catch (error) {
+    logError("[Proxy] Error listing sessions:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Update a session entry (status, title)
+ */
+app.patch("/sessions/:sessionId", (req, res) => {
+  const { sessionId } = req.params;
+  const { workingDirectory, status, title } = req.body;
+
+  if (!workingDirectory) {
+    return res.status(400).json({ error: "workingDirectory is required" });
+  }
+
+  try {
+    const updates = { updatedAt: Date.now() };
+    if (status !== undefined) updates.status = status;
+    if (title !== undefined) updates.title = title;
+
+    const entry = updateSessionEntry(workingDirectory, sessionId, updates);
+    res.json({ session: entry });
+  } catch (error) {
+    logError("[Proxy] Error updating session:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Migrate: scan all JSONL files to populate registry
+ */
+app.post("/sessions/migrate", (req, res) => {
+  const { workingDirectory } = req.body;
+
+  if (!workingDirectory) {
+    return res.status(400).json({ error: "workingDirectory is required" });
+  }
+
+  try {
+    const projectDir = join(homedir(), ".claude", "projects", encodePath(workingDirectory));
+    if (!existsSync(projectDir)) {
+      return res.json({ migrated: 0 });
+    }
+
+    const registry = loadRegistry(workingDirectory);
+    const existingIds = new Set(registry.sessions.map(s => s.id));
+
+    const files = readdirSync(projectDir).filter(f => f.endsWith(".jsonl"));
+    let migrated = 0;
+
+    for (const file of files) {
+      const sessionId = file.replace(".jsonl", "");
+      // Skip summaries sidecars
+      if (sessionId.endsWith(".summaries")) continue;
+      // Skip already registered
+      if (existingIds.has(sessionId)) continue;
+
+      const transcriptPath = join(projectDir, file);
+
+      // Skip empty files
+      try {
+        const stat = statSync(transcriptPath);
+        if (stat.size === 0) continue;
+      } catch { continue; }
+
+      // Skip warmup/sidechain sessions
+      if (isWarmupTranscript(transcriptPath)) continue;
+
+      const title = extractTitleFromTranscript(transcriptPath);
+      if (!title) continue; // Skip sessions with no user messages
+
+      const messageCount = countTranscriptMessages(transcriptPath);
+      const { first, last } = getTranscriptTimestamps(transcriptPath);
+      const filePaths = extractFilePathsFromTranscript(transcriptPath);
+
+      registry.sessions.push({
+        id: sessionId,
+        title,
+        status: "done", // Assume migrated sessions are done
+        createdAt: first,
+        updatedAt: last,
+        model: "haiku", // Default; we can't reliably determine from transcript
+        messageCount,
+        files: filePaths,
+      });
+      migrated++;
+    }
+
+    saveRegistry(workingDirectory, registry);
+    log(`[Proxy] Migration complete: ${migrated} sessions migrated`);
+    res.json({ migrated });
+  } catch (error) {
+    logError("[Proxy] Migration error:", error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 /**
@@ -341,6 +628,9 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
     return prompt;
   };
 
+  // Track the resolved session ID (set in runQuery, used in finally for registry update)
+  let resolvedSessionId = sessionId || null;
+
   const buildQueryOptions = (resumeSessionId) => ({
     model: model || "haiku",
     systemPrompt: buildSystemPrompt(),
@@ -407,6 +697,7 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
           // Capture session ID on init
           if (msg.subtype === "init" && msg.session_id) {
             currentSessionId = msg.session_id;
+            resolvedSessionId = msg.session_id;
             log("[Proxy] Session ID:", currentSessionId);
             sendEvent("session", { sessionId: currentSessionId });
           }
@@ -476,6 +767,25 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
       sendEvent("error", { content: error.message || "Unknown error" });
     }
   } finally {
+    // Update session registry
+    try {
+      if (resolvedSessionId && workingDirectory) {
+        const filePaths = collectFilePaths(req.body);
+        const transcriptPath = getTranscriptPath(workingDirectory, resolvedSessionId);
+        const title = extractTitleFromTranscript(transcriptPath);
+        const msgCount = countTranscriptMessages(transcriptPath);
+
+        updateSessionEntry(workingDirectory, resolvedSessionId, {
+          title: title || undefined,
+          model: model || "haiku",
+          messageCount: msgCount,
+          updatedAt: Date.now(),
+          files: filePaths,
+        });
+      }
+    } catch (regError) {
+      logError("[Proxy] Failed to update session registry:", regError);
+    }
     res.end();
   }
 });

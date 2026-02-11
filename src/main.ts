@@ -5,6 +5,7 @@ import { ClaudeAgentSettings, DEFAULT_SETTINGS } from "./types";
 import { ClaudeAgentSettingTab } from "./settings";
 import { ClaudeAgentChatView, CHAT_VIEW_TYPE } from "./ui/ChatView";
 import { RelevantNotesView, RELEVANT_NOTES_VIEW_TYPE } from "./ui/RelevantNotesView";
+import { SessionsView, SESSIONS_VIEW_TYPE } from "./ui/SessionsView";
 import { ClaudeAgentClient } from "./claude/client";
 
 const PROXY_PORT = 27182;
@@ -35,6 +36,9 @@ export default class ClaudeAgentPlugin extends Plugin {
     // Register the relevant notes view
     this.registerView(RELEVANT_NOTES_VIEW_TYPE, (leaf) => new RelevantNotesView(leaf, this));
 
+    // Register the sessions view
+    this.registerView(SESSIONS_VIEW_TYPE, (leaf) => new SessionsView(leaf, this));
+
     // Add ribbon icon
     this.addRibbonIcon("message-circle", "Open Claude Agent", () => {
       this.activateChatView();
@@ -55,6 +59,15 @@ export default class ClaudeAgentPlugin extends Plugin {
       name: "Open Relevant Notes",
       callback: () => {
         this.activateRelevantNotesView();
+      },
+    });
+
+    // Add command to open sessions
+    this.addCommand({
+      id: "open-sessions",
+      name: "Open Sessions",
+      callback: () => {
+        this.activateSessionsView();
       },
     });
 
@@ -304,6 +317,30 @@ export default class ClaudeAgentPlugin extends Plugin {
       if (rightLeaf) {
         await rightLeaf.setViewState({
           type: RELEVANT_NOTES_VIEW_TYPE,
+          active: true,
+        });
+        leaf = rightLeaf;
+      }
+    }
+
+    if (leaf) {
+      workspace.revealLeaf(leaf);
+    }
+  }
+
+  /**
+   * Activate or focus the sessions view
+   */
+  async activateSessionsView(): Promise<void> {
+    const { workspace } = this.app;
+
+    let leaf = workspace.getLeavesOfType(SESSIONS_VIEW_TYPE)[0];
+
+    if (!leaf) {
+      const rightLeaf = workspace.getRightLeaf(false);
+      if (rightLeaf) {
+        await rightLeaf.setViewState({
+          type: SESSIONS_VIEW_TYPE,
           active: true,
         });
         leaf = rightLeaf;

@@ -84,6 +84,51 @@ The agent uses MCP servers configured in:
 
 Set via `settingSources: ["user", "project", "local"]` and `workingDirectory` pointing to the vault path.
 
+## `~/.claude/` Files We Read and Write
+
+The proxy server reads and writes files under `~/.claude/projects/{encoded-path}/` where `{encoded-path}` is the vault's absolute path with `/`, spaces, and `~` replaced by `-`.
+
+For the IWE vault, that resolves to:
+`~/.claude/projects/-Users-huy-Library-Mobile-Documents-iCloud-md-obsidian-Documents-IWE/`
+
+### Files managed by Claude Code SDK (read-only to us)
+
+| File pattern | Description |
+|---|---|
+| `{sessionId}.jsonl` | Session transcript — one JSON object per line. Contains `user`, `assistant`, `system` entries with `message`, `timestamp`, `type`/`subtype` fields. SDK creates these; we only read them. |
+
+### Files we create and manage
+
+| File pattern | Owner | Description |
+|---|---|---|
+| `{sessionId}.summaries.json` | Proxy server | Compact summaries sidecar. Array of `{ timestamp, preTokens, summary }`. One entry per `/compact` invocation. Written by the proxy after generating a synthetic summary via Haiku. |
+| `session-registry.json` | Proxy server | Central session registry. Single JSON file tracking all sessions with metadata (title, status, timestamps, model, associated files). See schema below. |
+
+### Session Registry schema (`session-registry.json`)
+
+```jsonc
+{
+  "version": 1,
+  "sessions": [
+    {
+      "id": "uuid",              // matches JSONL filename
+      "title": "First message",  // first user message, 80 chars max
+      "status": "in_progress",   // "in_progress" | "done"
+      "createdAt": 1700000000,   // epoch ms
+      "updatedAt": 1700000000,   // epoch ms, updated after each /chat
+      "model": "haiku",          // "haiku" | "sonnet" | "opus"
+      "messageCount": 12,        // user + assistant messages
+      "files": ["path/to/note.md"]  // vault-relative paths (deduped)
+    }
+  ]
+}
+```
+
+**How the registry is populated:**
+- **Migration** (`POST /sessions/migrate`): One-time scan of all `.jsonl` files. Extracts title from first user message, timestamps, file paths from `currently viewing: **path**` patterns. Skips empty files and warmup/sidechain sessions (`isSidechain: true` or first message is "Warmup"). Migrated sessions default to `status: "done"`.
+- **Ongoing** (`POST /chat` finally block): After each chat completes, upserts the session entry with current model, message count, `updatedAt`, and merges file paths from `activeFile`, `mentionedFiles`, and `relevantNotes`.
+- **Manual** (`PATCH /sessions/:id`): Client can update `status` and `title` (used by `/done` command and status toggle in UI).
+
 ## Compaction
 
 Long conversations are managed via the Agent SDK's compaction feature. The `/compact` slash command triggers it.
@@ -97,9 +142,34 @@ Long conversations are managed via the Agent SDK's compaction feature. The `/com
 - SDK injects a synthetic user message after `compact_boundary` in the transcript containing its own detailed summary — captured as `sdkSummary` and rendered with markdown in the boundary UI
 - History endpoint filters compaction artifacts from transcript: `/compact` command, SDK's "Compacted" acknowledgment, `<local-command-caveat>` system injections
 
+## Session Management
+
+Sessions are tracked via a central registry file (see `~/.claude/` section above). The proxy server exposes three endpoints and the client/UI provide browsing and switching.
+
+**Server endpoints:**
+- `GET /sessions?workingDirectory=...&status=...&file=...` — list sessions, sorted by `updatedAt` desc
+- `PATCH /sessions/:sessionId` — update `status` and/or `title`
+- `POST /sessions/migrate` — one-time JSONL scan to populate registry
+
+**UI — standalone `SessionsView`** (`src/ui/SessionsView.tsx`): Separate `ItemView` (like `RelevantNotesView`), registered in `main.ts`. Owns its own data fetching, active-file tracking, and migration trigger. Two modes:
+- **"This File"** (default) — auto-fetches sessions associated with the active file on `active-leaf-change`
+- **"All Sessions"** — shows all sessions vault-wide with status filtering (Active / All)
+
+**Cross-view communication** via custom events (same pattern as RelevantNotes → ChatView):
+- `claude-agent:switch-session` — SessionsView → ChatView (loads history for selected session)
+- `claude-agent:session-changed` — ChatView → SessionsView (sync current session ID)
+- `claude-agent:refresh-sessions` — ChatView → SessionsView (after chat completes, /done, /clear)
+
+**Key files:**
+- `src/state/sessionState.ts` — Jotai atoms
+- `src/ui/SessionsView.tsx` — Standalone ItemView (data fetching + rendering)
+- `src/ui/Sessions/SessionCard.tsx` — Card component
+
 ## Slash Commands
 
 Registered in `src/commands/builtins/` and initialized in `src/commands/index.ts`. Autocomplete triggers when typing `/` in the chat input.
 
 - `/clear` (aliases: `/new`, `/reset`) — start fresh session
 - `/compact` — compact conversation context (routes through chat pipeline, not a local command)
+- `/done` — mark current session as done and start new chat
+- `/sessions` (alias: `/history`) — toggle All Sessions mode in the sessions panel
