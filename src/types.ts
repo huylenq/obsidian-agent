@@ -47,6 +47,10 @@ export interface GraphViewSettings {
   maxSimilarityEdges: number;    // default 15
   showLinkEdges: boolean;
   showSimilarityEdges: boolean;
+  // Physics / force settings
+  centerForce: number;           // 0..1, default 0.5
+  repelForce: number;            // 0..500, default 100 (applied as negative internally)
+  linkDistance: number;           // 50..500, default 250
 }
 
 export const DEFAULT_GRAPH_VIEW_SETTINGS: GraphViewSettings = {
@@ -55,6 +59,9 @@ export const DEFAULT_GRAPH_VIEW_SETTINGS: GraphViewSettings = {
   maxSimilarityEdges: 15,
   showLinkEdges: true,
   showSimilarityEdges: true,
+  centerForce: 0.5,
+  repelForce: 100,
+  linkDistance: 250,
 };
 
 export interface ClaudeAgentSettings {

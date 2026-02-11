@@ -59,6 +59,11 @@ interface AnimState {
   target: number;
 }
 
+interface ColorState {
+  current: { r: number; g: number; b: number };
+  target: { r: number; g: number; b: number };
+}
+
 export class GraphRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -85,7 +90,9 @@ export class GraphRenderer {
   // Animation state tracking
   private nodeAlphas = new Map<ForceNode, AnimState>();
   private edgeAlphas = new Map<ForceLink, AnimState>();
-  private nodeRadii = new Map<ForceNode, AnimState>();
+  private edgeColors = new Map<ForceLink, ColorState>();
+  private labelFontSizes = new Map<ForceNode, AnimState>();
+  private labelYOffsets = new Map<ForceNode, AnimState>(); // Separate animation for vertical shift
   private lastAnimTime = 0;
   private isAnimating = false;
 
@@ -100,6 +107,102 @@ export class GraphRenderer {
     this.setupMouseHandlers();
     this.observeTheme();
     this.lastAnimTime = performance.now();
+  }
+
+  /**
+   * Parse a CSS color string to RGB values (0-255).
+   * Handles hex, rgb(), and CSS variables.
+   */
+  private parseColor(color: string): { r: number; g: number; b: number } {
+    // Handle CSS variables by reading computed style
+    if (color.startsWith("var(")) {
+      const varName = color.match(/var\((--[^)]+)\)/)?.[1];
+      if (varName) {
+        color = getComputedStyle(document.body).getPropertyValue(varName).trim();
+      }
+    }
+
+    // Try to parse as hex
+    if (color.startsWith("#")) {
+      const hex = color.slice(1);
+      const bigint = parseInt(hex, 16);
+      return {
+        r: (bigint >> 16) & 255,
+        g: (bigint >> 8) & 255,
+        b: bigint & 255,
+      };
+    }
+
+    // Try to parse as rgb() or rgba()
+    const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (rgbMatch) {
+      return {
+        r: parseInt(rgbMatch[1]),
+        g: parseInt(rgbMatch[2]),
+        b: parseInt(rgbMatch[3]),
+      };
+    }
+
+    // Fallback: create a temporary element to get computed color
+    const temp = document.createElement("div");
+    temp.style.color = color;
+    document.body.appendChild(temp);
+    const computed = getComputedStyle(temp).color;
+    document.body.removeChild(temp);
+
+    const match = computed.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (match) {
+      return {
+        r: parseInt(match[1]),
+        g: parseInt(match[2]),
+        b: parseInt(match[3]),
+      };
+    }
+
+    // Ultimate fallback
+    return { r: 128, g: 128, b: 128 };
+  }
+
+  /**
+   * Convert HSL to RGB (all values 0-1 range).
+   */
+  private hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: number } {
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    const m = l - c / 2;
+
+    let r = 0, g = 0, b = 0;
+    if (h < 60) { r = c; g = x; }
+    else if (h < 120) { r = x; g = c; }
+    else if (h < 180) { g = c; b = x; }
+    else if (h < 240) { g = x; b = c; }
+    else if (h < 300) { r = x; b = c; }
+    else { r = c; b = x; }
+
+    return {
+      r: Math.round((r + m) * 255),
+      g: Math.round((g + m) * 255),
+      b: Math.round((b + m) * 255),
+    };
+  }
+
+  /**
+   * Get or initialize color animation state.
+   */
+  private getColorState(
+    map: Map<any, ColorState>,
+    key: any,
+    initialColor: { r: number; g: number; b: number }
+  ): ColorState {
+    let state = map.get(key);
+    if (!state) {
+      state = {
+        current: { ...initialColor },
+        target: { ...initialColor },
+      };
+      map.set(key, state);
+    }
+    return state;
   }
 
   /**
@@ -140,7 +243,9 @@ export class GraphRenderer {
     // Clear animation state for fresh start
     this.nodeAlphas.clear();
     this.edgeAlphas.clear();
-    this.nodeRadii.clear();
+    this.edgeColors.clear();
+    this.labelFontSizes.clear();
+    this.labelYOffsets.clear();
     this.hoveredNode = null;
     this.hoveredNeighbors.clear();
 
@@ -179,10 +284,18 @@ export class GraphRenderer {
   }
 
   /**
-   * Easing function for smooth transitions (ease-out cubic).
+   * Easing function for smooth transitions (ease-out quart).
    */
   private ease(t: number): number {
-    return 1 - Math.pow(1 - t, 3);
+    return 1 - Math.pow(1 - t, 4);
+  }
+
+  /**
+   * Gentler easing for label shift (ease-out quint).
+   * Even more cushioned at the end than quart.
+   */
+  private easeGentle(t: number): number {
+    return 1 - Math.pow(1 - t, 5);
   }
 
   /**
@@ -190,30 +303,44 @@ export class GraphRenderer {
    * Returns true if any animation is still in progress.
    */
   private stepAnimations(deltaTime: number): boolean {
-    const speed = 0.002; // transition speed factor (lower = slower, longer animation)
+    const speed = 0.01; // base transition speed
+    const fontSizeSpeed = 0.02; // snappier for font size (2x faster)
+    const yOffsetSpeed = 0.007; // gentler for position shift (0.7x slower)
     const threshold = 0.001; // snap to target when close enough
     let anyActive = false;
 
-    const lerp = (current: number, target: number): number => {
+    const lerp = (current: number, target: number, animSpeed: number, easeFn = this.ease.bind(this)): number => {
       const delta = target - current;
       if (Math.abs(delta) < threshold) return target;
       anyActive = true;
-      return current + delta * this.ease(speed * deltaTime);
+      return current + delta * easeFn(animSpeed * deltaTime);
     };
 
     // Animate node alphas
     for (const state of this.nodeAlphas.values()) {
-      state.current = lerp(state.current, state.target);
+      state.current = lerp(state.current, state.target, speed);
     }
 
     // Animate edge alphas
     for (const state of this.edgeAlphas.values()) {
-      state.current = lerp(state.current, state.target);
+      state.current = lerp(state.current, state.target, speed);
     }
 
-    // Animate node radii
-    for (const state of this.nodeRadii.values()) {
-      state.current = lerp(state.current, state.target);
+    // Animate label font sizes (snappier)
+    for (const state of this.labelFontSizes.values()) {
+      state.current = lerp(state.current, state.target, fontSizeSpeed);
+    }
+
+    // Animate label Y offsets (gentler, with softer easing)
+    for (const state of this.labelYOffsets.values()) {
+      state.current = lerp(state.current, state.target, yOffsetSpeed, this.easeGentle.bind(this));
+    }
+
+    // Animate edge colors (RGB channels)
+    for (const state of this.edgeColors.values()) {
+      state.current.r = lerp(state.current.r, state.target.r, speed);
+      state.current.g = lerp(state.current.g, state.target.g, speed);
+      state.current.b = lerp(state.current.b, state.target.b, speed);
     }
 
     return anyActive;
@@ -240,10 +367,21 @@ export class GraphRenderer {
       }
       this.getAnimState(this.nodeAlphas, node, targetAlpha).target = targetAlpha;
 
-      // Radius target
-      const baseRadius = isCenter ? CENTER_RADIUS : NODE_RADIUS;
-      const targetRadius = isHovered ? baseRadius + 2 : baseRadius;
-      this.getAnimState(this.nodeRadii, node, targetRadius).target = targetRadius;
+      // Label font size target (snappier animation)
+      const baseFontSize = isCenter ? FONT_SIZE + 1 : FONT_SIZE;
+      const targetFontSize = isHovered ? baseFontSize + 3 : baseFontSize;
+      const fontState = this.getAnimState(this.labelFontSizes, node, targetFontSize);
+      fontState.target = targetFontSize;
+
+      // Label Y-offset target (gentler animation, independent from font size)
+      const targetYOffset = isHovered ? 11 : 0; // 7.5px additional downward shift when hovered
+      const yOffsetState = this.getAnimState(this.labelYOffsets, node, targetYOffset);
+      yOffsetState.target = targetYOffset;
+
+      // Debug logging
+      if (isHovered) {
+        console.log(`[Font Anim] Node ${node.title}: fontSize=${fontState.current.toFixed(1)}→${fontState.target}, yOffset=${yOffsetState.current.toFixed(1)}→${yOffsetState.target}`);
+      }
     }
 
     // Update edge targets
@@ -252,15 +390,41 @@ export class GraphRenderer {
       const tgt = edge.target as ForceNode;
       const connected = src === this.hoveredNode || tgt === this.hoveredNode;
 
+      // Alpha target (uniform for both edge types)
       let targetAlpha = 1;
       if (hoverActive && connected) {
-        targetAlpha = edge.type === "similarity" ? 0.9 : 1;
+        targetAlpha = 1;
       } else if (hoverActive) {
-        targetAlpha = edge.type === "similarity" ? 0.15 : 0.12;
+        targetAlpha = 0.12;
       } else {
-        targetAlpha = edge.type === "similarity" ? 1 : 0.6;
+        targetAlpha = 0.6;
       }
       this.getAnimState(this.edgeAlphas, edge, targetAlpha).target = targetAlpha;
+
+      // Color target
+      let targetColor: { r: number; g: number; b: number };
+      if (edge.type === "similarity") {
+        // Always use hue-based gradient — opacity handles highlighting
+        const t = edge.weight;
+        const hue = Math.min(t - 0.3, 0.5) / 0.5 * 120;
+        targetColor = this.hslToRgb(hue, 0.7, 0.55);
+      } else {
+        // Link edge
+        if (hoverActive && connected) {
+          // Highlighted link edge → accent color
+          targetColor = this.parseColor(this.colors.nodeFocused);
+        } else {
+          // Normal/dimmed link edge → theme line color
+          targetColor = this.parseColor(this.colors.line);
+        }
+      }
+
+      const colorState = this.getColorState(
+        this.edgeColors,
+        edge,
+        targetColor
+      );
+      colorState.target = targetColor;
     }
   }
 
@@ -268,7 +432,11 @@ export class GraphRenderer {
    * Start the animation loop if not already running.
    */
   private startAnimation(): void {
-    if (this.isAnimating) return;
+    if (this.isAnimating) {
+      console.log("[Animation] Already animating, skipping start");
+      return;
+    }
+    console.log("[Animation] Starting animation loop");
     this.isAnimating = true;
     this.lastAnimTime = performance.now();
     this.animateLoop();
@@ -290,6 +458,7 @@ export class GraphRenderer {
     if (stillAnimating) {
       requestAnimationFrame(this.animateLoop);
     } else {
+      console.log("[Animation] Animation loop complete, stopping");
       this.isAnimating = false;
     }
   };
@@ -321,22 +490,49 @@ export class GraphRenderer {
 
   // ========== Private ==========
 
+  /**
+   * Update force parameters in-place without rebuilding the simulation.
+   * Use this for physics-only changes (centerForce, repelForce, linkDistance)
+   * so nodes keep their positions.
+   */
+  updateForces(settings: GraphViewSettings): void {
+    this.settings = settings;
+    if (!this.simulation) return;
+
+    const baseDist = settings.linkDistance;
+    const linkForce = this.simulation.force("link") as ReturnType<typeof forceLink> | undefined;
+    if (linkForce) {
+      (linkForce as any).distance((d: ForceLink) => d.type === "similarity" ? baseDist * 1.4 : baseDist);
+    }
+
+    const charge = this.simulation.force("charge") as ReturnType<typeof forceManyBody> | undefined;
+    if (charge) {
+      (charge as any).strength(-settings.repelForce);
+    }
+
+    const center = this.simulation.force("center") as ReturnType<typeof forceCenter> | undefined;
+    if (center) {
+      (center as any).strength(settings.centerForce);
+    }
+
+    // Reheat gently so nodes settle into new equilibrium
+    this.simulation.alpha(0.3).restart();
+  }
+
   private initSimulation(): void {
     if (this.simulation) this.simulation.stop();
+    const s = this.settings!;
 
+    const baseDist = s.linkDistance;
     const linkForce = forceLink<ForceNode, ForceLink>(this.edges)
       .id((d) => d.id)
-      .distance((d) => {
-        return d.type === "similarity" ? 350 : 250;
-      })
-      .strength((d) => {
-        return d.type === "similarity" ? 0.25 : 1.0;
-      });
+      .distance((d) => d.type === "similarity" ? baseDist * 1.4 : baseDist)
+      .strength((d) => d.type === "similarity" ? 0.25 : 1.0);
 
     this.simulation = forceSimulation<ForceNode>(this.nodes)
       .force("link", linkForce)
-      .force("charge", forceManyBody().strength(-100).distanceMax(600))
-      .force("center", forceCenter(0, 0).strength(0.52))
+      .force("charge", forceManyBody().strength(-s.repelForce).distanceMax(600))
+      .force("center", forceCenter(0, 0).strength(s.centerForce))
       .force("collide", forceCollide<ForceNode>().radius((d) => (d.isCenter ? CENTER_RADIUS : NODE_RADIUS) + 4))
       .alphaDecay(0.05)
       .velocityDecay(0.6)
@@ -359,9 +555,18 @@ export class GraphRenderer {
         }
         return true;
       })
+      .on("start", (event) => {
+        // Show grabbing cursor only when panning (mousedown-initiated, not wheel zoom)
+        if (event.sourceEvent?.type === "mousedown") {
+          this.canvas.style.cursor = "grabbing";
+        }
+      })
       .on("zoom", (event) => {
         this.transform = event.transform;
         this.draw();
+      })
+      .on("end", () => {
+        this.canvas.style.cursor = this.hoveredNode ? "pointer" : "default";
       });
 
     select(this.canvas).call(this.zoomBehavior);
@@ -434,7 +639,7 @@ export class GraphRenderer {
           if (tgt === node) this.hoveredNeighbors.add(src);
         }
       }
-      this.canvas.style.cursor = node ? "pointer" : "grab";
+      this.canvas.style.cursor = node ? "pointer" : "default";
       this.onNodeHover?.(node, e.clientX, e.clientY);
       this.updateAnimationTargets();
       this.startAnimation();
@@ -460,7 +665,7 @@ export class GraphRenderer {
       this.draggedNode = null;
       // Let simulation cool down immediately so panning is smooth right after
       this.simulation?.alphaTarget(0);
-      this.canvas.style.cursor = this.hoveredNode ? "pointer" : "grab";
+      this.canvas.style.cursor = this.hoveredNode ? "pointer" : "default";
     }
   };
 
@@ -523,29 +728,28 @@ export class GraphRenderer {
     const animState = this.getAnimState(this.edgeAlphas, edge, 1);
     const animatedAlpha = animState.current;
 
+    // Get animated color
+    const t = edge.weight;
+    const defaultColor = edge.type === "similarity"
+      ? this.hslToRgb(Math.min(t - 0.3, 0.5) / 0.5 * 120, 0.7, 0.55)
+      : this.parseColor(this.colors.line);
+    const colorState = this.getColorState(this.edgeColors, edge, defaultColor);
+    const animatedColor = colorState.current;
+
     this.ctx.beginPath();
 
     if (edge.type === "similarity") {
       this.ctx.setLineDash([5, 3]);
-      const t = edge.weight;
-      const hue = Math.min(t - 0.3, 0.5) / 0.5 * 120;
+
+      // Use animated color
+      this.ctx.strokeStyle = `rgb(${Math.round(animatedColor.r)}, ${Math.round(animatedColor.g)}, ${Math.round(animatedColor.b)})`;
+      this.ctx.globalAlpha = animatedAlpha;
 
       if (hoverActive && connected) {
-        // Highlight: bright accent
-        this.ctx.strokeStyle = this.colors.nodeFocused;
-        this.ctx.globalAlpha = animatedAlpha;
         this.ctx.lineWidth = 1.5 + t;
       } else if (hoverActive) {
-        // Dim: nearly invisible
-        const alpha = Math.pow(t, 3) * 0.9;
-        this.ctx.strokeStyle = `hsla(${hue}, 70%, 55%, ${alpha})`;
-        this.ctx.globalAlpha = animatedAlpha;
         this.ctx.lineWidth = 0.5 + t * 1.5;
       } else {
-        // Normal
-        const alpha = Math.pow(t, 3) * 0.9;
-        this.ctx.strokeStyle = `hsla(${hue}, 70%, 55%, ${alpha})`;
-        this.ctx.globalAlpha = animatedAlpha;
         this.ctx.lineWidth = 0.5 + t * 1.5;
       }
 
@@ -564,20 +768,15 @@ export class GraphRenderer {
     } else {
       this.ctx.setLineDash([]);
 
+      // Use animated color
+      this.ctx.strokeStyle = `rgb(${Math.round(animatedColor.r)}, ${Math.round(animatedColor.g)}, ${Math.round(animatedColor.b)})`;
+      this.ctx.globalAlpha = animatedAlpha;
+
       if (hoverActive && connected) {
-        // Highlight: bright accent
-        this.ctx.strokeStyle = this.colors.nodeFocused;
-        this.ctx.globalAlpha = animatedAlpha;
         this.ctx.lineWidth = 1.5;
       } else if (hoverActive) {
-        // Dim
-        this.ctx.strokeStyle = this.colors.line;
-        this.ctx.globalAlpha = animatedAlpha;
         this.ctx.lineWidth = 1;
       } else {
-        // Normal
-        this.ctx.strokeStyle = this.colors.line;
-        this.ctx.globalAlpha = animatedAlpha;
         this.ctx.lineWidth = 1;
       }
 
@@ -598,12 +797,14 @@ export class GraphRenderer {
     const isNeighbor = this.hoveredNeighbors.has(node);
     const isHighlighted = isHovered || isNeighbor;
 
-    // Get animated values
+    // Get animated alpha
     const animAlpha = this.getAnimState(this.nodeAlphas, node, 1).current;
-    const animRadius = this.getAnimState(this.nodeRadii, node, node.isCenter ? CENTER_RADIUS : NODE_RADIUS).current;
+
+    // Use constant radius (no animation)
+    const radius = node.isCenter ? CENTER_RADIUS : NODE_RADIUS;
 
     this.ctx.beginPath();
-    this.ctx.arc(node.x, node.y, animRadius, 0, Math.PI * 2);
+    this.ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
 
     if (hoverActive && !isHighlighted && !node.isCenter) {
       // Dim: faded out
@@ -638,32 +839,47 @@ export class GraphRenderer {
       const isNeighbor = this.hoveredNeighbors.has(node);
       const isHighlighted = isHovered || isNeighbor;
 
-      // Use animated radius for label positioning
-      const animRadius = this.getAnimState(this.nodeRadii, node, node.isCenter ? CENTER_RADIUS : NODE_RADIUS).current;
+      // Get animated values
       const animAlpha = this.getAnimState(this.nodeAlphas, node, 1).current;
-      const y = node.y + animRadius + 4;
+      const baseFontSize = node.isCenter ? FONT_SIZE + 1 : FONT_SIZE;
+      const animFontSize = this.getAnimState(this.labelFontSizes, node, baseFontSize).current;
+      const animYOffset = this.getAnimState(this.labelYOffsets, node, 0).current;
+
+      // Debug logging for hovered node
+      if (isHovered) {
+        console.log(`[Draw Label] Node ${node.title}: fontSize=${animFontSize.toFixed(1)}px, yOffset=${animYOffset.toFixed(1)}px`);
+      }
+
+      // Use constant radius for positioning
+      const radius = node.isCenter ? CENTER_RADIUS : NODE_RADIUS;
+
+      // Position with independent Y-offset animation (gentler than font size)
+      const y = node.y + radius + 4 + animYOffset;
+
       const text = node.title;
 
-      const fontSize = node.isCenter ? FONT_SIZE + 1 : FONT_SIZE;
-
       if (isHovered) {
-        // Hovered label: bold, bright white
-        this.ctx.font = `bold ${fontSize}px var(--font-interface, -apple-system, sans-serif)`;
+        // Hovered label: bright, larger (no bold)
+        const fontSizePx = Math.round(animFontSize);
+        const fontString = `${fontSizePx}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+        console.log(`[Font String] Setting font to: "${fontString}"`);
+        this.ctx.font = fontString;
+        console.log(`[Font String] Actual ctx.font after setting: "${this.ctx.font}"`);
         this.ctx.fillStyle = this.colors.nodeFocused;
         this.ctx.globalAlpha = animAlpha;
       } else if (hoverActive && isHighlighted) {
         // Neighbor label: normal weight, brighter
-        this.ctx.font = `${fontSize}px var(--font-interface, -apple-system, sans-serif)`;
+        this.ctx.font = `${Math.round(animFontSize)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
         this.ctx.fillStyle = this.colors.text;
         this.ctx.globalAlpha = animAlpha;
       } else if (hoverActive) {
         // Dim label
-        this.ctx.font = `${fontSize}px var(--font-interface, -apple-system, sans-serif)`;
+        this.ctx.font = `${Math.round(animFontSize)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
         this.ctx.fillStyle = this.colors.text;
         this.ctx.globalAlpha = animAlpha;
       } else {
         // Normal
-        this.ctx.font = `${fontSize}px var(--font-interface, -apple-system, sans-serif)`;
+        this.ctx.font = `${Math.round(animFontSize)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
         this.ctx.fillStyle = this.colors.text;
         this.ctx.globalAlpha = animAlpha;
       }

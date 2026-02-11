@@ -110,7 +110,7 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
   // Trigger rebuild when active file changes or index becomes available
   useEffect(() => {
     if (activeFile) buildAndSetGraph();
-  }, [activeFile, buildAndSetGraph]);
+  }, [activeFile, indexAvailable, buildAndSetGraph]);
 
   // Rebuild when settings change
   useEffect(() => {
