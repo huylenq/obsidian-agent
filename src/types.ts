@@ -41,12 +41,29 @@ export interface SelectionContext {
 
 export type ClaudeModel = "haiku" | "sonnet" | "opus";
 
+export interface GraphViewSettings {
+  linkDepth: 1 | 2 | 3;
+  similarityThreshold: number;   // default 0.4
+  maxSimilarityEdges: number;    // default 15
+  showLinkEdges: boolean;
+  showSimilarityEdges: boolean;
+}
+
+export const DEFAULT_GRAPH_VIEW_SETTINGS: GraphViewSettings = {
+  linkDepth: 1,
+  similarityThreshold: 0.4,
+  maxSimilarityEdges: 15,
+  showLinkEdges: true,
+  showSimilarityEdges: true,
+};
+
 export interface ClaudeAgentSettings {
   systemPrompt: string;
   showDebugInfo: boolean;
   sessionId: string | null;
   model: ClaudeModel;
   includeRelevantNotes: boolean;
+  graphSettings: GraphViewSettings;
 }
 
 export const DEFAULT_SETTINGS: ClaudeAgentSettings = {
@@ -57,6 +74,7 @@ Be concise and accurate.`,
   sessionId: null,
   model: "haiku",
   includeRelevantNotes: true,
+  graphSettings: DEFAULT_GRAPH_VIEW_SETTINGS,
 };
 
 // ============================================================================
@@ -118,3 +136,34 @@ export interface SessionRegistry {
   version: 1;
   sessions: SessionEntry[];
 }
+
+// ============================================================================
+// Semantic Graph View Types
+// ============================================================================
+
+export interface GraphNode {
+  id: string;              // vault-relative path
+  title: string;           // filename sans extension
+  depth: number;           // BFS depth from center (0 = active file)
+  isCenter: boolean;
+  inVectorIndex: boolean;
+  x?: number; y?: number;  // d3-force mutates these
+  fx?: number | null;      // fixed position (center node pinned)
+  fy?: number | null;
+}
+
+export interface GraphEdge {
+  id: string;              // `${source}--${type}--${target}`
+  source: string | GraphNode;
+  target: string | GraphNode;
+  type: "link" | "similarity";
+  direction: "outgoing" | "incoming" | "bidirectional";
+  weight: number;          // similarity score for similarity edges, 1.0 for links
+}
+
+export interface GraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  centerPath: string;
+}
+

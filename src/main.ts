@@ -6,6 +6,7 @@ import { ClaudeAgentSettingTab } from "./settings";
 import { ClaudeAgentChatView, CHAT_VIEW_TYPE } from "./ui/ChatView";
 import { RelevantNotesView, RELEVANT_NOTES_VIEW_TYPE } from "./ui/RelevantNotesView";
 import { SessionsView, SESSIONS_VIEW_TYPE } from "./ui/SessionsView";
+import { GraphView, GRAPH_VIEW_TYPE } from "./ui/GraphView";
 import { ClaudeAgentClient } from "./claude/client";
 
 const PROXY_PORT = 27182;
@@ -39,6 +40,9 @@ export default class ClaudeAgentPlugin extends Plugin {
     // Register the sessions view
     this.registerView(SESSIONS_VIEW_TYPE, (leaf) => new SessionsView(leaf, this));
 
+    // Register the semantic graph view
+    this.registerView(GRAPH_VIEW_TYPE, (leaf) => new GraphView(leaf, this));
+
     // Add ribbon icon
     this.addRibbonIcon("message-circle", "Open Claude Agent", () => {
       this.activateChatView();
@@ -68,6 +72,15 @@ export default class ClaudeAgentPlugin extends Plugin {
       name: "Open Sessions",
       callback: () => {
         this.activateSessionsView();
+      },
+    });
+
+    // Add command to open semantic graph
+    this.addCommand({
+      id: "open-semantic-graph",
+      name: "Open Semantic Graph",
+      callback: () => {
+        this.activateGraphView();
       },
     });
 
@@ -341,6 +354,30 @@ export default class ClaudeAgentPlugin extends Plugin {
       if (rightLeaf) {
         await rightLeaf.setViewState({
           type: SESSIONS_VIEW_TYPE,
+          active: true,
+        });
+        leaf = rightLeaf;
+      }
+    }
+
+    if (leaf) {
+      workspace.revealLeaf(leaf);
+    }
+  }
+
+  /**
+   * Activate or focus the semantic graph view
+   */
+  async activateGraphView(): Promise<void> {
+    const { workspace } = this.app;
+
+    let leaf = workspace.getLeavesOfType(GRAPH_VIEW_TYPE)[0];
+
+    if (!leaf) {
+      const rightLeaf = workspace.getRightLeaf(false);
+      if (rightLeaf) {
+        await rightLeaf.setViewState({
+          type: GRAPH_VIEW_TYPE,
           active: true,
         });
         leaf = rightLeaf;
