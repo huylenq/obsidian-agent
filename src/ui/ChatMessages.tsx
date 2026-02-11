@@ -8,6 +8,7 @@ import {
   chatStore,
 } from "@/state/chatState";
 import { MarkdownContent } from "./MarkdownContent";
+import { ToolCallBlock } from "./ToolCallBlock";
 import { ChatMessage } from "@/types";
 
 interface MessageGroup {
@@ -81,6 +82,16 @@ function CompactBoundary({
 }
 
 function MessageBubble({ message }: { message: ChatMessage }) {
+  if (message.role === "tool_block" && message.toolBlocks) {
+    return (
+      <div className="claude-agent-message tool_block">
+        {message.toolBlocks.map((block) => (
+          <ToolCallBlock key={block.toolUseId} block={block} />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div
       className={`claude-agent-message ${message.role} ${message.toolName ? "tool-call" : ""}`}

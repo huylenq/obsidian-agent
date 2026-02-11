@@ -4,10 +4,19 @@ import { FileSearchResult } from "@/utils/fileSearch";
 const PROXY_URL = "http://localhost:27182";
 
 export interface ChatResponse {
-  type: "text" | "tool_call" | "tool_result" | "error" | "done" | "session" | "compact_boundary";
+  type: "text" | "tool_use" | "tool_result" | "error" | "done" | "session" | "compact_boundary" | "result";
   content: string;
   toolName?: string;
+  toolUseId?: string;
+  description?: string;
+  input?: string;
+  isError?: boolean;
   sessionId?: string;
+  resultMetadata?: {
+    durationMs?: number;
+    numTurns?: number;
+    totalCostUsd?: number;
+  };
   compactMetadata?: {
     preTokens: number;
     trigger: "manual" | "auto";
@@ -163,41 +172,63 @@ export class ClaudeAgentClient {
   /**
    * Parse proxy server message into ChatResponse
    */
-  private parseProxyMessage(data: { type: string; content?: string; toolName?: string; sessionId?: string; preTokens?: number; trigger?: string; summary?: string }): ChatResponse {
+  private parseProxyMessage(data: Record<string, unknown>): ChatResponse {
     switch (data.type) {
       case "text":
-        return { type: "text", content: data.content || "" };
-      case "tool_call":
-        return { type: "tool_call", content: `Executing: ${data.toolName}`, toolName: data.toolName };
+        return { type: "text", content: (data.content as string) || "" };
+      case "tool_use":
+        return {
+          type: "tool_use",
+          content: "",
+          toolName: data.toolName as string,
+          toolUseId: data.toolUseId as string,
+          description: data.description as string,
+          input: data.input as string,
+        };
       case "tool_result":
-        return { type: "tool_result", content: `Result from: ${data.toolName}`, toolName: data.toolName };
+        return {
+          type: "tool_result",
+          content: (data.content as string) || "",
+          toolUseId: data.toolUseId as string,
+          isError: data.isError as boolean,
+        };
+      case "result":
+        return {
+          type: "result",
+          content: "",
+          resultMetadata: {
+            durationMs: data.durationMs as number,
+            numTurns: data.numTurns as number,
+            totalCostUsd: data.totalCostUsd as number,
+          },
+        };
       case "error":
-        return { type: "error", content: data.content || "Unknown error" };
+        return { type: "error", content: (data.content as string) || "Unknown error" };
       case "compact_boundary":
         return {
           type: "compact_boundary",
           content: "",
           compactMetadata: {
-            preTokens: data.preTokens || 0,
-            trigger: (data.trigger as "manual" | "auto") || "manual",
-            summary: data.summary,
+            preTokens: (data.preTokens as number) || 0,
+            trigger: ((data.trigger as string) || "manual") as "manual" | "auto",
+            summary: data.summary as string,
           },
         };
       case "session":
         // Store session ID for conversation continuity
         if (data.sessionId) {
-          this.settings.sessionId = data.sessionId;
-          this.onSessionChange?.(data.sessionId);
+          this.settings.sessionId = data.sessionId as string;
+          this.onSessionChange?.(data.sessionId as string);
           console.log("[ClaudeAgentClient] Session ID:", data.sessionId);
         }
-        return { type: "session", content: "", sessionId: data.sessionId };
+        return { type: "session", content: "", sessionId: data.sessionId as string };
       case "done":
         // Also capture session ID from done event if present
         if (data.sessionId && !this.settings.sessionId) {
-          this.settings.sessionId = data.sessionId;
-          this.onSessionChange?.(data.sessionId);
+          this.settings.sessionId = data.sessionId as string;
+          this.onSessionChange?.(data.sessionId as string);
         }
-        return { type: "done", content: "", sessionId: data.sessionId };
+        return { type: "done", content: "", sessionId: data.sessionId as string };
       default:
         return { type: "text", content: "" };
     }
@@ -283,7 +314,7 @@ export class ClaudeAgentClient {
    * Fetch session history from transcript file
    * Returns array of messages or empty array if no history
    */
-  async fetchHistory(): Promise<Array<{ role: "user" | "assistant"; content: string; timestamp: number }>> {
+  async fetchHistory(): Promise<Array<Record<string, unknown>>> {
     const sessionId = this.settings.sessionId;
     if (!sessionId) {
       return [];

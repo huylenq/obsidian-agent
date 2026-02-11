@@ -60,3 +60,30 @@ export function prependHistoryMessages(historyMessages: ChatMessage[]): void {
   const currentMessages = chatStore.get(messagesAtom);
   chatStore.set(messagesAtom, [...historyMessages, ...currentMessages]);
 }
+
+/**
+ * Attach tool result output to an existing tool_block message.
+ * Finds the latest message with a matching toolBlocks[].toolUseId,
+ * sets its output and clears isRunning.
+ */
+export function updateToolMessage(toolUseId: string, output: string, isError: boolean): void {
+  const currentMessages = chatStore.get(messagesAtom);
+  // Search from end (most recent) for the matching tool block
+  for (let i = currentMessages.length - 1; i >= 0; i--) {
+    const msg = currentMessages[i];
+    if (msg.role !== "tool_block" || !msg.toolBlocks) continue;
+    const block = msg.toolBlocks.find(tb => tb.toolUseId === toolUseId);
+    if (block) {
+      // Immutable update
+      const updatedBlocks = msg.toolBlocks.map(tb =>
+        tb.toolUseId === toolUseId
+          ? { ...tb, output, isError, isRunning: false }
+          : tb
+      );
+      const updatedMessages = [...currentMessages];
+      updatedMessages[i] = { ...msg, toolBlocks: updatedBlocks };
+      chatStore.set(messagesAtom, updatedMessages);
+      return;
+    }
+  }
+}

@@ -5,12 +5,23 @@ export interface CompactMetadata {
   sdkSummary?: string;
 }
 
+export interface ToolBlock {
+  toolUseId: string;
+  toolName: string;
+  description: string;
+  input?: string;
+  output?: string;
+  isError?: boolean;
+  isRunning?: boolean;
+}
+
 export interface ChatMessage {
   id: string;
-  role: "user" | "assistant" | "tool" | "compact_boundary";
+  role: "user" | "assistant" | "tool" | "tool_block" | "compact_boundary";
   content: string;
   timestamp: number;
   toolName?: string;
+  toolBlocks?: ToolBlock[];
   compactMetadata?: CompactMetadata;
 }
 

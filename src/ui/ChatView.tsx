@@ -20,13 +20,14 @@ import {
   clearMessages,
   messagesAtom,
   modelAtom,
+  updateToolMessage,
 } from "@/state/chatState";
 import {
   relevantNotesAtom,
   includeRelevantNotesAtom,
   setIncludeRelevantNotes,
 } from "@/state/relevantNotesState";
-import { ChatMessage, CompactMetadata } from "@/types";
+import { ChatMessage, CompactMetadata, ToolBlock } from "@/types";
 import type ClaudeAgentPlugin from "@/main";
 import { initializeCommands, commandRegistry, CommandContext } from "@/commands";
 
@@ -137,12 +138,13 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       try {
         const historyMessages = await plugin.claudeClient.fetchHistory();
         if (historyMessages.length > 0) {
-          const chatMessages: ChatMessage[] = historyMessages.map((msg: { role: string; content: string; timestamp: number; compactMetadata?: CompactMetadata }) => ({
+          const chatMessages: ChatMessage[] = historyMessages.map((msg) => ({
             id: generateMessageId(),
             role: msg.role as ChatMessage["role"],
-            content: msg.content,
-            timestamp: msg.timestamp,
-            ...(msg.compactMetadata && { compactMetadata: msg.compactMetadata }),
+            content: (msg.content as string) || "",
+            timestamp: (msg.timestamp as number) || Date.now(),
+            ...((msg.compactMetadata as CompactMetadata) && { compactMetadata: msg.compactMetadata as CompactMetadata }),
+            ...((msg.toolBlocks as ToolBlock[]) && { toolBlocks: msg.toolBlocks as ToolBlock[] }),
           }));
           chatStore.set(messagesAtom, chatMessages);
           console.log("[ChatView] Loaded", chatMessages.length, "history messages");
@@ -250,12 +252,13 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       try {
         const historyMessages = await plugin.claudeClient.fetchHistory();
         if (historyMessages.length > 0) {
-          const chatMessages: ChatMessage[] = historyMessages.map((msg: { role: string; content: string; timestamp: number; compactMetadata?: CompactMetadata }) => ({
+          const chatMessages: ChatMessage[] = historyMessages.map((msg) => ({
             id: generateMessageId(),
             role: msg.role as ChatMessage["role"],
-            content: msg.content,
-            timestamp: msg.timestamp,
-            ...(msg.compactMetadata && { compactMetadata: msg.compactMetadata }),
+            content: (msg.content as string) || "",
+            timestamp: (msg.timestamp as number) || Date.now(),
+            ...((msg.compactMetadata as CompactMetadata) && { compactMetadata: msg.compactMetadata as CompactMetadata }),
+            ...((msg.toolBlocks as ToolBlock[]) && { toolBlocks: msg.toolBlocks as ToolBlock[] }),
           }));
           chatStore.set(messagesAtom, chatMessages);
         }
@@ -330,6 +333,20 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
 
         let fullResponse = "";
 
+        // Helper: flush accumulated text as a permanent assistant message
+        const flushText = () => {
+          if (fullResponse) {
+            clearStreamingMessage();
+            addMessage({
+              id: generateMessageId(),
+              role: "assistant",
+              content: fullResponse,
+              timestamp: Date.now(),
+            });
+            fullResponse = "";
+          }
+        };
+
         for await (const chunk of plugin.claudeClient.chat(message, fileContext, mentionedFiles, selectionContext, highMatchNotes)) {
           switch (chunk.type) {
             case "text":
@@ -337,16 +354,30 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
               updateStreamingMessage(fullResponse);
               break;
 
-            case "tool_call":
-              if (plugin.settings.showDebugInfo) {
-                addMessage({
-                  id: generateMessageId(),
-                  role: "tool",
-                  content: chunk.content,
-                  timestamp: Date.now(),
-                  toolName: chunk.toolName,
-                });
-              }
+            case "tool_use":
+              // Flush any accumulated text before showing tool block
+              flushText();
+              addMessage({
+                id: generateMessageId(),
+                role: "tool_block",
+                content: "",
+                timestamp: Date.now(),
+                toolBlocks: [{
+                  toolUseId: chunk.toolUseId!,
+                  toolName: chunk.toolName!,
+                  description: chunk.description || chunk.toolName!,
+                  input: chunk.input,
+                  isRunning: true,
+                }],
+              });
+              break;
+
+            case "tool_result":
+              updateToolMessage(
+                chunk.toolUseId!,
+                chunk.content,
+                chunk.isError || false,
+              );
               break;
 
             case "compact_boundary":
@@ -363,6 +394,10 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
               });
               break;
 
+            case "result":
+              // Metadata about the completed query (optional future use)
+              break;
+
             case "error":
               setError(chunk.content);
               break;
@@ -376,6 +411,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
                   content: fullResponse,
                   timestamp: Date.now(),
                 });
+                fullResponse = "";
               } else {
                 clearStreamingMessage();
               }

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { existsSync, readFileSync } from "fs";
 import { log, logError } from "../log.js";
 import { getTranscriptPath, getSummariesPath, extractTextFromEntry, loadSummaries } from "../transcript.js";
+import { computeToolDescription, formatToolInput, extractToolResultContent } from "../toolFormat.js";
 
 const router = Router();
 
@@ -51,8 +52,48 @@ router.post("/history", (req, res) => {
           // The SDK injects a synthetic user message after compact_boundary
           // containing its internal context summary — capture it for the boundary UI
           captureNextUserForBoundary = true;
-        } else if (entry.type === "user" || entry.type === "assistant") {
-          if (captureNextUserForBoundary && entry.type === "user") {
+        } else if (entry.type === "assistant") {
+          captureNextUserForBoundary = false;
+
+          // Parse message content blocks
+          const msg = typeof entry.message === "string" ? JSON.parse(entry.message) : entry.message;
+          const contentBlocks = Array.isArray(msg?.content) ? msg.content : [];
+
+          // Extract text blocks
+          const textParts = contentBlocks.filter(b => b.type === "text").map(b => b.text);
+          const textContent = textParts.join("");
+
+          // Filter compaction artifacts
+          if (/^compacted$/i.test(textContent.trim())) continue;
+          if (textContent.includes("<local-command-caveat>")) continue;
+
+          // Emit text message if there's text
+          if (textContent) {
+            messages.push({
+              role: "assistant",
+              content: textContent,
+              timestamp: entry.timestamp || Date.now(),
+            });
+          }
+
+          // Extract tool_use blocks
+          const toolUseBlocks = contentBlocks.filter(b => b.type === "tool_use");
+          if (toolUseBlocks.length > 0) {
+            messages.push({
+              role: "tool_block",
+              content: "",
+              timestamp: entry.timestamp || Date.now(),
+              toolBlocks: toolUseBlocks.map(b => ({
+                toolUseId: b.id,
+                toolName: b.name,
+                description: computeToolDescription(b.name, b.input),
+                input: formatToolInput(b.name, b.input),
+                isRunning: false,
+              })),
+            });
+          }
+        } else if (entry.type === "user") {
+          if (captureNextUserForBoundary) {
             captureNextUserForBoundary = false;
             const textContent = extractTextFromEntry(entry);
             if (textContent) {
@@ -65,17 +106,37 @@ router.post("/history", (req, res) => {
             continue;
           }
           captureNextUserForBoundary = false;
+
+          // Tool result — attach output to the most recent tool_block
+          if (entry.toolUseResult !== undefined) {
+            const msg = typeof entry.message === "string" ? JSON.parse(entry.message) : entry.message;
+            const contentBlocks = Array.isArray(msg?.content) ? msg.content : [];
+            const toolResultBlock = contentBlocks.find(b => b.type === "tool_result");
+            if (toolResultBlock) {
+              const result = extractToolResultContent(entry);
+              // Find the matching tool block and attach output
+              const lastToolMsg = messages.findLast(m => m.role === "tool_block");
+              if (lastToolMsg?.toolBlocks) {
+                const match = lastToolMsg.toolBlocks.find(tb => tb.toolUseId === toolResultBlock.tool_use_id);
+                if (match) {
+                  match.output = result.text;
+                  match.isError = result.isError;
+                }
+              }
+            }
+            continue;
+          }
+
+          // Regular user message
           const textContent = extractTextFromEntry(entry);
           if (!textContent) continue;
 
-          // Filter out compaction artifacts from transcript
-          if (entry.type === "user" && /^\/compact\b/.test(textContent.trim())) continue;
-          if (entry.type === "assistant" && /^compacted$/i.test(textContent.trim())) continue;
-          // Skip system-injected local-command caveats
+          // Filter compaction artifacts
+          if (/^\/compact\b/.test(textContent.trim())) continue;
           if (textContent.includes("<local-command-caveat>")) continue;
 
           messages.push({
-            role: entry.type,
+            role: "user",
             content: textContent,
             timestamp: entry.timestamp || Date.now(),
           });

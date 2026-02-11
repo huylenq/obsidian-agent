@@ -3,6 +3,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { log, logError } from "../log.js";
 import { getTranscriptPath, getSummariesPath, readLatestSegmentMessages, generateCompactSummary, appendSummary } from "../transcript.js";
 import { updateSessionEntry, collectFilePaths, extractTitleFromTranscript, countTranscriptMessages } from "../sessions.js";
+import { computeToolDescription, formatToolInput, extractToolResultContent } from "../toolFormat.js";
 
 const router = Router();
 
@@ -115,32 +116,40 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
       console.log(`[Proxy] Message ${messageCount}:`, msg.type, msg.subtype || "", JSON.stringify(msg).slice(0, 200));
 
       switch (msg.type) {
-        case "assistant":
+        case "assistant": {
+          // Gather content blocks from either msg.content or msg.message.content
+          const contentBlocks = [];
           if (msg.content) {
             if (typeof msg.content === "string") {
-              lastContent = msg.content;
-              sendEvent("text", { content: msg.content });
+              contentBlocks.push({ type: "text", text: msg.content });
             } else if (Array.isArray(msg.content)) {
-              for (const block of msg.content) {
-                if (block.type === "text") {
-                  lastContent = block.text;
-                  sendEvent("text", { content: block.text });
-                }
-              }
+              contentBlocks.push(...msg.content);
             }
           }
-          // Also check msg.message?.content (SDK sometimes wraps it)
-          if (msg.message?.content) {
-            if (Array.isArray(msg.message.content)) {
-              for (const block of msg.message.content) {
-                if (block.type === "text") {
-                  lastContent = block.text;
-                  sendEvent("text", { content: block.text });
-                }
-              }
+          if (msg.message?.content && Array.isArray(msg.message.content)) {
+            // SDK sometimes wraps content — only add blocks we haven't seen
+            if (!msg.content || !Array.isArray(msg.content)) {
+              contentBlocks.push(...msg.message.content);
+            }
+          }
+
+          for (const block of contentBlocks) {
+            if (block.type === "text") {
+              lastContent = block.text;
+              sendEvent("text", { content: block.text });
+            } else if (block.type === "tool_use") {
+              const description = computeToolDescription(block.name, block.input);
+              const input = formatToolInput(block.name, block.input);
+              sendEvent("tool_use", {
+                toolName: block.name,
+                toolUseId: block.id,
+                description,
+                input,
+              });
             }
           }
           break;
+        }
 
         case "error":
           logError("[Proxy] Error message:", msg);
@@ -185,18 +194,45 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
 
         case "result":
           log("[Proxy] Result:", msg.subtype);
-          if (msg.subtype?.startsWith("error")) {
+          if (msg.subtype === "success") {
+            sendEvent("result", {
+              durationMs: msg.duration_ms,
+              numTurns: msg.num_turns,
+              totalCostUsd: msg.total_cost_usd,
+            });
+          } else if (msg.subtype?.startsWith("error")) {
             sendEvent("error", {
               content: msg.error_message || `Error: ${msg.subtype}`
             });
           }
           break;
 
-        case "user":
-          // User messages from conversation history replay - ignore
-          // History is loaded via /history endpoint from transcript files
-          log("[Proxy] User message (history replay, ignored)", msg);
+        case "user": {
+          // SDK replay messages have no useful content for the UI
+          if (msg.isReplay) {
+            log("[Proxy] User message (replay, ignored)");
+            break;
+          }
+
+          // Tool result messages carry the output of a tool call
+          const msgContent = msg.message?.content;
+          if (Array.isArray(msgContent)) {
+            const toolResultBlock = msgContent.find(b => b.type === "tool_result");
+            if (toolResultBlock) {
+              const result = extractToolResultContent(msg);
+              sendEvent("tool_result", {
+                toolUseId: toolResultBlock.tool_use_id,
+                content: result.text,
+                isError: result.isError,
+              });
+              break;
+            }
+          }
+
+          // Other user messages (initial prompt echo, document blocks) — ignore
+          log("[Proxy] User message (non-tool, ignored)");
           break;
+        }
 
         default:
           log("[Proxy] Unknown message type:", msg.type);
