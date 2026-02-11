@@ -21,7 +21,14 @@ An Obsidian plugin that provides chat with your vault using Claude Agent SDK.
 
 ## Key Files
 
-- `server/index.js` - Proxy server with `/chat` endpoint, handles SDK queries and SSE streaming
+- `server/index.js` - Express app setup, mounts route modules, starts server
+- `server/log.js` - Logging utilities (`log()`, `logError()`)
+- `server/transcript.js` - Transcript & summary helpers (read/write JSONL, compact summaries)
+- `server/sessions.js` - Session registry helpers (load/save/update registry, transcript inspection)
+- `server/routes/health.js` - GET /health
+- `server/routes/chat.js` - POST /chat (SSE streaming, SDK query)
+- `server/routes/history.js` - POST /history (transcript parsing)
+- `server/routes/sessions.js` - GET/PATCH /sessions, POST /sessions/migrate
 - `src/claude/client.ts` - HTTP client, manages sessions
 - `src/ui/ChatView.tsx` - React chat interface
 
