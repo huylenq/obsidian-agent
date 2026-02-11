@@ -112,10 +112,11 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
     if (activeFile) buildAndSetGraph();
   }, [activeFile, indexAvailable, buildAndSetGraph]);
 
-  // Rebuild when settings change
+  // Rebuild when data-affecting settings change (not physics/force settings)
+  const dataSettingsKey = `${settings.linkDepth}|${settings.similarityThreshold}|${settings.maxSimilarityEdges}|${settings.showLinkEdges}|${settings.showSimilarityEdges}`;
   useEffect(() => {
     if (activeFile) buildAndSetGraph();
-  }, [settings]);
+  }, [dataSettingsKey]);
 
   // Handle node click — open the note
   const handleNodeClick = useCallback((node: GraphNode) => {

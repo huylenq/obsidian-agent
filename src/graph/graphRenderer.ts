@@ -86,6 +86,7 @@ export class GraphRenderer {
   private onNodeHover?: (node: GraphNode | null, x: number, y: number) => void;
 
   private themeObserver: MutationObserver | null = null;
+  private forceUpdateTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Animation state tracking
   private nodeAlphas = new Map<ForceNode, AnimState>();
@@ -475,6 +476,10 @@ export class GraphRenderer {
       cancelAnimationFrame(this.animationFrame);
       this.animationFrame = null;
     }
+    if (this.forceUpdateTimer) {
+      clearTimeout(this.forceUpdateTimer);
+      this.forceUpdateTimer = null;
+    }
     if (this.themeObserver) {
       this.themeObserver.disconnect();
       this.themeObserver = null;
@@ -515,8 +520,15 @@ export class GraphRenderer {
       (center as any).strength(settings.centerForce);
     }
 
-    // Reheat gently so nodes settle into new equilibrium
-    this.simulation.alpha(0.3).restart();
+    // Keep simulation gently warm while slider is being dragged —
+    // alphaTarget gives smooth continuous motion instead of sudden jumps
+    this.simulation.alphaTarget(0.05).restart();
+
+    // Once slider stops moving, let the simulation cool naturally
+    if (this.forceUpdateTimer) clearTimeout(this.forceUpdateTimer);
+    this.forceUpdateTimer = setTimeout(() => {
+      this.simulation?.alphaTarget(0);
+    }, 300);
   }
 
   private initSimulation(): void {
