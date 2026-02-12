@@ -1,8 +1,6 @@
 import { ClaudeAgentSettings, ActiveFileContext, SelectionContext, RankedNote, SessionEntry, SessionStatus } from "@/types";
 import { FileSearchResult } from "@/utils/fileSearch";
 
-const PROXY_URL = "http://localhost:27182";
-
 export interface ChatResponse {
   type: "text" | "tool_use" | "tool_result" | "error" | "done" | "session" | "compact_boundary" | "result";
   content: string;
@@ -30,11 +28,30 @@ export interface ChatResponse {
 export class ClaudeAgentClient {
   private settings: ClaudeAgentSettings;
   private vaultPath: string;
+  private proxyUrl: string;
+  private authToken?: string;
   private onSessionChange: ((sessionId: string | null) => void) | null = null;
 
-  constructor(settings: ClaudeAgentSettings, vaultPath: string) {
+  constructor(settings: ClaudeAgentSettings, vaultPath: string, proxyUrl: string, authToken?: string) {
     this.settings = settings;
     this.vaultPath = vaultPath;
+    this.proxyUrl = proxyUrl;
+    this.authToken = authToken;
+  }
+
+  /**
+   * Build headers with optional auth token
+   */
+  private getHeaders(extra?: Record<string, string>): Record<string, string> {
+    const headers: Record<string, string> = {
+      // Skip ngrok's free-tier browser warning interstitial
+      "ngrok-skip-browser-warning": "1",
+      ...extra,
+    };
+    if (this.authToken) {
+      headers["Authorization"] = `Bearer ${this.authToken}`;
+    }
+    return headers;
   }
 
   /**
@@ -63,19 +80,19 @@ export class ClaudeAgentClient {
    * Initialize the client (check proxy is running)
    */
   async initialize(): Promise<void> {
-    // Check if proxy server is running
     try {
-      const response = await fetch(`${PROXY_URL}/health`);
+      const response = await fetch(`${this.proxyUrl}/health`, { headers: this.getHeaders() });
       if (!response.ok) {
-        throw new Error("Proxy server health check failed");
+        throw new Error(`Health check returned ${response.status}`);
       }
-      console.log("[ClaudeAgentClient] Proxy server is running");
+      console.log("[ClaudeAgentClient] Server reachable at", this.proxyUrl);
     } catch (error) {
-      throw new Error(
-        `Claude Agent proxy server is not running. Please start it with:\n` +
-        `cd server && npm start\n\n` +
-        `Original error: ${error instanceof Error ? error.message : error}`
-      );
+      const original = error instanceof Error ? error.message : error;
+      const isRemote = !this.proxyUrl.includes("localhost");
+      if (isRemote) {
+        throw new Error(`Cannot reach remote server at ${this.proxyUrl} — ${original}`);
+      }
+      throw new Error(`Local proxy server is not running — ${original}`);
     }
   }
 
@@ -98,11 +115,9 @@ export class ClaudeAgentClient {
 
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-          response = await fetch(`${PROXY_URL}/chat`, {
+          response = await fetch(`${this.proxyUrl}/chat`, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers: this.getHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify({
               message,
               systemPrompt: this.settings.systemPrompt,
@@ -115,6 +130,10 @@ export class ClaudeAgentClient {
               relevantNotes,
             }),
           });
+          // Fail fast on auth errors
+          if (response.status === 401) {
+            throw new Error("Authentication failed — check your auth token in settings");
+          }
           break; // Success, exit retry loop
         } catch (e) {
           lastError = e instanceof Error ? e : new Error(String(e));
@@ -134,6 +153,15 @@ export class ClaudeAgentClient {
         throw new Error(`Proxy request failed: ${error}`);
       }
 
+      // Check content type — if not event-stream, the response is likely
+      // an ngrok interstitial page or proxy error HTML
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("text/event-stream")) {
+        const body = await response.text();
+        const preview = body.slice(0, 200).replace(/\s+/g, " ");
+        throw new Error(`Expected SSE stream but got ${contentType || "unknown content-type"}: ${preview}`);
+      }
+
       // Parse SSE stream
       const reader = response.body?.getReader();
       if (!reader) {
@@ -142,6 +170,7 @@ export class ClaudeAgentClient {
 
       const decoder = new TextDecoder();
       let buffer = "";
+      let yieldedAny = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -155,12 +184,17 @@ export class ClaudeAgentClient {
           if (line.startsWith("data: ")) {
             try {
               const data = JSON.parse(line.slice(6));
+              yieldedAny = true;
               yield this.parseProxyMessage(data);
             } catch (e) {
-              // Ignore parse errors for incomplete data
+              console.warn("[ClaudeAgentClient] Failed to parse SSE line:", line.slice(0, 200));
             }
           }
         }
+      }
+
+      if (!yieldedAny) {
+        throw new Error("Server returned empty response — no SSE events received");
       }
     } catch (error) {
       const errorMessage =
@@ -251,7 +285,7 @@ export class ClaudeAgentClient {
       if (filters?.status) params.set("status", filters.status);
       if (filters?.file) params.set("file", filters.file);
 
-      const response = await fetch(`${PROXY_URL}/sessions?${params}`);
+      const response = await fetch(`${this.proxyUrl}/sessions?${params}`, { headers: this.getHeaders() });
       if (!response.ok) return [];
 
       const data = await response.json();
@@ -267,9 +301,9 @@ export class ClaudeAgentClient {
    */
   async updateSession(sessionId: string, updates: { status?: SessionStatus; title?: string }): Promise<SessionEntry | null> {
     try {
-      const response = await fetch(`${PROXY_URL}/sessions/${sessionId}`, {
+      const response = await fetch(`${this.proxyUrl}/sessions/${sessionId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: this.getHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ workingDirectory: this.vaultPath, ...updates }),
       });
       if (!response.ok) return null;
@@ -287,9 +321,9 @@ export class ClaudeAgentClient {
    */
   async migrateSessionRegistry(): Promise<number> {
     try {
-      const response = await fetch(`${PROXY_URL}/sessions/migrate`, {
+      const response = await fetch(`${this.proxyUrl}/sessions/migrate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: this.getHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ workingDirectory: this.vaultPath }),
       });
       if (!response.ok) return 0;
@@ -323,11 +357,9 @@ export class ClaudeAgentClient {
     try {
       console.log("[ClaudeAgentClient] Fetching history for session:", sessionId);
 
-      const response = await fetch(`${PROXY_URL}/history`, {
+      const response = await fetch(`${this.proxyUrl}/history`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: this.getHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           sessionId,
           workingDirectory: this.vaultPath,

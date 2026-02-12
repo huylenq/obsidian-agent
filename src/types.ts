@@ -41,6 +41,9 @@ export interface SelectionContext {
 
 export type ClaudeModel = "haiku" | "sonnet" | "opus";
 
+export type ConnectionMode = "local" | "remote";
+export type ConnectionStatus = "connected" | "disconnected" | "connecting" | "error";
+
 export interface GraphViewSettings {
   linkDepth: 1 | 2 | 3;
   similarityThreshold: number;   // default 0.4
@@ -77,6 +80,9 @@ export interface ClaudeAgentSettings {
   model: ClaudeModel;
   includeRelevantNotes: boolean;
   graphSettings: GraphViewSettings;
+  connectionMode: ConnectionMode;
+  remoteServerUrl: string;
+  remoteAuthToken: string;
 }
 
 export const DEFAULT_SETTINGS: ClaudeAgentSettings = {
@@ -88,6 +94,9 @@ Be concise and accurate.`,
   model: "haiku",
   includeRelevantNotes: true,
   graphSettings: DEFAULT_GRAPH_VIEW_SETTINGS,
+  connectionMode: "local",
+  remoteServerUrl: "",
+  remoteAuthToken: "",
 };
 
 // ============================================================================

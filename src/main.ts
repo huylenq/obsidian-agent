@@ -1,6 +1,4 @@
-import { Notice, Plugin } from "obsidian";
-import { spawn, ChildProcess } from "child_process";
-import * as path from "path";
+import { Notice, Platform, Plugin } from "obsidian";
 import { ClaudeAgentSettings, DEFAULT_SETTINGS, DEFAULT_GRAPH_VIEW_SETTINGS } from "./types";
 import { ClaudeAgentSettingTab } from "./settings";
 import { ClaudeAgentChatView, CHAT_VIEW_TYPE } from "./ui/ChatView";
@@ -8,14 +6,62 @@ import { RelevantNotesView, RELEVANT_NOTES_VIEW_TYPE } from "./ui/RelevantNotesV
 import { SessionsView, SESSIONS_VIEW_TYPE } from "./ui/SessionsView";
 import { GraphView, GRAPH_VIEW_TYPE } from "./ui/GraphView";
 import { ClaudeAgentClient } from "./claude/client";
+import { setConnectionStatus, setConnectionError } from "./state/connectionState";
+
+// Node.js imports - only available on desktop.
+// These are external in esbuild, so `require()` is emitted as-is in the bundle.
+// On mobile, these modules don't exist — the try-catch prevents the entire
+// plugin from failing to load.
+let spawn: typeof import("child_process").spawn | undefined;
+let path: typeof import("path") | undefined;
+try {
+  if (!Platform.isMobile) {
+    spawn = require("child_process").spawn;
+    path = require("path");
+  }
+} catch {
+  // Expected on mobile — Node.js builtins unavailable
+}
 
 const PROXY_PORT = 27182;
-const PROXY_URL = `http://localhost:${PROXY_PORT}`;
+
+interface ConnectionConfig {
+  url: string;
+  authToken?: string;
+}
+
+/** Connection info auto-discovered from vault file (written by start-mobile-server.sh) */
+interface ConnectionFile {
+  url: string;
+  timestamp: number;
+}
+
+const CONNECTION_FILE = ".claude-agent-connection.json";
+const CONNECTION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+/**
+ * Get connection URL and auth token based on settings and platform
+ */
+function getConnectionConfig(settings: ClaudeAgentSettings, isMobile: boolean): ConnectionConfig {
+  if (isMobile) {
+    if (!settings.remoteServerUrl) {
+      throw new Error("No connection file found and no remote URL configured. Run scripts/start-mobile-server.sh on your Mac, or set remote URL manually in settings.");
+    }
+    return { url: settings.remoteServerUrl, authToken: settings.remoteAuthToken || undefined };
+  }
+  if (settings.connectionMode === "remote") {
+    if (!settings.remoteServerUrl) {
+      throw new Error("Remote mode requires server URL — configure it in settings");
+    }
+    return { url: settings.remoteServerUrl, authToken: settings.remoteAuthToken || undefined };
+  }
+  return { url: `http://localhost:${PROXY_PORT}` };
+}
 
 export default class ClaudeAgentPlugin extends Plugin {
   settings: ClaudeAgentSettings = DEFAULT_SETTINGS;
   claudeClient: ClaudeAgentClient | null = null;
-  private serverProcess: ChildProcess | null = null;
+  private serverProcess: import("child_process").ChildProcess | null = null;
 
   // Promise that resolves when initialization is complete
   initializationPromise: Promise<void> | null = null;
@@ -125,19 +171,24 @@ export default class ClaudeAgentPlugin extends Plugin {
    * Start the proxy server as a child process
    */
   private startServer(): void {
+    if (Platform.isMobile) {
+      console.warn("[ClaudeAgent] Cannot start server on mobile platform");
+      return;
+    }
+
     if (this.serverProcess) {
       console.log("[ClaudeAgent] Server already running");
       return;
     }
 
     const vaultPath = (this.app.vault.adapter as any).basePath;
-    const pluginDir = path.join(vaultPath, ".obsidian", "plugins", this.manifest.id);
-    const serverDir = path.join(pluginDir, "server");
+    const pluginDir = path!.join(vaultPath, ".obsidian", "plugins", this.manifest.id);
+    const serverDir = path!.join(pluginDir, "server");
 
     console.log(`[ClaudeAgent] Starting proxy server from ${serverDir}`);
 
     // Use shell to inherit PATH for finding node (macOS GUI apps have minimal PATH)
-    this.serverProcess = spawn("node", ["index.js"], {
+    this.serverProcess = spawn!("node", ["index.js"], {
       cwd: serverDir,
       stdio: ["ignore", "pipe", "pipe"],
       detached: false,
@@ -146,23 +197,25 @@ export default class ClaudeAgentPlugin extends Plugin {
         ...process.env,
         // Ensure common node install locations are in PATH
         PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ""}`,
+        // Pass auth token to server if configured
+        ...(this.settings.remoteAuthToken ? { AUTH_TOKEN: this.settings.remoteAuthToken } : {}),
       },
     });
 
-    this.serverProcess.stdout?.on("data", (data) => {
+    this.serverProcess.stdout?.on("data", (data: Buffer) => {
       console.log(`[ClaudeAgent Server] ${data.toString().trim()}`);
     });
 
-    this.serverProcess.stderr?.on("data", (data) => {
+    this.serverProcess.stderr?.on("data", (data: Buffer) => {
       console.error(`[ClaudeAgent Server Error] ${data.toString().trim()}`);
     });
 
-    this.serverProcess.on("error", (err) => {
+    this.serverProcess.on("error", (err: Error) => {
       console.error("[ClaudeAgent] Failed to start server:", err);
       this.serverProcess = null;
     });
 
-    this.serverProcess.on("exit", (code, signal) => {
+    this.serverProcess.on("exit", (code: number | null, signal: string | null) => {
       console.error(`[ClaudeAgent] ⚠️ SERVER DIED! Exit code: ${code}, signal: ${signal}`);
       this.serverProcess = null;
     });
@@ -172,6 +225,10 @@ export default class ClaudeAgentPlugin extends Plugin {
    * Stop the proxy server
    */
   private stopServer(): void {
+    if (Platform.isMobile) {
+      return; // No server to stop on mobile
+    }
+
     if (this.serverProcess) {
       console.log("[ClaudeAgent] Stopping proxy server...");
       this.serverProcess.kill();
@@ -183,9 +240,10 @@ export default class ClaudeAgentPlugin extends Plugin {
    * Wait for the server to be ready (health check with retries)
    */
   private async waitForServer(maxRetries = 30, intervalMs = 200): Promise<boolean> {
+    const localUrl = `http://localhost:${PROXY_PORT}`;
     for (let i = 0; i < maxRetries; i++) {
       try {
-        const response = await fetch(`${PROXY_URL}/health`);
+        const response = await fetch(`${localUrl}/health`);
         if (response.ok) {
           console.log(`[ClaudeAgent] Server ready after ${i + 1} attempts`);
           return true;
@@ -202,8 +260,9 @@ export default class ClaudeAgentPlugin extends Plugin {
    * Check if server is already running
    */
   private async isServerRunning(): Promise<boolean> {
+    const localUrl = `http://localhost:${PROXY_PORT}`;
     try {
-      const response = await fetch(`${PROXY_URL}/health`);
+      const response = await fetch(`${localUrl}/health`);
       return response.ok;
     } catch {
       return false;
@@ -214,9 +273,13 @@ export default class ClaudeAgentPlugin extends Plugin {
    * Kill any process using our port (handles orphans from crashed sessions)
    */
   private async killProcessOnPort(): Promise<void> {
+    if (Platform.isMobile) {
+      return; // No process management on mobile
+    }
+
     return new Promise((resolve) => {
       // Use lsof to find and kill process on our port
-      const killer = spawn("sh", ["-c", `lsof -ti:${PROXY_PORT} | xargs kill -9 2>/dev/null || true`]);
+      const killer = spawn!("sh", ["-c", `lsof -ti:${PROXY_PORT} | xargs kill -9 2>/dev/null || true`]);
       killer.on("close", () => {
         resolve();
       });
@@ -253,18 +316,75 @@ export default class ClaudeAgentPlugin extends Plugin {
   }
 
   /**
+   * Read auto-discovered connection info from vault.
+   * Written by scripts/start-mobile-server.sh, synced via iCloud.
+   */
+  private async readConnectionFile(): Promise<ConnectionFile | null> {
+    try {
+      const content = await this.app.vault.adapter.read(CONNECTION_FILE);
+      const data = JSON.parse(content) as ConnectionFile;
+      if (!data.url) return null;
+
+      const ageMs = Date.now() - data.timestamp * 1000;
+      if (ageMs > CONNECTION_MAX_AGE_MS) {
+        console.log("[ClaudeAgent] Connection file is stale (>24h), ignoring");
+        return null;
+      }
+
+      console.log(`[ClaudeAgent] Found connection file: ${data.url}`);
+      return data;
+    } catch {
+      return null; // File doesn't exist or is invalid
+    }
+  }
+
+  /**
    * Initialize the Claude client (auto-starts server if needed)
    */
   private async initializeClient(): Promise<void> {
     try {
-      // Always start fresh - kill any existing server first
-      // This prevents the flip-flop bug where we detect a dying server
-      // from previous session but don't track it for cleanup
-      await this.ensureFreshServer();
+      setConnectionStatus("connecting");
+      setConnectionError(null);
+
+      // On mobile (or remote mode with no URL), try auto-discovery first
+      let connectionConfig: ConnectionConfig;
+      const needsDiscovery = Platform.isMobile ||
+        (this.settings.connectionMode === "remote" && !this.settings.remoteServerUrl);
+
+      if (needsDiscovery) {
+        const discovered = await this.readConnectionFile();
+        if (discovered) {
+          connectionConfig = { url: discovered.url, authToken: this.settings.remoteAuthToken || undefined };
+          console.log("[ClaudeAgent] Using auto-discovered URL from vault, token from settings");
+        } else {
+          connectionConfig = getConnectionConfig(this.settings, Platform.isMobile);
+        }
+      } else {
+        connectionConfig = getConnectionConfig(this.settings, Platform.isMobile);
+      }
+
+      const isLocalMode = this.settings.connectionMode === "local" && !Platform.isMobile;
+
+      // Only start server in local mode on desktop
+      if (isLocalMode) {
+        console.log("[ClaudeAgent] Local mode: starting proxy server");
+        // Always start fresh - kill any existing server first
+        // This prevents the flip-flop bug where we detect a dying server
+        // from previous session but don't track it for cleanup
+        await this.ensureFreshServer();
+      } else {
+        const mode = Platform.isMobile ? "mobile" : "remote";
+        console.log(`[ClaudeAgent] ${mode} mode: connecting to ${connectionConfig.url}`);
+      }
 
       // Create the Claude client with vault path for working directory
       const vaultPath = (this.app.vault.adapter as any).basePath;
-      this.claudeClient = new ClaudeAgentClient(this.settings, vaultPath);
+      this.claudeClient = new ClaudeAgentClient(
+        this.settings,
+        vaultPath,
+        connectionConfig.url,
+        connectionConfig.authToken
+      );
 
       // Persist session ID when it changes
       this.claudeClient.setOnSessionChange((sessionId) => {
@@ -274,12 +394,16 @@ export default class ClaudeAgentPlugin extends Plugin {
 
       await this.claudeClient.initialize();
 
+      setConnectionStatus("connected");
       console.log("Claude Agent client initialized successfully");
     } catch (error) {
       console.error("Failed to initialize Claude Agent:", error);
 
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
+
+      setConnectionStatus("error");
+      setConnectionError(errorMessage);
 
       // Show a notice but don't block the plugin from loading
       new Notice(

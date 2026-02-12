@@ -1,6 +1,6 @@
 import React, { useCallback, useState, useEffect, useRef } from "react";
 import { useAtomValue } from "jotai";
-import { App, ItemView, WorkspaceLeaf, MarkdownView } from "obsidian";
+import { App, ItemView, WorkspaceLeaf, MarkdownView, setIcon } from "obsidian";
 import { createRoot, Root } from "react-dom/client";
 import { ActiveFileContext, ClaudeModel, SelectionContext } from "@/types";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
@@ -27,6 +27,7 @@ import {
   includeRelevantNotesAtom,
   setIncludeRelevantNotes,
 } from "@/state/relevantNotesState";
+import { connectionStatusAtom, connectionErrorAtom } from "@/state/connectionState";
 import { ChatMessage, CompactMetadata, ToolBlock } from "@/types";
 import type ClaudeAgentPlugin from "@/main";
 import { initializeCommands, commandRegistry, CommandContext } from "@/commands";
@@ -84,7 +85,11 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   const model = useAtomValue(modelAtom, { store: chatStore });
   const relevantNotes = useAtomValue(relevantNotesAtom, { store: chatStore });
   const includeRelevantNotes = useAtomValue(includeRelevantNotesAtom, { store: chatStore });
+  const connectionStatus = useAtomValue(connectionStatusAtom, { store: chatStore });
+  const connectionError = useAtomValue(connectionErrorAtom, { store: chatStore });
   const modelSelectRef = useRef<HTMLSelectElement>(null);
+  const brainIconRef = useRef<HTMLSpanElement>(null);
+  const checkIconRef = useRef<HTMLSpanElement>(null);
   const [inputRef, setInputRef] = useState<ChatInputHandle | null>(null);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
 
@@ -96,6 +101,15 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     };
     window.addEventListener("claude-agent:open-model-selector", handleOpenSelector);
     return () => window.removeEventListener("claude-agent:open-model-selector", handleOpenSelector);
+  }, []);
+
+  useEffect(() => {
+    if (brainIconRef.current) {
+      setIcon(brainIconRef.current, "sparkles");
+    }
+    if (checkIconRef.current) {
+      setIcon(checkIconRef.current, "check");
+    }
   }, []);
 
   // Sync model atom with plugin settings on mount
@@ -399,7 +413,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
               break;
 
             case "error":
-              setError(chunk.content);
+              setError(chunk.content || "Unknown error (no details from server)");
               break;
 
             case "done":
@@ -499,49 +513,6 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
 
   return (
     <div className="claude-agent-container">
-      <div className="claude-agent-header">
-        <span className="claude-agent-session-info">
-          {sessionId ? (
-            <span className="claude-agent-session-title" title={sessionId ?? undefined}>
-              {sessionTitle || sessionId.slice(0, 12)}
-            </span>
-          ) : (
-            <span className="claude-agent-session-id claude-agent-session-new">
-              New session
-            </span>
-          )}
-        </span>
-        {sessionId && (
-          <button
-            className="claude-agent-done-button"
-            onClick={handleMarkDone}
-            disabled={isLoading}
-            title="Mark session as done and start new"
-          >
-            Done
-          </button>
-        )}
-        <button
-          className="claude-agent-new-chat-button"
-          onClick={handleNewChat}
-          disabled={isLoading}
-          title="Start new chat"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-        </button>
-      </div>
       <ChatMessages />
       <div className="claude-agent-input-area">
         {(showFileChip || showSelectionChip) && (
@@ -562,6 +533,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           onRef={setInputRef}
         />
         <div className="claude-agent-input-footer">
+          <span ref={brainIconRef} className="claude-agent-model-icon" />
           <select
             ref={modelSelectRef}
             className="claude-agent-model-select"
@@ -573,16 +545,18 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
             <option value="sonnet">Sonnet</option>
             <option value="opus">Opus</option>
           </select>
-          <label className="claude-agent-include-notes-label">
-            <input
-              type="checkbox"
-              className="claude-agent-include-notes-checkbox"
-              checked={includeRelevantNotes}
-              onChange={(e) => handleIncludeNotesChange(e.target.checked)}
-              disabled={isLoading}
-            />
-            <span>Include relevances</span>
-          </label>
+          <span
+            className={`claude-agent-include-notes-toggle ${includeRelevantNotes ? "active" : ""}`}
+            onClick={() => !isLoading && handleIncludeNotesChange(!includeRelevantNotes)}
+          >
+            <span ref={checkIconRef} className="claude-agent-include-notes-check" />
+            Include relevances
+          </span>
+          <div className={`claude-agent-connection-status ${connectionStatus}`} title={
+            connectionError || (connectionStatus === "connected" ? "Connected to server" : connectionStatus === "connecting" ? "Connecting..." : connectionStatus === "error" ? "Connection error" : "Disconnected")
+          }>
+            <span className="claude-agent-connection-dot" />
+          </div>
         </div>
       </div>
     </div>

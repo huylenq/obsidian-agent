@@ -7,6 +7,7 @@
   padding: 0;
 }
 
+/* Header removed — styles kept for reference */
 .claude-agent-header {
   display: flex;
   align-items: center;
@@ -75,10 +76,17 @@
   height: 100%;
   color: var(--text-muted);
   text-align: center;
-  padding: 32px;
+  padding: 24px;
+  font-size: 0.9em;
 }
 
 .claude-agent-empty-state h3 {
   margin-bottom: 8px;
   color: var(--text-normal);
+  font-size: 1em;
+}
+
+.claude-agent-empty-state p {
+  font-size: 0.85em;
+  line-height: 1.4;
 }

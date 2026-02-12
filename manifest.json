@@ -5,5 +5,5 @@
   "minAppVersion": "1.0.0",
   "description": "Chat with your Obsidian vault using Claude Agent SDK and RAG-powered semantic search",
   "author": "Huy",
-  "isDesktopOnly": true
+  "isDesktopOnly": false
 }

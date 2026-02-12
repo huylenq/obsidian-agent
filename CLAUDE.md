@@ -19,22 +19,63 @@ An Obsidian plugin that provides chat with your vault using Claude Agent SDK.
 
 **Why a proxy?** Claude Agent SDK uses Node.js APIs incompatible with Obsidian's Electron environment.
 
+## Connection Modes
+
+The plugin supports two connection modes, configured in **Settings > Connection**:
+
+| Mode | Platform | How it works |
+|------|----------|-------------|
+| **Local** (default) | Desktop only | Plugin auto-spawns `server/index.js` as a child process on `localhost:27182` |
+| **Remote** | Desktop & Mobile | Plugin connects to an external server URL (e.g. ngrok) with Bearer token auth |
+
+On mobile, remote mode is the only option — there's no Node.js runtime to run the server.
+
+**Auth token** (`settings.remoteAuthToken`) serves double duty:
+- In local mode: passed as `AUTH_TOKEN` env var to the spawned server process
+- In remote mode: sent as `Authorization: Bearer` header on all requests
+
+**Key files:**
+- `src/main.ts` — `getConnectionConfig()` resolves mode, `initializeClient()` conditionally spawns server
+- `src/claude/client.ts` — constructor takes `proxyUrl` + optional `authToken`, `getHeaders()` injects auth
+- `server/middleware/auth.js` — Express middleware, validates Bearer token if `AUTH_TOKEN` env is set
+- `src/state/connectionState.ts` — Jotai atoms for connection status/error
+- `src/settings.ts` — Connection section UI (mode dropdown, auth token, remote URL, test button)
+
+**Mobile auto-discovery:**
+
+On mobile, the plugin reads `claude-agent-connection.json` from the vault root before falling back to manual settings. This file is written by `<vault>/scripts/start-mobile-server.sh` on the Mac and syncs via iCloud — zero manual configuration on the phone.
+
+```bash
+# from the vault
+./scripts/start-mobile-server.sh
+```
+
+The connection file has `{ url, authToken, timestamp }`. Files older than 24h are rejected. On Ctrl+C, the script zeroes the file so mobile won't connect to a dead tunnel.
+
+**Mobile constraints:**
+- `manifest.json` has `isDesktopOnly: false` to allow enabling on mobile
+- Node.js builtins (`child_process`, `path`) are imported with try-catch guard in `main.ts`
+- `deploy.js` skips copying `server/` to `.obsidian-mobile` (no Node.js on mobile)
+
 ## Key Files
 
-- `server/index.js` - Express app setup, mounts route modules, starts server
+- `server/index.js` - Express app setup, mounts route modules and auth middleware, starts server
+- `server/middleware/auth.js` - Bearer token auth (optional via `AUTH_TOKEN` env)
 - `server/log.js` - Logging utilities (`log()`, `logError()`)
 - `server/transcript.js` - Transcript & summary helpers (read/write JSONL, compact summaries)
 - `server/sessions.js` - Session registry helpers (load/save/update registry, transcript inspection)
-- `server/routes/health.js` - GET /health
+- `server/routes/health.js` - GET /health (unauthenticated)
 - `server/routes/chat.js` - POST /chat (SSE streaming, SDK query)
 - `server/routes/history.js` - POST /history (transcript parsing)
 - `server/routes/sessions.js` - GET/PATCH /sessions, POST /sessions/migrate
-- `src/claude/client.ts` - HTTP client, manages sessions
+- `src/claude/client.ts` - HTTP client with dynamic URL + auth, manages sessions
 - `src/ui/ChatView.tsx` - React chat interface
 
 ## Running
 
-The plugin auto-starts the proxy server as a child process. Just enable the plugin in Obsidian and click the chat icon.
+**Desktop (local mode):** The plugin auto-starts the proxy server as a child process. Just enable the plugin in Obsidian and click the chat icon.
+
+**Mobile:** Requires a Mac running the server + ngrok. See `Claude Agent Mobile Setup.md` in the vault.
 
 ## Development
 
@@ -43,6 +84,8 @@ After making changes:
 ```bash
 pnpm run deploy
 ```
+
+Deploys to both `.obsidian/plugins/claude-agent` (desktop, with server/) and `.obsidian-mobile/plugins/claude-agent` (mobile, files only).
 
 Then reload Obsidian (or disable/enable the plugin) to pick up changes.
 

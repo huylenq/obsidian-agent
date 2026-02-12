@@ -66,11 +66,13 @@ export class CopilotIndexReader {
     if (this.initialized) return true;
 
     try {
-      const configDir = this.app.vault.configDir;
-      console.log("[CopilotIndexReader] Config dir:", configDir);
+      // Always read from .obsidian — Copilot writes its index there (desktop configDir).
+      // On mobile (configDir = .obsidian-mobile) the index still lives in .obsidian via iCloud sync.
+      const indexDir = ".obsidian";
+      console.log("[CopilotIndexReader] Index dir:", indexDir);
 
       // Find the metadata file
-      const files = await this.app.vault.adapter.list(configDir);
+      const files = await this.app.vault.adapter.list(indexDir);
       const metadataFile = files.files.find(
         (f) => f.includes(CHUNK_PREFIX) && f.endsWith("-metadata.json")
       );
@@ -100,7 +102,7 @@ export class CopilotIndexReader {
 
       // Load all partition files and extract documents + vectors
       for (let i = 0; i < metadata.numPartitions; i++) {
-        const chunkPath = `${configDir}/${CHUNK_PREFIX}${indexIdentifier}-${i}.json`;
+        const chunkPath = `${indexDir}/${CHUNK_PREFIX}${indexIdentifier}-${i}.json`;
 
         if (await this.app.vault.adapter.exists(chunkPath)) {
           console.log("[CopilotIndexReader] Loading partition", i);

@@ -82,18 +82,26 @@
 }
 
 .claude-agent-model-select {
-  padding: 2px 6px;
+  padding: 2px 4px;
   font-size: 11px;
   border: none;
   border-radius: 4px;
-  background-color: var(--background-secondary);
-  color: var(--text-muted);
+  background: transparent;
+  color: var(--text-faint);
   cursor: pointer;
+  text-align: center;
+  -webkit-appearance: none;
+  appearance: none;
+  box-shadow: none;
+}
+
+.claude-agent-model-select:focus {
+  outline: none;
+  box-shadow: none;
 }
 
 .claude-agent-model-select:hover {
-  background-color: var(--background-modifier-hover);
-  color: var(--text-normal);
+  background-color: var(--background-secondary);
 }
 
 .claude-agent-model-select:disabled {
@@ -101,30 +109,83 @@
   cursor: not-allowed;
 }
 
-.claude-agent-include-notes-label {
+.claude-agent-include-notes-toggle {
   display: flex;
   align-items: center;
   gap: 4px;
   margin-left: 8px;
   font-size: 11px;
   color: var(--text-muted);
+  opacity: 0.4;
   cursor: pointer;
   user-select: none;
 }
 
-.claude-agent-include-notes-label:hover {
+.claude-agent-include-notes-toggle.active {
   color: var(--text-normal);
+  opacity: 1;
 }
 
-.claude-agent-include-notes-checkbox {
+.claude-agent-include-notes-toggle:hover {
+  text-decoration: underline;
+}
+
+.claude-agent-include-notes-check {
+  display: flex;
+  align-items: center;
+  visibility: hidden;
+}
+
+.claude-agent-include-notes-check svg {
   width: 12px;
   height: 12px;
-  margin: 0;
-  cursor: pointer;
-  accent-color: var(--interactive-accent);
 }
 
-.claude-agent-include-notes-checkbox:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.claude-agent-include-notes-toggle.active .claude-agent-include-notes-check {
+  visibility: visible;
+}
+
+.claude-agent-model-icon {
+  display: flex;
+  align-items: center;
+  color: var(--text-faint);
+}
+
+.claude-agent-model-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Connection status indicator */
+
+.claude-agent-connection-status {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  padding: 2px 4px;
+  cursor: default;
+}
+
+.claude-agent-connection-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.claude-agent-connection-status.connected .claude-agent-connection-dot {
+  background-color: var(--text-success, #4caf50);
+}
+
+.claude-agent-connection-status.connecting .claude-agent-connection-dot {
+  background-color: var(--text-warning, #ff9800);
+  animation: claude-agent-pulse 1.2s infinite;
+}
+
+.claude-agent-connection-status.error .claude-agent-connection-dot {
+  background-color: var(--text-error, #f44336);
+}
+
+.claude-agent-connection-status.disconnected .claude-agent-connection-dot {
+  background-color: var(--text-faint);
 }
