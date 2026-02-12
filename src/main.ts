@@ -1,7 +1,7 @@
 import { Notice, Plugin } from "obsidian";
 import { spawn, ChildProcess } from "child_process";
 import * as path from "path";
-import { ClaudeAgentSettings, DEFAULT_SETTINGS } from "./types";
+import { ClaudeAgentSettings, DEFAULT_SETTINGS, DEFAULT_GRAPH_VIEW_SETTINGS } from "./types";
 import { ClaudeAgentSettingTab } from "./settings";
 import { ClaudeAgentChatView, CHAT_VIEW_TYPE } from "./ui/ChatView";
 import { RelevantNotesView, RELEVANT_NOTES_VIEW_TYPE } from "./ui/RelevantNotesView";
@@ -395,6 +395,12 @@ export default class ClaudeAgentPlugin extends Plugin {
   async loadSettings(): Promise<void> {
     const data = await this.loadData();
     this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
+    // Deep-merge graphSettings so new fields get defaults from DEFAULT_GRAPH_VIEW_SETTINGS
+    this.settings.graphSettings = Object.assign(
+      {},
+      DEFAULT_GRAPH_VIEW_SETTINGS,
+      data?.graphSettings,
+    );
   }
 
   /**

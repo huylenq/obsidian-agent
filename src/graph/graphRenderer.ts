@@ -23,6 +23,7 @@ const FONT_SIZE = 12;
 
 interface ThemeColors {
   nodeFocused: string;  // center/active node (warm accent)
+  nodePinned: string;   // pinned nodes (warm orange)
   node: string;         // regular nodes (muted blue-gray)
   line: string;         // link edges
   text: string;         // label text
@@ -34,6 +35,7 @@ function readThemeColors(): ThemeColors {
   return {
     nodeFocused: style.getPropertyValue("--graph-node-focused").trim()
       || style.getPropertyValue("--interactive-accent").trim() || "#d2a8ff",
+    nodePinned: style.getPropertyValue("--graph-node-pinned").trim() || "#e8a87c",
     node: style.getPropertyValue("--graph-node").trim()
       || style.getPropertyValue("--text-muted").trim() || "#999",
     line: style.getPropertyValue("--graph-line").trim()
@@ -52,6 +54,9 @@ export interface GraphRendererOptions {
   onNodeClick?: (node: GraphNode, newTab?: boolean) => void;
   onNodeHover?: (node: GraphNode | null, x: number, y: number) => void;
   onNodeContextMenu?: (node: GraphNode, event: MouseEvent) => void;
+  onNodePinToggle?: (node: GraphNode) => void;
+  onNodeDepthAdjust?: (node: GraphNode, deltaPixels: number) => void;
+  onNodeSimilarityAdjust?: (node: GraphNode, deltaPixels: number) => void;
 }
 
 // Animation state for smooth transitions
@@ -86,6 +91,14 @@ export class GraphRenderer {
   private onNodeClick?: (node: GraphNode, newTab?: boolean) => void;
   private onNodeHover?: (node: GraphNode | null, x: number, y: number) => void;
   private onNodeContextMenu?: (node: GraphNode, event: MouseEvent) => void;
+  private onNodePinToggle?: (node: GraphNode) => void;
+  private onNodeDepthAdjust?: (node: GraphNode, deltaPixels: number) => void;
+  private onNodeSimilarityAdjust?: (node: GraphNode, deltaPixels: number) => void;
+
+  // Right-button drag state for pin interactions
+  private rightDragNode: ForceNode | null = null;
+  private rightDragStartX = 0;
+  private rightWasDragged = false;
 
   private themeObserver: MutationObserver | null = null;
   private forceUpdateTimer: ReturnType<typeof setTimeout> | null = null;
@@ -108,6 +121,9 @@ export class GraphRenderer {
     this.onNodeClick = options.onNodeClick;
     this.onNodeHover = options.onNodeHover;
     this.onNodeContextMenu = options.onNodeContextMenu;
+    this.onNodePinToggle = options.onNodePinToggle;
+    this.onNodeDepthAdjust = options.onNodeDepthAdjust;
+    this.onNodeSimilarityAdjust = options.onNodeSimilarityAdjust;
     this.colors = readThemeColors();
 
     this.setupZoom();
@@ -218,6 +234,14 @@ export class GraphRenderer {
   setData(data: GraphData, settings: GraphViewSettings): void {
     this.settings = settings;
 
+    // Save positions of ALL old nodes for position preservation across rebuilds
+    const savedPositions = new Map<string, { x: number; y: number }>();
+    for (const node of this.nodes) {
+      if (node.x != null && node.y != null) {
+        savedPositions.set(node.id, { x: node.x, y: node.y });
+      }
+    }
+
     // Clone nodes so d3 can mutate x/y
     this.nodes = data.nodes.map((n) => ({ ...n }));
 
@@ -226,6 +250,17 @@ export class GraphRenderer {
     if (center) {
       center.fx = 0;
       center.fy = 0;
+    }
+
+    // Seed all persisting nodes with their old positions so the graph doesn't jump
+    let seededCount = 0;
+    for (const node of this.nodes) {
+      const saved = savedPositions.get(node.id);
+      if (saved) {
+        node.x = saved.x;
+        node.y = saved.y;
+        seededCount++;
+      }
     }
 
     // Build edge references
@@ -294,7 +329,7 @@ export class GraphRenderer {
     // Initialize animation state with default values
     this.updateAnimationTargets();
 
-    this.initSimulation();
+    this.initSimulation(seededCount);
   }
 
   /**
@@ -429,12 +464,13 @@ export class GraphRenderer {
       const isHovered = node === this.hoveredNode;
       const isNeighbor = this.hoveredNeighbors.has(node);
       const isCenter = node.isCenter;
+      const isPinned = node.isPinned === true;
 
-      // Alpha target
+      // Alpha target — pinned nodes get same dimming resistance as center
       let targetAlpha = 1;
-      if (hoverActive && !isHovered && !isNeighbor && !isCenter) {
+      if (hoverActive && !isHovered && !isNeighbor && !isCenter && !isPinned) {
         targetAlpha = 0.15;
-      } else if (hoverActive && isCenter && !isHovered && !isNeighbor) {
+      } else if (hoverActive && (isCenter || isPinned) && !isHovered && !isNeighbor) {
         targetAlpha = 0.4;
       }
       this.getAnimState(this.nodeAlphas, node, targetAlpha).target = targetAlpha;
@@ -604,7 +640,7 @@ export class GraphRenderer {
     }, 300);
   }
 
-  private initSimulation(): void {
+  private initSimulation(seededCount = 0): void {
     if (this.simulation) this.simulation.stop();
     const s = this.settings!;
 
@@ -623,8 +659,10 @@ export class GraphRenderer {
       .velocityDecay(0.6)
       .on("tick", () => this.draw());
 
-    // Reheat on new data
-    this.simulation.alpha(0.6).restart();
+    // Gentle reheat when most nodes already have positions (e.g. pin toggle),
+    // full reheat for fresh graphs
+    const mostSeeded = seededCount > 0 && seededCount >= this.nodes.length * 0.5;
+    this.simulation.alpha(mostSeeded ? 0.1 : 0.6).restart();
   }
 
   private setupZoom(): void {
@@ -707,6 +745,21 @@ export class GraphRenderer {
   }
 
   private handleMouseMove = (e: MouseEvent): void => {
+    // Right-drag: adjust pinned node depth or similarity
+    if (this.rightDragNode) {
+      const dx = e.clientX - this.rightDragStartX;
+      if (Math.abs(dx) >= 5) this.rightWasDragged = true;
+      if (this.rightWasDragged) {
+        this.canvas.style.cursor = "ew-resize";
+        if (e.altKey) {
+          this.onNodeSimilarityAdjust?.(this.rightDragNode, dx);
+        } else {
+          this.onNodeDepthAdjust?.(this.rightDragNode, dx);
+        }
+      }
+      return;
+    }
+
     if (this.draggedNode) {
       this.wasDragged = true;
       const [gx, gy] = this.screenToGraph(e.clientX, e.clientY);
@@ -738,7 +791,19 @@ export class GraphRenderer {
 
   private handleMouseDown = (e: MouseEvent): void => {
     const node = this.findNodeAt(e.clientX, e.clientY);
-    if (node) {
+    if (!node) return;
+
+    // Right-button on node: start right-drag for pin interactions
+    if (e.button === 2) {
+      this.rightDragNode = node;
+      this.rightDragStartX = e.clientX;
+      this.rightWasDragged = false;
+      e.preventDefault();
+      return;
+    }
+
+    // Left-button: regular drag
+    if (e.button === 0) {
       this.draggedNode = node;
       this.wasDragged = false;
       node.fx = node.x;
@@ -747,7 +812,17 @@ export class GraphRenderer {
     }
   };
 
-  private handleMouseUp = (_e: MouseEvent): void => {
+  private handleMouseUp = (e: MouseEvent): void => {
+    // Right-button release: toggle pin (if no drag) or end right-drag
+    if (this.rightDragNode) {
+      if (!this.rightWasDragged) {
+        this.onNodePinToggle?.(this.rightDragNode);
+      }
+      this.rightDragNode = null;
+      this.canvas.style.cursor = this.hoveredNode ? "pointer" : "default";
+      return;
+    }
+
     if (this.draggedNode) {
       // Unpin so forces (especially forceCenter) can pull it back
       this.draggedNode.fx = null;
@@ -779,8 +854,10 @@ export class GraphRenderer {
     }
   };
 
-  private handleContextMenu = (_e: MouseEvent): void => {
-    // No-op: "add to chat" is now shift-click, not right-click
+  private handleContextMenu = (e: MouseEvent): void => {
+    // Suppress browser context menu on nodes (right-click = pin toggle)
+    const node = this.findNodeAt(e.clientX, e.clientY);
+    if (node) e.preventDefault();
   };
 
   private draw = (): void => {
@@ -809,6 +886,9 @@ export class GraphRenderer {
 
     // Draw labels (on top)
     this.drawLabels();
+
+    // Draw pinned node indicators (depth/similarity overrides)
+    this.drawPinnedIndicators();
 
     this.ctx.restore();
   }
@@ -923,16 +1003,22 @@ export class GraphRenderer {
     this.ctx.beginPath();
     this.ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
 
-    if (hoverActive && !isHighlighted && !node.isCenter) {
-      // Dim: faded out
-      this.ctx.fillStyle = this.colors.node;
-      this.ctx.globalAlpha = animAlpha;
-    } else if (isHovered || (hoverActive && isNeighbor)) {
-      // Highlighted: accent color
+    const isPinned = node.isPinned === true;
+
+    if (isHovered || (hoverActive && isNeighbor)) {
+      // Highlighted: accent color (highest priority)
       this.ctx.fillStyle = this.colors.nodeFocused;
       this.ctx.globalAlpha = animAlpha;
     } else if (node.isCenter) {
       this.ctx.fillStyle = this.colors.nodeFocused;
+      this.ctx.globalAlpha = animAlpha;
+    } else if (isPinned) {
+      // Pinned: warm orange
+      this.ctx.fillStyle = this.colors.nodePinned;
+      this.ctx.globalAlpha = animAlpha;
+    } else if (hoverActive && !isHighlighted) {
+      // Dim: faded out
+      this.ctx.fillStyle = this.colors.node;
       this.ctx.globalAlpha = animAlpha;
     } else {
       this.ctx.fillStyle = this.colors.node;
@@ -1002,6 +1088,40 @@ export class GraphRenderer {
       }
 
       this.ctx.fillText(text, node.x, y);
+      this.ctx.globalAlpha = 1;
+    }
+  }
+
+  private drawPinnedIndicators(): void {
+    if (!this.settings) return;
+
+    this.ctx.textAlign = "center";
+    this.ctx.textBaseline = "bottom";
+    this.ctx.font = "9px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+
+    for (const node of this.nodes) {
+      if (!node.isPinned || node.x == null || node.y == null) continue;
+
+      const config = node.pinnedConfig;
+      if (!config) continue;
+
+      const parts: string[] = [];
+      if (config.linkDepth != null && config.linkDepth !== this.settings.linkDepth) {
+        parts.push(`d:${config.linkDepth}`);
+      }
+      if (config.similarityThreshold != null && config.similarityThreshold !== this.settings.similarityThreshold) {
+        parts.push(`s:${config.similarityThreshold.toFixed(2)}`);
+      }
+
+      if (parts.length === 0) continue;
+
+      const radius = node.isCenter ? CENTER_RADIUS : NODE_RADIUS;
+      const indicatorY = node.y - radius - 3;
+      const text = parts.join(" ");
+
+      this.ctx.fillStyle = this.colors.nodePinned;
+      this.ctx.globalAlpha = 0.8;
+      this.ctx.fillText(text, node.x, indicatorY);
       this.ctx.globalAlpha = 1;
     }
   }

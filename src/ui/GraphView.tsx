@@ -3,7 +3,7 @@
  * wiki-link edges with embedding similarity edges.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { App, ItemView, WorkspaceLeaf } from "obsidian";
 import { createRoot, Root } from "react-dom/client";
 import { useAtomValue } from "jotai";
@@ -20,8 +20,10 @@ import {
   setGraphLoading,
   setGraphError,
   setGraphIndexAvailable,
+  togglePinnedNode,
+  updatePinnedNodeConfig,
 } from "@/state/graphViewState";
-import type { GraphNode, GraphViewSettings, ActiveFileContext, GraphEdge } from "@/types";
+import type { GraphNode, GraphViewSettings, ActiveFileContext } from "@/types";
 import { CopilotIndexReader } from "@/embeddings";
 import { buildGraph } from "@/graph/buildGraph";
 import { GraphCanvas } from "./GraphView/GraphCanvas";
@@ -44,6 +46,7 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
   const indexAvailable = useAtomValue(graphIndexAvailableAtom, { store: chatStore });
 
   const indexReaderRef = useRef<CopilotIndexReader | null>(null);
+  const activeFileRef = useRef<ActiveFileContext | undefined>(undefined);
   const [activeFile, setActiveFile] = useState<ActiveFileContext | undefined>(undefined);
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
@@ -84,16 +87,21 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
     return () => { app.workspace.off("active-leaf-change", update); };
   }, [app, getActiveFileContext]);
 
-  // Build graph when active file or settings change
+  // Keep ref in sync with state so buildAndSetGraph always sees the latest
+  useEffect(() => { activeFileRef.current = activeFile; }, [activeFile]);
+
+  // Build graph — reads activeFile from ref, so this callback is stable (deps: [app] only).
+  // Every caller always gets the current active file without stale closures.
   const buildAndSetGraph = useCallback(async () => {
-    if (!activeFile) return;
+    const file = activeFileRef.current;
+    if (!file) return;
 
     setGraphLoading(true);
     setGraphError(null);
 
     try {
       const data = await buildGraph(
-        activeFile.path,
+        file.path,
         app,
         indexReaderRef.current,
         chatStore.get(graphSettingsAtom),
@@ -105,7 +113,7 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
     } finally {
       setGraphLoading(false);
     }
-  }, [activeFile, app]);
+  }, [app]);
 
   // Trigger rebuild when active file changes or index becomes available
   useEffect(() => {
@@ -113,10 +121,11 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
   }, [activeFile, indexAvailable, buildAndSetGraph]);
 
   // Rebuild when data-affecting settings change (not physics/force settings)
-  const dataSettingsKey = `${settings.linkDepth}|${settings.similarityThreshold}|${settings.maxSimilarityEdges}|${settings.showLinkEdges}|${settings.showSimilarityEdges}`;
+  const pinnedKey = useMemo(() => JSON.stringify(settings.pinnedNodes ?? []), [settings.pinnedNodes]);
+  const dataSettingsKey = `${settings.linkDepth}|${settings.similarityThreshold}|${settings.maxSimilarityEdges}|${settings.showLinkEdges}|${settings.showSimilarityEdges}|${pinnedKey}`;
   useEffect(() => {
-    if (activeFile) buildAndSetGraph();
-  }, [dataSettingsKey]);
+    if (activeFileRef.current) buildAndSetGraph();
+  }, [dataSettingsKey, buildAndSetGraph]);
 
   // Handle node click — open the note (cmd-click or middle-click opens in new tab)
   const handleNodeClick = useCallback((node: GraphNode, newTab?: boolean) => {
@@ -144,6 +153,59 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
     plugin.saveSettings();
   }, [plugin]);
 
+  // Debounced rebuild for right-drag adjustments (depth/similarity)
+  const debouncedRebuildRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedRebuild = useCallback(() => {
+    if (debouncedRebuildRef.current) clearTimeout(debouncedRebuildRef.current);
+    debouncedRebuildRef.current = setTimeout(() => {
+      buildAndSetGraph();
+    }, 150);
+  }, [buildAndSetGraph]);
+
+  // Handle pin toggle — right-click on node
+  // No direct buildAndSetGraph() call needed: togglePinnedNode mutates the atom →
+  // settings.pinnedNodes changes → pinnedKey changes → dataSettingsKey effect fires rebuild.
+  const handleNodePinToggle = useCallback((node: GraphNode) => {
+    togglePinnedNode(node.id);
+    const updated = chatStore.get(graphSettingsAtom);
+    plugin.settings.graphSettings = updated;
+    plugin.saveSettings();
+  }, [plugin]);
+
+  // Handle right-drag depth adjustment on pinned node
+  // Reads from atom store directly to avoid stale settings closure
+  const handleNodeDepthAdjust = useCallback((node: GraphNode, deltaPixels: number) => {
+    if (!node.isPinned) return;
+    const s = chatStore.get(graphSettingsAtom);
+    const currentConfig = (s.pinnedNodes ?? []).find((p) => p.path === node.id);
+    const currentDepth = currentConfig?.linkDepth ?? s.linkDepth;
+    const steps = Math.round(deltaPixels / 40);
+    const newDepth = Math.max(1, Math.min(3, currentDepth + steps)) as 1 | 2 | 3;
+    if (newDepth === currentConfig?.linkDepth) return;
+    updatePinnedNodeConfig(node.id, { linkDepth: newDepth });
+    const updated = chatStore.get(graphSettingsAtom);
+    plugin.settings.graphSettings = updated;
+    plugin.saveSettings();
+    debouncedRebuild();
+  }, [plugin, debouncedRebuild]);
+
+  // Handle alt+right-drag similarity adjustment on pinned node
+  const handleNodeSimilarityAdjust = useCallback((node: GraphNode, deltaPixels: number) => {
+    if (!node.isPinned) return;
+    const s = chatStore.get(graphSettingsAtom);
+    const currentConfig = (s.pinnedNodes ?? []).find((p) => p.path === node.id);
+    const currentThreshold = currentConfig?.similarityThreshold ?? s.similarityThreshold;
+    const steps = Math.round(deltaPixels / 30);
+    const newThreshold = Math.max(0.3, Math.min(0.8, currentThreshold - steps * 0.05));
+    const rounded = Math.round(newThreshold * 100) / 100;
+    if (rounded === currentConfig?.similarityThreshold) return;
+    updatePinnedNodeConfig(node.id, { similarityThreshold: rounded });
+    const updated = chatStore.get(graphSettingsAtom);
+    plugin.settings.graphSettings = updated;
+    plugin.saveSettings();
+    debouncedRebuild();
+  }, [plugin, debouncedRebuild]);
+
   if (!activeFile) {
     return (
       <div className="claude-agent-graph-container">
@@ -166,6 +228,9 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
             onNodeClick={handleNodeClick}
             onNodeHover={handleNodeHover}
             onNodeContextMenu={handleNodeContextMenu}
+            onNodePinToggle={handleNodePinToggle}
+            onNodeDepthAdjust={handleNodeDepthAdjust}
+            onNodeSimilarityAdjust={handleNodeSimilarityAdjust}
           />
         )}
 

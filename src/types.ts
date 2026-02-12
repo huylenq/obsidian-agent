@@ -53,6 +53,8 @@ export interface GraphViewSettings {
   linkDistance: number;           // 50..500, default 250
   // UI
   floatSliders: boolean;         // undock filter sliders to HUD overlay
+  // Pinned nodes — persist across center changes
+  pinnedNodes: PinnedNodeConfig[];
 }
 
 export const DEFAULT_GRAPH_VIEW_SETTINGS: GraphViewSettings = {
@@ -65,6 +67,7 @@ export const DEFAULT_GRAPH_VIEW_SETTINGS: GraphViewSettings = {
   repelForce: 100,
   linkDistance: 250,
   floatSliders: false,
+  pinnedNodes: [],
 };
 
 export interface ClaudeAgentSettings {
@@ -151,11 +154,19 @@ export interface SessionRegistry {
 // Semantic Graph View Types
 // ============================================================================
 
+export interface PinnedNodeConfig {
+  path: string;                    // vault-relative path (= GraphNode.id)
+  linkDepth?: 1 | 2 | 3;          // undefined = use global
+  similarityThreshold?: number;    // undefined = use global
+}
+
 export interface GraphNode {
   id: string;              // vault-relative path
   title: string;           // filename sans extension
   depth: number;           // BFS depth from center (0 = active file)
   isCenter: boolean;
+  isPinned?: boolean;
+  pinnedConfig?: PinnedNodeConfig;
   inVectorIndex: boolean;
   x?: number; y?: number;  // d3-force mutates these
   fx?: number | null;      // fixed position (center node pinned)

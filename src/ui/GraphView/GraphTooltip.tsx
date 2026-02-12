@@ -38,7 +38,14 @@ export function GraphTooltip({ node, edges, x, y }: GraphTooltipProps) {
             <span>Depth: {node.depth}</span>
             {simEdge && <span>Similarity: {simEdge.weight.toFixed(2)}</span>}
             {node.inVectorIndex && <span className="claude-agent-graph-tooltip-indexed">Indexed</span>}
+            {node.isPinned && <span className="claude-agent-graph-tooltip-pinned">Pinned</span>}
           </div>
+          {node.isPinned && node.pinnedConfig && (
+            <div className="claude-agent-graph-tooltip-meta">
+              {node.pinnedConfig.linkDepth != null && <span>Local depth: {node.pinnedConfig.linkDepth}</span>}
+              {node.pinnedConfig.similarityThreshold != null && <span>Local sim: {node.pinnedConfig.similarityThreshold.toFixed(2)}</span>}
+            </div>
+          )}
         </>
       )}
     </div>

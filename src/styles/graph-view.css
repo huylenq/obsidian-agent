@@ -1,5 +1,14 @@
 /* Semantic Graph View */
 
+/* Pinned node color — warm orange, overridable per theme */
+.theme-dark {
+  --graph-node-pinned: #e8a87c;
+}
+
+.theme-light {
+  --graph-node-pinned: #c67a3e;
+}
+
 .claude-agent-graph-view {
   display: flex;
   flex-direction: column;
@@ -83,6 +92,11 @@
 
 .claude-agent-graph-tooltip-indexed {
   color: var(--color-green);
+}
+
+.claude-agent-graph-tooltip-pinned {
+  color: var(--graph-node-pinned, #e8a87c);
+  font-weight: 600;
 }
 
 /* Floating filter sliders — bare, no chrome, transparent until hovered */
@@ -184,4 +198,33 @@
   border-radius: 4px;
   border: 1px solid var(--background-modifier-border);
   pointer-events: none;
+}
+
+/* Pinned nodes section in controls */
+
+.claude-agent-pinned-hint {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.claude-agent-pinned-item {
+  padding: 2px 0;
+}
+
+.claude-agent-pinned-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 150px;
+}
+
+.claude-agent-pinned-overrides {
+  color: var(--graph-node-pinned, #e8a87c);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+}
+
+.claude-agent-pinned-clear {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
 }

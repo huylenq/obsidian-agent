@@ -1,9 +1,13 @@
 /**
  * React wrapper around the canvas-based GraphRenderer.
  * Handles lifecycle, resize, and forwarding callbacks.
+ *
+ * Uses a callback-ref pattern: the renderer receives stable wrapper functions
+ * that always delegate to the latest prop via a ref. This avoids stale
+ * closures when React recreates callbacks after state changes.
  */
 
-import React, { useRef, useEffect, useCallback } from "react";
+import React, { useRef, useEffect } from "react";
 import { GraphRenderer } from "@/graph/graphRenderer";
 import type { GraphData, GraphNode, GraphViewSettings } from "@/types";
 
@@ -23,24 +27,34 @@ interface GraphCanvasProps {
   onNodeClick: (node: GraphNode, newTab?: boolean) => void;
   onNodeHover: (node: GraphNode | null, x: number, y: number) => void;
   onNodeContextMenu?: (node: GraphNode, event: MouseEvent) => void;
+  onNodePinToggle?: (node: GraphNode) => void;
+  onNodeDepthAdjust?: (node: GraphNode, deltaPixels: number) => void;
+  onNodeSimilarityAdjust?: (node: GraphNode, deltaPixels: number) => void;
 }
 
-export function GraphCanvas({ data, settings, onNodeClick, onNodeHover, onNodeContextMenu }: GraphCanvasProps) {
+export function GraphCanvas({ data, settings, onNodeClick, onNodeHover, onNodeContextMenu, onNodePinToggle, onNodeDepthAdjust, onNodeSimilarityAdjust }: GraphCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<GraphRenderer | null>(null);
   const prevSettingsRef = useRef<GraphViewSettings>(settings);
   const prevDataRef = useRef<GraphData>(data);
 
-  // Initialize renderer
+  // Single ref object holding the latest callbacks — updated every render
+  const cbRef = useRef({ onNodeClick, onNodeHover, onNodeContextMenu, onNodePinToggle, onNodeDepthAdjust, onNodeSimilarityAdjust });
+  cbRef.current = { onNodeClick, onNodeHover, onNodeContextMenu, onNodePinToggle, onNodeDepthAdjust, onNodeSimilarityAdjust };
+
+  // Initialize renderer with stable wrappers that delegate through cbRef
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const renderer = new GraphRenderer({
       canvas,
-      onNodeClick,
-      onNodeHover,
-      onNodeContextMenu,
+      onNodeClick: (node, newTab) => cbRef.current.onNodeClick(node, newTab),
+      onNodeHover: (node, x, y) => cbRef.current.onNodeHover(node, x, y),
+      onNodeContextMenu: (node, e) => cbRef.current.onNodeContextMenu?.(node, e),
+      onNodePinToggle: (node) => cbRef.current.onNodePinToggle?.(node),
+      onNodeDepthAdjust: (node, d) => cbRef.current.onNodeDepthAdjust?.(node, d),
+      onNodeSimilarityAdjust: (node, d) => cbRef.current.onNodeSimilarityAdjust?.(node, d),
     });
     rendererRef.current = renderer;
     renderer.resize();
@@ -49,7 +63,7 @@ export function GraphCanvas({ data, settings, onNodeClick, onNodeHover, onNodeCo
       renderer.destroy();
       rendererRef.current = null;
     };
-  }, []); // only on mount — callbacks are stable refs
+  }, []);
 
   // Update data/settings when they change
   useEffect(() => {

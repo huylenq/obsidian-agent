@@ -4,7 +4,7 @@
 
 import type { App } from "obsidian";
 import type { CopilotIndexReader } from "@/embeddings";
-import type { GraphNode, GraphEdge, GraphData, GraphViewSettings } from "@/types";
+import type { GraphNode, GraphEdge, GraphData, GraphViewSettings, PinnedNodeConfig } from "@/types";
 
 const MAX_NODES = 200;
 
@@ -198,6 +198,123 @@ async function discoverCenterSimilarity(
 }
 
 /**
+ * Phase 1b: BFS from each pinned node using its local or global linkDepth.
+ */
+function bfsPinnedNodes(
+  app: App,
+  pins: PinnedNodeConfig[],
+  nodes: Map<string, GraphNode>,
+  globalDepth: number,
+): void {
+  for (const pin of pins) {
+    const maxDepth = pin.linkDepth ?? globalDepth;
+
+    // Seed pinned origin if not already present
+    if (!nodes.has(pin.path)) {
+      if (nodes.size >= MAX_NODES) continue;
+      nodes.set(pin.path, {
+        id: pin.path,
+        title: titleFromPath(pin.path),
+        depth: 0,
+        isCenter: false,
+        isPinned: true,
+        pinnedConfig: pin,
+        inVectorIndex: false,
+      });
+    } else {
+      const existing = nodes.get(pin.path)!;
+      existing.isPinned = true;
+      existing.pinnedConfig = pin;
+    }
+
+    // BFS from pin
+    const queue: [string, number][] = [[pin.path, 0]];
+    const visited = new Set<string>([pin.path]);
+
+    while (queue.length > 0) {
+      const [currentPath, currentDepth] = queue.shift()!;
+      if (currentDepth >= maxDepth) continue;
+
+      const nextDepth = currentDepth + 1;
+
+      for (const targetPath of getOutgoingLinks(app, currentPath)) {
+        if (!visited.has(targetPath)) {
+          visited.add(targetPath);
+          if (!nodes.has(targetPath)) {
+            if (nodes.size >= MAX_NODES) break;
+            nodes.set(targetPath, {
+              id: targetPath,
+              title: titleFromPath(targetPath),
+              depth: nextDepth,
+              isCenter: false,
+              inVectorIndex: false,
+            });
+          }
+          if (nextDepth < maxDepth) {
+            queue.push([targetPath, nextDepth]);
+          }
+        }
+        if (nodes.size >= MAX_NODES) break;
+      }
+      if (nodes.size >= MAX_NODES) break;
+    }
+  }
+}
+
+/**
+ * Phase 2b: Similarity edges from each pinned node using local or global threshold.
+ */
+async function discoverPinnedSimilarity(
+  pins: PinnedNodeConfig[],
+  indexReader: CopilotIndexReader,
+  nodes: Map<string, GraphNode>,
+  edges: Map<string, GraphEdge>,
+  settings: GraphViewSettings,
+): Promise<void> {
+  for (const pin of pins) {
+    const threshold = pin.similarityThreshold ?? settings.similarityThreshold;
+
+    const similarNotes = await indexReader.searchSimilarToPath(pin.path, {
+      minSimilarity: threshold,
+      limit: settings.maxSimilarityEdges,
+    });
+
+    for (const note of similarNotes) {
+      if (nodes.has(note.path)) {
+        nodes.get(note.path)!.inVectorIndex = true;
+      } else if (nodes.size < MAX_NODES) {
+        nodes.set(note.path, {
+          id: note.path,
+          title: note.title || titleFromPath(note.path),
+          depth: (pin.linkDepth ?? settings.linkDepth) + 1,
+          isCenter: false,
+          inVectorIndex: true,
+        });
+      }
+
+      const key = simEdgeKey(pin.path, note.path);
+      if (!edges.has(key)) {
+        edges.set(key, {
+          id: key,
+          source: pin.path,
+          target: note.path,
+          type: "similarity",
+          direction: "outgoing",
+          weight: note.similarity,
+        });
+      }
+    }
+
+    // Mark pin's vector index presence
+    const pinNode = nodes.get(pin.path);
+    if (pinNode) {
+      const embedding = await indexReader.getEmbeddingForPath(pin.path);
+      if (embedding) pinNode.inVectorIndex = true;
+    }
+  }
+}
+
+/**
  * Phase 4: Discover pairwise similarity edges between ALL visible nodes.
  * Fetches embeddings for every visible node and computes cosine similarity for each pair.
  */
@@ -245,12 +362,34 @@ export async function buildGraph(
   indexReader: CopilotIndexReader | null,
   settings: GraphViewSettings,
 ): Promise<GraphData> {
-  // Phase 1: BFS to collect nodes
+  // Phase 1: BFS to collect nodes from center
   const { nodes, edges } = bfsLinks(app, centerPath, settings.linkDepth);
+
+  // Phase 1b: BFS from pinned nodes (adds nodes using per-pin or global depth)
+  const allPins = settings.pinnedNodes ?? [];
+  const pins = allPins.filter((p) => p.path !== centerPath);
+  if (pins.length > 0) {
+    bfsPinnedNodes(app, pins, nodes, settings.linkDepth);
+  }
+
+  // Mark center as pinned if it's in the pin list (gets both isCenter + isPinned)
+  const centerPin = allPins.find((p) => p.path === centerPath);
+  if (centerPin) {
+    const centerNode = nodes.get(centerPath);
+    if (centerNode) {
+      centerNode.isPinned = true;
+      centerNode.pinnedConfig = centerPin;
+    }
+  }
 
   // Phase 2: Similarity edges from center (may add new periphery nodes)
   if (indexReader?.isInitialized() && settings.showSimilarityEdges) {
     await discoverCenterSimilarity(centerPath, indexReader, nodes, edges, settings);
+  }
+
+  // Phase 2b: Similarity edges from pinned nodes
+  if (indexReader?.isInitialized() && settings.showSimilarityEdges && pins.length > 0) {
+    await discoverPinnedSimilarity(pins, indexReader, nodes, edges, settings);
   }
 
   // Phase 3: Link edges between ALL visible nodes

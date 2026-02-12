@@ -10,7 +10,7 @@
 
 import React, { useState, useRef, useCallback } from "react";
 import { setIcon } from "obsidian";
-import type { GraphViewSettings } from "@/types";
+import type { GraphViewSettings, PinnedNodeConfig } from "@/types";
 
 interface GraphControlsProps {
   settings: GraphViewSettings;
@@ -363,6 +363,64 @@ export function GraphControls({ settings, onSettingsChange, onRefresh, isLoading
               />
             </div>
           </div>
+        </ControlSection>
+
+        {/* ── Pinned section ── */}
+        <ControlSection title="Pinned">
+          {(settings.pinnedNodes ?? []).length === 0 ? (
+            <div className="setting-item">
+              <div className="setting-item-info">
+                <div className="setting-item-name claude-agent-pinned-hint">
+                  Right-click a node to pin it
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              {(settings.pinnedNodes ?? []).map((pin) => {
+                const title = pin.path.split("/").pop()?.replace(/\.md$/, "") ?? pin.path;
+                const overrides: string[] = [];
+                if (pin.linkDepth != null) overrides.push(`d:${pin.linkDepth}`);
+                if (pin.similarityThreshold != null) overrides.push(`s:${pin.similarityThreshold.toFixed(2)}`);
+                return (
+                  <div key={pin.path} className="setting-item claude-agent-pinned-item">
+                    <div className="setting-item-info">
+                      <div className="setting-item-name claude-agent-pinned-name" title={pin.path}>
+                        {title}
+                        {overrides.length > 0 && (
+                          <span className="claude-agent-pinned-overrides"> {overrides.join(" ")}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="setting-item-control">
+                      <button
+                        className="clickable-icon"
+                        aria-label={`Unpin ${title}`}
+                        onClick={() => {
+                          const pinnedNodes = (settings.pinnedNodes ?? []).filter((p) => p.path !== pin.path);
+                          onSettingsChange({ pinnedNodes });
+                        }}
+                      >
+                        <ObsidianIcon name="x" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="setting-item">
+                <div className="setting-item-info" />
+                <div className="setting-item-control">
+                  <button
+                    className="clickable-icon claude-agent-pinned-clear"
+                    aria-label="Clear all pins"
+                    onClick={() => onSettingsChange({ pinnedNodes: [] })}
+                  >
+                    Clear all
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </ControlSection>
       </div>
 

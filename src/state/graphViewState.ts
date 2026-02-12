@@ -3,7 +3,7 @@
  */
 
 import { atom } from "jotai";
-import type { GraphData, GraphViewSettings } from "@/types";
+import type { GraphData, GraphViewSettings, PinnedNodeConfig } from "@/types";
 import { DEFAULT_GRAPH_VIEW_SETTINGS } from "@/types";
 import { chatStore } from "./chatState";
 
@@ -46,4 +46,21 @@ export function setGraphError(error: string | null): void {
 
 export function setGraphIndexAvailable(available: boolean): void {
   chatStore.set(graphIndexAvailableAtom, available);
+}
+
+export function togglePinnedNode(path: string): void {
+  const current = chatStore.get(graphSettingsAtom);
+  const exists = current.pinnedNodes.some((p) => p.path === path);
+  const pinnedNodes = exists
+    ? current.pinnedNodes.filter((p) => p.path !== path)
+    : [...current.pinnedNodes, { path }];
+  chatStore.set(graphSettingsAtom, { ...current, pinnedNodes });
+}
+
+export function updatePinnedNodeConfig(path: string, update: Partial<PinnedNodeConfig>): void {
+  const current = chatStore.get(graphSettingsAtom);
+  const pinnedNodes = current.pinnedNodes.map((p) =>
+    p.path === path ? { ...p, ...update } : p,
+  );
+  chatStore.set(graphSettingsAtom, { ...current, pinnedNodes });
 }
