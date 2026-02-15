@@ -1,9 +1,25 @@
+import { existsSync } from "fs";
+import { execSync } from "child_process";
 import { Router } from "express";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { log, logError } from "../log.js";
 import { getTranscriptPath, getSummariesPath, readLatestSegmentMessages, generateCompactSummary, appendSummary } from "../transcript.js";
 import { updateSessionEntry, collectFilePaths, extractTitleFromTranscript, countTranscriptMessages } from "../sessions.js";
 import { computeToolDescription, formatToolInput, extractToolResultContent } from "../toolFormat.js";
+
+/**
+ * Resolve the current node binary path.
+ * process.execPath can go stale after `brew upgrade node` — the Cellar
+ * versioned path gets deleted while the running process keeps its old value.
+ */
+function resolveNodeBinary() {
+  if (existsSync(process.execPath)) return process.execPath;
+  try {
+    return execSync("which node", { encoding: "utf8" }).trim();
+  } catch {
+    return "node";
+  }
+}
 
 const router = Router();
 
@@ -12,12 +28,13 @@ const router = Router();
  * Uses MCP servers configured in ~/.claude/ or vault's .claude/
  */
 router.post("/chat", async (req, res) => {
-  const { message, systemPrompt, sessionId, workingDirectory, activeFile, mentionedFiles, selection, model, relevantNotes } = req.body;
+  const { message, systemPrompt, sessionId, activeFile, mentionedFiles, selection, model, relevantNotes } = req.body;
+  const vaultPath = req.vaultPath;
 
   log("[Proxy] Received chat request:", {
     message,
     sessionId: sessionId || "new session",
-    workingDirectory: workingDirectory || "default",
+    vaultPath,
     activeFile: activeFile?.path || "none",
     selection: selection ? `${selection.text.slice(0, 50)}... (from ${selection.filePath})` : "none",
     mentionedFiles: mentionedFiles?.map(f => f.path) || [],
@@ -95,12 +112,13 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
     permissionMode: "bypassPermissions",
     maxTurns: 100,
     settingSources: ["user", "project", "local"],
-    cwd: workingDirectory,
+    cwd: vaultPath,
+    executable: resolveNodeBinary(),
     ...(resumeSessionId && { resume: resumeSessionId }),
   });
 
   const runQuery = async (resumeSessionId) => {
-    log("[Proxy] Starting query with cwd:", workingDirectory, resumeSessionId ? `(resuming ${resumeSessionId})` : "(new session)");
+    log("[Proxy] Starting query with cwd:", vaultPath, resumeSessionId ? `(resuming ${resumeSessionId})` : "(new session)");
 
     const response = query({
       prompt: message,
@@ -174,13 +192,13 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
             const trigger = msg.compact_metadata?.trigger || "manual";
 
             // Generate synthetic summary from the compacted segment
-            const transcriptPath = getTranscriptPath(workingDirectory, currentSessionId);
+            const transcriptPath = getTranscriptPath(vaultPath, currentSessionId);
             const segmentMessages = readLatestSegmentMessages(transcriptPath);
             const summary = await generateCompactSummary(segmentMessages);
 
             // Persist summary to sidecar file
             if (summary && currentSessionId) {
-              const summariesPath = getSummariesPath(workingDirectory, currentSessionId);
+              const summariesPath = getSummariesPath(vaultPath, currentSessionId);
               appendSummary(summariesPath, { timestamp: Date.now(), preTokens, summary });
             }
 
@@ -262,13 +280,13 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
   } finally {
     // Update session registry
     try {
-      if (resolvedSessionId && workingDirectory) {
+      if (resolvedSessionId) {
         const filePaths = collectFilePaths(req.body);
-        const transcriptPath = getTranscriptPath(workingDirectory, resolvedSessionId);
+        const transcriptPath = getTranscriptPath(vaultPath, resolvedSessionId);
         const title = extractTitleFromTranscript(transcriptPath);
         const msgCount = countTranscriptMessages(transcriptPath);
 
-        updateSessionEntry(workingDirectory, resolvedSessionId, {
+        updateSessionEntry(vaultPath, resolvedSessionId, {
           title: title || undefined,
           model: model || "haiku",
           messageCount: msgCount,

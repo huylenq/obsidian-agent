@@ -23,7 +23,7 @@ try {
   // Expected on mobile — Node.js builtins unavailable
 }
 
-const PROXY_PORT = 27182;
+const PROXY_PORT = 27181;
 
 interface ConnectionConfig {
   url: string;
@@ -36,8 +36,7 @@ interface ConnectionFile {
   timestamp: number;
 }
 
-const CONNECTION_FILE = ".claude-agent-connection.json";
-const CONNECTION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+const CONNECTION_FILE = "claude-agent-connection.json";
 
 /**
  * Get connection URL and auth token based on settings and platform
@@ -55,13 +54,16 @@ function getConnectionConfig(settings: ClaudeAgentSettings, isMobile: boolean): 
     }
     return { url: settings.remoteServerUrl, authToken: settings.remoteAuthToken || undefined };
   }
-  return { url: `http://localhost:${PROXY_PORT}` };
+  return { url: `http://localhost:${PROXY_PORT}`, authToken: settings.remoteAuthToken || undefined };
 }
 
 export default class ClaudeAgentPlugin extends Plugin {
   settings: ClaudeAgentSettings = DEFAULT_SETTINGS;
   claudeClient: ClaudeAgentClient | null = null;
+  /** The resolved connection URL (may come from auto-discovery or settings) */
+  activeConnectionUrl: string | null = null;
   private serverProcess: import("child_process").ChildProcess | null = null;
+  private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
 
   // Promise that resolves when initialization is complete
   initializationPromise: Promise<void> | null = null;
@@ -155,14 +157,38 @@ export default class ClaudeAgentPlugin extends Plugin {
       },
     });
 
+    // Listen for flashcard explain requests from Inline Flashcards plugin
+    const handleExplainFlashcard = (event: CustomEvent<{ question: string; answer: string; context: string }>) => {
+      const { question, answer, context } = event.detail;
+      // Open chat view first, then dispatch the prompt
+      this.activateChatView().then(() => {
+        const prompt = this.buildFlashcardExplainPrompt(question, answer, context);
+        window.dispatchEvent(new CustomEvent('claude-agent:send-message', { detail: { message: prompt } }));
+      });
+    };
+    window.addEventListener('claude-agent:explain-flashcard', handleExplainFlashcard as EventListener);
+    this.register(() => window.removeEventListener('claude-agent:explain-flashcard', handleExplainFlashcard as EventListener));
+
     // Add settings tab
     this.addSettingTab(new ClaudeAgentSettingTab(this.app, this));
 
     console.log("Claude Agent plugin loaded");
   }
 
+  private buildFlashcardExplainPrompt(question: string, answer: string, context: string): string {
+    let prompt = `Explain this flashcard. The question gives context, elaborate on the answer to help understand the fact intuitively. Focus on the terminologies in the answer.\n\n**Question:**\n${question}\n\n**Answer:**\n${answer}`;
+    if (context) {
+      prompt += `\n\n**Context:**\n${context}`;
+    }
+    return prompt;
+  }
+
   async onunload(): Promise<void> {
     console.log("Unloading Claude Agent plugin...");
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
+    }
     this.claudeClient = null;
     this.stopServer();
   }
@@ -197,7 +223,7 @@ export default class ClaudeAgentPlugin extends Plugin {
         ...process.env,
         // Ensure common node install locations are in PATH
         PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ""}`,
-        // Pass auth token to server if configured
+        PORT: String(PROXY_PORT),
         ...(this.settings.remoteAuthToken ? { AUTH_TOKEN: this.settings.remoteAuthToken } : {}),
       },
     });
@@ -320,22 +346,89 @@ export default class ClaudeAgentPlugin extends Plugin {
    * Written by scripts/start-mobile-server.sh, synced via iCloud.
    */
   private async readConnectionFile(): Promise<ConnectionFile | null> {
-    try {
-      const content = await this.app.vault.adapter.read(CONNECTION_FILE);
-      const data = JSON.parse(content) as ConnectionFile;
-      if (!data.url) return null;
+    const exists = await this.app.vault.adapter.exists(CONNECTION_FILE);
+    if (!exists) return null;
 
-      const ageMs = Date.now() - data.timestamp * 1000;
-      if (ageMs > CONNECTION_MAX_AGE_MS) {
-        console.log("[ClaudeAgent] Connection file is stale (>24h), ignoring");
-        return null;
-      }
-
-      console.log(`[ClaudeAgent] Found connection file: ${data.url}`);
-      return data;
-    } catch {
-      return null; // File doesn't exist or is invalid
+    const content = await this.app.vault.adapter.read(CONNECTION_FILE);
+    const data = JSON.parse(content) as ConnectionFile;
+    if (!data.url) {
+      throw new Error("Connection file has no url field");
     }
+
+    console.log(`[ClaudeAgent] Found connection file: ${data.url}`);
+    return data;
+  }
+
+  /**
+   * Re-read the connection file and re-initialize the client.
+   * Useful when iCloud hasn't synced the file by plugin startup time.
+   */
+  async reloadConnectionFile(): Promise<{ url: string } | null> {
+    const discovered = await this.readConnectionFile(); // throws on errors
+    if (!discovered) {
+      throw new Error(`${CONNECTION_FILE} not found in vault root`);
+    }
+
+    this.activeConnectionUrl = discovered.url;
+    const vaultPath = (this.app.vault.adapter as any).basePath;
+
+    setConnectionStatus("connecting");
+    setConnectionError(null);
+
+    try {
+      this.claudeClient = new ClaudeAgentClient(
+        this.settings,
+        vaultPath,
+        discovered.url,
+        this.settings.remoteAuthToken || undefined,
+      );
+      this.claudeClient.setOnSessionChange((sessionId) => {
+        this.settings.sessionId = sessionId;
+        this.saveSettings();
+      });
+      await this.claudeClient.initialize();
+      setConnectionStatus("connected");
+      this.startHealthCheck();
+      console.log("[ClaudeAgent] Reconnected via connection file:", discovered.url);
+      return { url: discovered.url };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Unknown error";
+      setConnectionStatus("error");
+      setConnectionError(msg);
+      throw error;
+    }
+  }
+
+  /**
+   * Periodic health check — updates connection status dot in real time.
+   */
+  private startHealthCheck(): void {
+    if (this.healthCheckInterval) clearInterval(this.healthCheckInterval);
+
+    const url = this.activeConnectionUrl;
+    if (!url) return;
+
+    const check = async () => {
+      try {
+        const headers: Record<string, string> = { "ngrok-skip-browser-warning": "1" };
+        if (this.settings.remoteAuthToken) {
+          headers["Authorization"] = `Bearer ${this.settings.remoteAuthToken}`;
+        }
+        const resp = await fetch(`${url}/health`, { headers, signal: AbortSignal.timeout(5000) });
+        if (resp.ok) {
+          setConnectionStatus("connected");
+          setConnectionError(null);
+        } else {
+          setConnectionStatus("error");
+          setConnectionError(`Health check returned ${resp.status}`);
+        }
+      } catch {
+        setConnectionStatus("error");
+        setConnectionError("Server unreachable");
+      }
+    };
+
+    this.healthCheckInterval = setInterval(check, 30_000);
   }
 
   /**
@@ -352,7 +445,12 @@ export default class ClaudeAgentPlugin extends Plugin {
         (this.settings.connectionMode === "remote" && !this.settings.remoteServerUrl);
 
       if (needsDiscovery) {
-        const discovered = await this.readConnectionFile();
+        let discovered: ConnectionFile | null = null;
+        try {
+          discovered = await this.readConnectionFile();
+        } catch (e) {
+          console.log("[ClaudeAgent] Connection file discovery failed:", e instanceof Error ? e.message : e);
+        }
         if (discovered) {
           connectionConfig = { url: discovered.url, authToken: this.settings.remoteAuthToken || undefined };
           console.log("[ClaudeAgent] Using auto-discovered URL from vault, token from settings");
@@ -363,6 +461,7 @@ export default class ClaudeAgentPlugin extends Plugin {
         connectionConfig = getConnectionConfig(this.settings, Platform.isMobile);
       }
 
+      this.activeConnectionUrl = connectionConfig.url;
       const isLocalMode = this.settings.connectionMode === "local" && !Platform.isMobile;
 
       // Only start server in local mode on desktop
@@ -395,6 +494,7 @@ export default class ClaudeAgentPlugin extends Plugin {
       await this.claudeClient.initialize();
 
       setConnectionStatus("connected");
+      this.startHealthCheck();
       console.log("Claude Agent client initialized successfully");
     } catch (error) {
       console.error("Failed to initialize Claude Agent:", error);

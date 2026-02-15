@@ -195,18 +195,13 @@ export function ChatInput({ onSend, onCommand, disabled, app, onRef }: ChatInput
 
   const handleCommandSelect = useCallback(
     (command: SlashCommand) => {
-      const newInput = `/${command.name} `;
-      setInput(newInput);
+      // Execute the command immediately — no second Enter needed
+      onCommand(command.name, "");
+      setInput("");
+      setMentionState({ isActive: false, startIndex: -1, query: "" });
       setCommandState({ isActive: false, query: "" });
-
-      requestAnimationFrame(() => {
-        if (textareaRef.current) {
-          textareaRef.current.setSelectionRange(newInput.length, newInput.length);
-          textareaRef.current.focus();
-        }
-      });
     },
-    []
+    [onCommand]
   );
 
   const handleSubmit = useCallback(() => {
@@ -342,7 +337,7 @@ export function ChatInput({ onSend, onCommand, disabled, app, onRef }: ChatInput
         <textarea
           ref={textareaRef}
           className="claude-agent-input"
-          placeholder="Ask about your vault... Use @ to mention files or folders"
+          placeholder="Ask away..."
           value={input}
           onChange={handleChange}
           onKeyDown={handleKeyDown}

@@ -55,7 +55,7 @@ export class ClaudeAgentSettingTab extends PluginSettingTab {
     if (this.plugin.settings.connectionMode === "remote") {
       new Setting(containerEl)
         .setName("Remote Server URL")
-        .setDesc("Full URL of the proxy server (e.g. https://abc123.ngrok.io)")
+        .setDesc("Full URL of the proxy server (e.g. https://abc123.ngrok.io). Leave blank to use auto-discovered URL from connection file.")
         .addText((text) =>
           text
             .setPlaceholder("https://your-server.ngrok.io")
@@ -66,12 +66,44 @@ export class ClaudeAgentSettingTab extends PluginSettingTab {
             })
         );
 
+      // Show auto-discovered URL if active and no manual URL is set
+      const activeUrl = this.plugin.activeConnectionUrl;
+      if (activeUrl && !this.plugin.settings.remoteServerUrl) {
+        new Setting(containerEl)
+          .setName("Active URL (auto-discovered)")
+          .setDesc(activeUrl);
+      }
+
+      // Reload connection file (useful when iCloud sync is slow)
+      new Setting(containerEl)
+        .setName("Reload Connection File")
+        .setDesc("Re-read claude-agent-connection.json from vault (iCloud may delay sync)")
+        .addButton((button) =>
+          button.setButtonText("Reload").onClick(async () => {
+            button.setButtonText("Loading...");
+            try {
+              const result = await this.plugin.reloadConnectionFile();
+              if (result) {
+                button.setButtonText(`Found: ${result.url.replace(/^https?:\/\//, "").slice(0, 30)}`);
+                this.display(); // Refresh to show new active URL
+              } else {
+                button.setButtonText("File not found");
+              }
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : "Failed";
+              button.setButtonText(msg.slice(0, 30));
+            }
+            setTimeout(() => button.setButtonText("Reload"), 4000);
+          })
+        );
+
       new Setting(containerEl)
         .setName("Test Connection")
         .setDesc("Verify the remote server is reachable")
         .addButton((button) =>
           button.setButtonText("Test").onClick(async () => {
-            const url = this.plugin.settings.remoteServerUrl;
+            // Use active URL (may be auto-discovered), fall back to settings
+            const url = this.plugin.activeConnectionUrl || this.plugin.settings.remoteServerUrl;
             if (!url) {
               button.setButtonText("No URL set");
               setTimeout(() => button.setButtonText("Test"), 2000);

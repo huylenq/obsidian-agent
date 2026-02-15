@@ -19,17 +19,14 @@ const router = Router();
 
 /**
  * List sessions from registry
- * Query params: workingDirectory (required), status (optional: "in_progress"|"done"), file (optional: vault-relative path)
+ * Query params: status (optional: "in_progress"|"done"), file (optional: vault-relative path)
  */
 router.get("/sessions", (req, res) => {
-  const { workingDirectory, status, file } = req.query;
-
-  if (!workingDirectory) {
-    return res.status(400).json({ error: "workingDirectory is required" });
-  }
+  const { status, file } = req.query;
+  const vaultPath = req.vaultPath;
 
   try {
-    const registry = loadRegistry(workingDirectory);
+    const registry = loadRegistry(vaultPath);
     let sessions = registry.sessions;
 
     if (status && status !== "all") {
@@ -55,18 +52,15 @@ router.get("/sessions", (req, res) => {
  */
 router.patch("/sessions/:sessionId", (req, res) => {
   const { sessionId } = req.params;
-  const { workingDirectory, status, title } = req.body;
-
-  if (!workingDirectory) {
-    return res.status(400).json({ error: "workingDirectory is required" });
-  }
+  const { status, title } = req.body;
+  const vaultPath = req.vaultPath;
 
   try {
     const updates = { updatedAt: Date.now() };
     if (status !== undefined) updates.status = status;
     if (title !== undefined) updates.title = title;
 
-    const entry = updateSessionEntry(workingDirectory, sessionId, updates);
+    const entry = updateSessionEntry(vaultPath, sessionId, updates);
     res.json({ session: entry });
   } catch (error) {
     logError("[Proxy] Error updating session:", error);
@@ -78,19 +72,15 @@ router.patch("/sessions/:sessionId", (req, res) => {
  * Migrate: scan all JSONL files to populate registry
  */
 router.post("/sessions/migrate", (req, res) => {
-  const { workingDirectory } = req.body;
-
-  if (!workingDirectory) {
-    return res.status(400).json({ error: "workingDirectory is required" });
-  }
+  const vaultPath = req.vaultPath;
 
   try {
-    const projectDir = join(homedir(), ".claude", "projects", encodePath(workingDirectory));
+    const projectDir = join(homedir(), ".claude", "projects", encodePath(vaultPath));
     if (!existsSync(projectDir)) {
       return res.json({ migrated: 0 });
     }
 
-    const registry = loadRegistry(workingDirectory);
+    const registry = loadRegistry(vaultPath);
     const existingIds = new Set(registry.sessions.map(s => s.id));
 
     const files = readdirSync(projectDir).filter(f => f.endsWith(".jsonl"));
@@ -134,7 +124,7 @@ router.post("/sessions/migrate", (req, res) => {
       migrated++;
     }
 
-    saveRegistry(workingDirectory, registry);
+    saveRegistry(vaultPath, registry);
     log(`[Proxy] Migration complete: ${migrated} sessions migrated`);
     res.json({ migrated });
   } catch (error) {

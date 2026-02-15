@@ -1,3 +1,5 @@
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 import express from "express";
 import cors from "cors";
 import { log } from "./log.js";
@@ -9,11 +11,21 @@ import sessionsRouter from "./routes/sessions.js";
 
 const PORT = process.env.PORT || 27182;
 
+// Vault path: server lives at <vault>/.obsidian/plugins/claude-agent/server/
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const VAULT_PATH = resolve(__dirname, "..", "..", "..", "..");
+
 const app = express();
 
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(authMiddleware);
+
+// Inject server-side vault path into all requests
+app.use((req, _res, next) => {
+  req.vaultPath = VAULT_PATH;
+  next();
+});
 
 app.use(healthRouter);
 app.use(chatRouter);

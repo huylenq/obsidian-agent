@@ -3,6 +3,9 @@
 const fs = require('fs');
 const path = require('path');
 
+// Flags
+const includeDeps = process.argv.includes('--deps');
+
 // Configuration
 const PLUGIN_ID = 'claude-agent';
 const IWE_PATH = '/Users/huy/Library/Mobile Documents/iCloud~md~obsidian/Documents/IWE';
@@ -29,17 +32,18 @@ function ensureDir(dir) {
     }
 }
 
-// Recursively copy a directory
-function copyDirRecursive(src, dest) {
+// Recursively copy a directory, skipping entries in skipNames
+function copyDirRecursive(src, dest, skipNames = []) {
     ensureDir(dest);
     const entries = fs.readdirSync(src, { withFileTypes: true });
 
     for (const entry of entries) {
+        if (skipNames.includes(entry.name)) continue;
         const srcPath = path.join(src, entry.name);
         const destPath = path.join(dest, entry.name);
 
         if (entry.isDirectory()) {
-            copyDirRecursive(srcPath, destPath);
+            copyDirRecursive(srcPath, destPath, skipNames);
         } else {
             fs.copyFileSync(srcPath, destPath);
         }
@@ -64,13 +68,14 @@ function deployToDirectory(targetDir, { includeDirs = true } = {}) {
 
     // Deploy directories (skipped for mobile — no Node.js runtime)
     if (includeDirs) {
+        const skipNames = includeDeps ? [] : ['node_modules'];
         DIRS_TO_DEPLOY.forEach(dir => {
             const sourcePath = path.join(__dirname, dir);
             const targetPath = path.join(targetDir, dir);
 
             if (fs.existsSync(sourcePath)) {
-                copyDirRecursive(sourcePath, targetPath);
-                console.log(`Deployed ${dir}/ to ${targetPath}`);
+                copyDirRecursive(sourcePath, targetPath, skipNames);
+                console.log(`Deployed ${dir}/ to ${targetPath}${skipNames.length ? ' (skipping node_modules)' : ''}`);
             } else {
                 console.warn(`Warning: ${dir}/ not found in build directory`);
             }
@@ -79,7 +84,7 @@ function deployToDirectory(targetDir, { includeDirs = true } = {}) {
 }
 
 // Main deployment
-console.log('Starting deployment of claude-agent plugin...\n');
+console.log(`Starting deployment of claude-agent plugin...${includeDeps ? ' (with node_modules)' : ' (without node_modules, use --deps to include)'}\n`);
 
 // Deploy to .obsidian (desktop)
 console.log('Deploying to .obsidian (desktop):');

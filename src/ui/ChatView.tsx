@@ -495,6 +495,18 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     [plugin, app, handleSend]
   );
 
+  // Listen for programmatic send-message events (e.g. from flashcard explain deeplink)
+  useEffect(() => {
+    const handleSendMessage = (event: CustomEvent<{ message: string }>) => {
+      const { message } = event.detail;
+      if (message) {
+        handleSend(message, []);
+      }
+    };
+    window.addEventListener("claude-agent:send-message", handleSendMessage as EventListener);
+    return () => window.removeEventListener("claude-agent:send-message", handleSendMessage as EventListener);
+  }, [handleSend]);
+
   const handleModelChange = useCallback((newModel: ClaudeModel) => {
     chatStore.set(modelAtom, newModel);
     plugin.settings.model = newModel;

@@ -20,9 +20,14 @@
   align-self: flex-start;
 }
 
+/* Mobile: remove padding to save screen estate */
+.is-mobile .claude-agent-message.assistant {
+  padding: 0;
+}
+
 .claude-agent-message.error {
   background-color: var(--background-modifier-error);
-  color: var(--text-error);
+  color: var(--text-on-accent, var(--text-normal));
   user-select: text;
   -webkit-user-select: text;
   cursor: text;
@@ -181,6 +186,16 @@
 @keyframes claude-agent-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
+}
+
+.claude-agent-tool-block-mcp-badge {
+  font-size: 0.7em;
+  font-weight: 500;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  flex-shrink: 0;
 }
 
 .claude-agent-tool-block-name {

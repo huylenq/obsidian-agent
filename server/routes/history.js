@@ -11,7 +11,8 @@ const router = Router();
  * Claude Code stores transcripts at ~/.claude/projects/{encoded-path}/{session-id}.jsonl
  */
 router.post("/history", (req, res) => {
-  const { sessionId, workingDirectory } = req.body;
+  const { sessionId } = req.body;
+  const vaultPath = req.vaultPath;
 
   if (!sessionId) {
     return res.status(400).json({ error: "sessionId is required" });
@@ -20,7 +21,7 @@ router.post("/history", (req, res) => {
   log("[Proxy] Fetching history for session:", sessionId);
 
   try {
-    const transcriptPath = getTranscriptPath(workingDirectory, sessionId);
+    const transcriptPath = getTranscriptPath(vaultPath, sessionId);
 
     if (!existsSync(transcriptPath)) {
       log("[Proxy] Transcript file not found at:", transcriptPath);
@@ -148,7 +149,7 @@ router.post("/history", (req, res) => {
     }
 
     // Attach saved summaries to compact_boundary entries
-    const summariesPath = getSummariesPath(workingDirectory, sessionId);
+    const summariesPath = getSummariesPath(vaultPath, sessionId);
     const summaries = loadSummaries(summariesPath);
     let summaryIdx = 0;
     for (const msg of messages) {

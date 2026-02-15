@@ -30,10 +30,11 @@ export function computeToolDescription(toolName, input) {
     case "WebSearch":
       return `WebSearch "${truncateContent(input.query || "", 50)}"`;
     default: {
-      // MCP tools: mcp__server__tool → "tool (server)"
+      // MCP tools: mcp__server__tool → more readable format
       const mcpMatch = toolName.match(/^mcp__([^_]+)__(.+)$/);
       if (mcpMatch) {
-        return `${mcpMatch[2]} (${mcpMatch[1]})`;
+        const [, server, tool] = mcpMatch;
+        return formatMcpDescription(server, tool, input);
       }
       return toolName;
     }
@@ -69,9 +70,85 @@ export function formatToolInput(toolName, input) {
     }
     case "Glob":
       return input.pattern || "";
-    default:
+    default: {
+      // MCP tools: format input more readably
+      const mcpMatch = toolName.match(/^mcp__([^_]+)__(.+)$/);
+      if (mcpMatch) {
+        const [, server, tool] = mcpMatch;
+        return formatMcpInput(server, tool, input);
+      }
       return truncateContent(JSON.stringify(input), 500);
+    }
   }
+}
+
+/**
+ * Human-readable description for MCP tool calls.
+ * Extracts the most meaningful parameter to show in the header.
+ */
+function formatMcpDescription(server, tool, input) {
+  if (!input) return "";
+
+  // Common patterns for search/query tools
+  if (input.query) {
+    return `"${truncateContent(input.query, 50)}"`;
+  }
+  if (input.search || input.searchQuery) {
+    return `"${truncateContent(input.search || input.searchQuery, 50)}"`;
+  }
+
+  // Document/file operations
+  if (input.id && tool.includes("get")) {
+    return truncateContent(input.id, 40);
+  }
+  if (input.path || input.file || input.filePath) {
+    const path = input.path || input.file || input.filePath;
+    return basename(path);
+  }
+
+  // URL operations
+  if (input.url) {
+    return truncateContent(input.url, 50);
+  }
+
+  // List operations
+  if (tool.includes("list") || tool.includes("recent")) {
+    const limit = input.limit || input.count;
+    return limit ? `limit: ${limit}` : "";
+  }
+
+  return "";
+}
+
+/**
+ * Format MCP tool input for the expanded body view.
+ * Shows parameters in a readable key: value format.
+ */
+function formatMcpInput(server, tool, input) {
+  if (!input) return "";
+
+  // For simple single-param inputs, just show the value
+  const keys = Object.keys(input);
+  if (keys.length === 1) {
+    const value = input[keys[0]];
+    if (typeof value === "string" || typeof value === "number") {
+      return `${keys[0]}: ${value}`;
+    }
+  }
+
+  // For complex inputs, format as readable key-value pairs
+  const lines = [];
+  for (const [key, value] of Object.entries(input)) {
+    if (value === undefined || value === null) continue;
+
+    if (typeof value === "object") {
+      // Arrays and objects: compact JSON
+      lines.push(`${key}: ${truncateContent(JSON.stringify(value), 200)}`);
+    } else {
+      lines.push(`${key}: ${truncateContent(String(value), 200)}`);
+    }
+  }
+  return lines.join("\n");
 }
 
 /**

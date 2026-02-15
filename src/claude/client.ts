@@ -122,7 +122,6 @@ export class ClaudeAgentClient {
               message,
               systemPrompt: this.settings.systemPrompt,
               sessionId: this.settings.sessionId || undefined,
-              workingDirectory: this.vaultPath,
               activeFile,
               mentionedFiles,
               selection,
@@ -281,7 +280,7 @@ export class ClaudeAgentClient {
    */
   async fetchSessions(filters?: { status?: SessionStatus | "all"; file?: string }): Promise<SessionEntry[]> {
     try {
-      const params = new URLSearchParams({ workingDirectory: this.vaultPath });
+      const params = new URLSearchParams();
       if (filters?.status) params.set("status", filters.status);
       if (filters?.file) params.set("file", filters.file);
 
@@ -304,7 +303,7 @@ export class ClaudeAgentClient {
       const response = await fetch(`${this.proxyUrl}/sessions/${sessionId}`, {
         method: "PATCH",
         headers: this.getHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ workingDirectory: this.vaultPath, ...updates }),
+        body: JSON.stringify(updates),
       });
       if (!response.ok) return null;
 
@@ -324,7 +323,7 @@ export class ClaudeAgentClient {
       const response = await fetch(`${this.proxyUrl}/sessions/migrate`, {
         method: "POST",
         headers: this.getHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ workingDirectory: this.vaultPath }),
+        body: JSON.stringify({}),
       });
       if (!response.ok) return 0;
 
@@ -360,10 +359,7 @@ export class ClaudeAgentClient {
       const response = await fetch(`${this.proxyUrl}/history`, {
         method: "POST",
         headers: this.getHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
-          sessionId,
-          workingDirectory: this.vaultPath,
-        }),
+        body: JSON.stringify({ sessionId }),
       });
 
       if (!response.ok) {

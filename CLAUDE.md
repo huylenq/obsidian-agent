@@ -82,10 +82,13 @@ The connection file has `{ url, authToken, timestamp }`. Files older than 24h ar
 After making changes:
 
 ```bash
-pnpm run deploy
+pnpm run deploy          # default — skips server/node_modules
+pnpm run deploy:deps     # includes server/node_modules (only when deps change)
 ```
 
 Deploys to both `.obsidian/plugins/claude-agent` (desktop, with server/) and `.obsidian-mobile/plugins/claude-agent` (mobile, files only).
+
+The default skips `server/node_modules` to avoid churning iCloud sync with hundreds of unchanged files. Use `deploy:deps` after changing server dependencies.
 
 Then reload Obsidian (or disable/enable the plugin) to pick up changes.
 
