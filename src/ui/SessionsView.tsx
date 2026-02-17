@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { App, ItemView, WorkspaceLeaf } from "obsidian";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { App, ItemView, WorkspaceLeaf, setIcon } from "obsidian";
 import { createRoot, Root } from "react-dom/client";
 import { useAtomValue } from "jotai";
 import { chatStore } from "@/state/chatState";
@@ -24,6 +24,46 @@ export const SESSIONS_VIEW_TYPE = "claude-agent-sessions";
 interface SessionsContainerProps {
   plugin: ClaudeAgentPlugin;
   app: App;
+}
+
+function ModeToggleButton({ icon, isActive, tooltip, onClick }: {
+  icon: string;
+  isActive: boolean;
+  tooltip: string;
+  onClick: () => void;
+}) {
+  const ref = useRef<HTMLButtonElement>(null);
+  useEffect(() => { if (ref.current) setIcon(ref.current, icon); }, [icon]);
+  return (
+    <button
+      ref={ref}
+      className={isActive ? "active" : ""}
+      onClick={onClick}
+      title={tooltip}
+    />
+  );
+}
+
+function ClickableIcon({ icon, tooltip, onClick, isActive, disabled, className }: {
+  icon: string;
+  tooltip: string;
+  onClick: () => void;
+  isActive?: boolean;
+  disabled?: boolean;
+  className?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (ref.current) setIcon(ref.current, icon); }, [icon]);
+  return (
+    <div
+      ref={ref}
+      className={`clickable-icon${isActive ? " is-active" : ""}${className ? ` ${className}` : ""}`}
+      aria-label={tooltip}
+      aria-disabled={disabled}
+      onClick={disabled ? undefined : onClick}
+      style={disabled ? { opacity: 0.5, pointerEvents: "none" } : undefined}
+    />
+  );
 }
 
 function SessionsContainer({ plugin, app }: SessionsContainerProps) {
@@ -148,52 +188,36 @@ function SessionsContainer({ plugin, app }: SessionsContainerProps) {
       <div className="claude-agent-sessions-toolbar">
         {/* Mode toggle */}
         <div className="claude-agent-sessions-mode-toggle">
-          <button
-            className={mode === "thisFile" ? "active" : ""}
+          <ModeToggleButton
+            icon="file"
+            isActive={mode === "thisFile"}
+            tooltip="Sessions for current file"
             onClick={() => handleModeChange("thisFile")}
-            title="Sessions for current file"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-            </svg>
-          </button>
-          <button
-            className={mode === "all" ? "active" : ""}
+          />
+          <ModeToggleButton
+            icon="files"
+            isActive={mode === "all"}
+            tooltip="All sessions"
             onClick={() => handleModeChange("all")}
-            title="All sessions"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="7" />
-              <rect x="14" y="3" width="7" height="7" />
-              <rect x="3" y="14" width="7" height="7" />
-              <rect x="14" y="14" width="7" height="7" />
-            </svg>
-          </button>
+          />
         </div>
 
         {/* Status filter */}
-        <button
-          className="claude-agent-sessions-status-filter"
+        <ClickableIcon
+          icon="filter"
+          tooltip={statusFilter === "in_progress" ? "Showing active only — click for all" : "Showing all — click for active only"}
           onClick={handleStatusFilterChange}
-          title={statusFilter === "in_progress" ? "Showing in-progress only" : "Showing all"}
-        >
-          {statusFilter === "in_progress" ? "Active" : "All"}
-        </button>
+          isActive={statusFilter === "in_progress"}
+        />
 
         {/* Refresh */}
-        <button
-          className={`claude-agent-sessions-refresh ${isLoading ? "spinning" : ""}`}
+        <ClickableIcon
+          icon="refresh-cw"
+          tooltip="Refresh sessions"
           onClick={fetchSessions}
-          title="Refresh sessions"
           disabled={isLoading}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="23 4 23 10 17 10" />
-            <polyline points="1 20 1 14 7 14" />
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-          </svg>
-        </button>
+          className={isLoading ? "spinning" : ""}
+        />
       </div>
 
       <div className={`claude-agent-sessions-list ${isLoading ? "loading" : ""}`}>

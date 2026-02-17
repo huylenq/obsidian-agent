@@ -15,14 +15,22 @@ export interface ToolBlock {
   isRunning?: boolean;
 }
 
+export interface ThreadMetadata {
+  threadId: string;
+  flashcardId: string;    // cardId from deeplink
+  sourceFile: string;     // vault-relative path
+  question: string;       // card front (for display)
+}
+
 export interface ChatMessage {
   id: string;
-  role: "user" | "assistant" | "tool" | "tool_block" | "compact_boundary";
+  role: "user" | "assistant" | "tool" | "tool_block" | "compact_boundary" | "thread_boundary";
   content: string;
   timestamp: number;
   toolName?: string;
   toolBlocks?: ToolBlock[];
   compactMetadata?: CompactMetadata;
+  threadMetadata?: ThreadMetadata;
 }
 
 export interface ActiveFileContext {
@@ -143,6 +151,8 @@ export type SessionStatus = "in_progress" | "done";
 
 export type SessionsMode = "thisFile" | "all";
 
+export type SessionType = "regular" | "flashcard_study";
+
 export interface SessionEntry {
   id: string;
   title: string;                // first user message, 80 chars max
@@ -152,6 +162,8 @@ export interface SessionEntry {
   model: ClaudeModel;
   messageCount: number;
   files: string[];              // vault-relative note paths (deduped)
+  type?: SessionType;           // undefined = regular (backcompat)
+  epoch?: string;               // "2026-02-15" for daily flashcard sessions
 }
 
 export interface SessionRegistry {

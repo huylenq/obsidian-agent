@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useRef, useEffect } from "react";
+import { setIcon } from "obsidian";
 import type { SessionEntry } from "@/types";
 
 interface SessionCardProps {
@@ -11,6 +12,15 @@ interface SessionCardProps {
 export function SessionCard({ session, isActive, onSwitch, onToggleStatus }: SessionCardProps) {
   const isDone = session.status === "done";
   const dateStr = formatRelativeDate(session.updatedAt);
+
+  const isFlashcard = session.type === "flashcard_study";
+  const typeIconRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (isFlashcard && typeIconRef.current) {
+      setIcon(typeIconRef.current, "book-open");
+    }
+  }, [isFlashcard]);
 
   return (
     <div className={`claude-agent-session-card ${isActive ? "active" : ""}`}>
@@ -30,6 +40,7 @@ export function SessionCard({ session, isActive, onSwitch, onToggleStatus }: Ses
           onClick={onSwitch}
           title={session.title || session.id}
         >
+          {isFlashcard && <span ref={typeIconRef} className="claude-agent-session-type-icon" />}
           {session.title || session.id.slice(0, 12)}
         </span>
         <div className="claude-agent-session-card-meta">

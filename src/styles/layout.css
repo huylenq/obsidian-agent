@@ -5,6 +5,7 @@
   flex-direction: column;
   height: 100%;
   padding: 0;
+  position: relative;
 }
 
 /* Header removed — styles kept for reference */
@@ -59,6 +60,91 @@
   cursor: not-allowed;
 }
 
+/* Session header bar */
+
+.claude-agent-session-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 0.82em;
+  min-height: 28px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  background: color-mix(in srgb, var(--background-primary) 75%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+
+.claude-agent-session-header.flashcard-study {
+  background: transparent;
+  color: var(--text-accent);
+}
+
+.claude-agent-session-header.flashcard-study .claude-agent-session-header-title {
+  font-weight: 600;
+}
+
+.claude-agent-session-header-icon {
+  font-size: 1.1em;
+  pointer-events: auto;
+}
+
+.claude-agent-session-header-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 0.95em;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.claude-agent-session-header-title:hover {
+  color: var(--text-normal);
+}
+
+.claude-agent-session-header .claude-agent-done-button {
+  margin-left: auto;
+  pointer-events: auto;
+  background: color-mix(in srgb, var(--text-muted) 15%, transparent);
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 0.75em;
+  line-height: 1;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.claude-agent-session-header .claude-agent-done-button:hover {
+  background-color: var(--color-green);
+  color: white;
+}
+
+.claude-agent-session-header .claude-agent-new-chat-button {
+  pointer-events: auto;
+  background: color-mix(in srgb, var(--text-muted) 15%, transparent);
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 0.9em;
+  line-height: 1;
+}
+
+
 .claude-agent-messages {
   flex: 1;
   overflow-y: auto;
@@ -89,4 +175,87 @@
 .claude-agent-empty-state p {
   font-size: 0.85em;
   line-height: 1.4;
+}
+
+/* Session dropdown (from header title click) */
+
+.claude-agent-session-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--background-primary) 92%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--background-modifier-border);
+  pointer-events: auto;
+  padding: 4px 0;
+  z-index: 11;
+}
+
+.claude-agent-session-dropdown-search {
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: transparent;
+  color: var(--text-normal);
+  font-size: 12px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.claude-agent-session-dropdown-search::placeholder {
+  color: var(--text-faint);
+}
+
+.claude-agent-session-dropdown-empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.claude-agent-session-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.claude-agent-session-dropdown-item:hover,
+.claude-agent-session-dropdown-item.highlighted {
+  background-color: var(--background-modifier-hover);
+}
+
+.claude-agent-session-dropdown-item.active {
+  background-color: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
+}
+
+.claude-agent-session-dropdown-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-normal);
+}
+
+.claude-agent-session-dropdown-item.active .claude-agent-session-dropdown-title {
+  color: var(--interactive-accent);
+}
+
+.claude-agent-session-dropdown-meta {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background-color: var(--background-modifier-border);
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: lowercase;
+  flex-shrink: 0;
 }

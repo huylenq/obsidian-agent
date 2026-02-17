@@ -14,6 +14,7 @@ import {
   countTranscriptMessages,
   getTranscriptTimestamps,
 } from "../sessions.js";
+import { getThreadsPath, loadThreads } from "../threads.js";
 
 const router = Router();
 
@@ -22,7 +23,7 @@ const router = Router();
  * Query params: status (optional: "in_progress"|"done"), file (optional: vault-relative path)
  */
 router.get("/sessions", (req, res) => {
-  const { status, file } = req.query;
+  const { status, file, type, epoch } = req.query;
   const vaultPath = req.vaultPath;
 
   try {
@@ -37,12 +38,37 @@ router.get("/sessions", (req, res) => {
       sessions = sessions.filter(s => s.files.includes(file));
     }
 
+    if (type) {
+      sessions = sessions.filter(s => s.type === type);
+    }
+
+    if (epoch) {
+      sessions = sessions.filter(s => s.epoch === epoch);
+    }
+
     // Sort by updatedAt descending
     sessions.sort((a, b) => b.updatedAt - a.updatedAt);
 
     res.json({ sessions });
   } catch (error) {
     logError("[Proxy] Error listing sessions:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * List threads for a session
+ */
+router.get("/sessions/:sessionId/threads", (req, res) => {
+  const { sessionId } = req.params;
+  const vaultPath = req.vaultPath;
+
+  try {
+    const threadsPath = getThreadsPath(vaultPath, sessionId);
+    const threads = loadThreads(threadsPath);
+    res.json({ threads });
+  } catch (error) {
+    logError("[Proxy] Error loading threads:", error);
     res.status(500).json({ error: error.message });
   }
 });

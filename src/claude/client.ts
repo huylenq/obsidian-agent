@@ -1,4 +1,4 @@
-import { ClaudeAgentSettings, ActiveFileContext, SelectionContext, RankedNote, SessionEntry, SessionStatus } from "@/types";
+import { ClaudeAgentSettings, ActiveFileContext, SelectionContext, RankedNote, SessionEntry, SessionStatus, SessionType } from "@/types";
 import { FileSearchResult } from "@/utils/fileSearch";
 
 export interface ChatResponse {
@@ -104,7 +104,9 @@ export class ClaudeAgentClient {
     activeFile?: ActiveFileContext,
     mentionedFiles?: FileSearchResult[],
     selection?: SelectionContext,
-    relevantNotes?: RankedNote[]
+    relevantNotes?: RankedNote[],
+    flashcardMeta?: { cardId: string; sourceFile: string; question: string },
+    sessionMeta?: { type: SessionType; epoch: string },
   ): AsyncGenerator<ChatResponse> {
     try {
       console.log("[ClaudeAgentClient] Sending chat with workingDirectory:", this.vaultPath, "activeFile:", activeFile?.path, "mentionedFiles:", mentionedFiles?.length || 0, "selection:", selection?.text?.slice(0, 50) || "none", "relevantNotes:", relevantNotes?.length || 0);
@@ -127,6 +129,8 @@ export class ClaudeAgentClient {
               selection,
               model: this.settings.model,
               relevantNotes,
+              ...(flashcardMeta && { flashcardMeta }),
+              ...(sessionMeta && { sessionMeta }),
             }),
           });
           // Fail fast on auth errors
@@ -296,6 +300,22 @@ export class ClaudeAgentClient {
   }
 
   /**
+   * Fetch sessions filtered by type and epoch (for flashcard study sessions)
+   */
+  async fetchSessionsByType(type: SessionType, epoch: string): Promise<SessionEntry[]> {
+    try {
+      const params = new URLSearchParams({ type, epoch, status: "in_progress" });
+      const response = await fetch(`${this.proxyUrl}/sessions?${params}`, { headers: this.getHeaders() });
+      if (!response.ok) return [];
+      const data = await response.json();
+      return data.sessions || [];
+    } catch (error) {
+      console.warn("[ClaudeAgentClient] Error fetching sessions by type:", error);
+      return [];
+    }
+  }
+
+  /**
    * Update a session's status or title
    */
   async updateSession(sessionId: string, updates: { status?: SessionStatus; title?: string }): Promise<SessionEntry | null> {
@@ -333,6 +353,23 @@ export class ClaudeAgentClient {
     } catch (error) {
       console.warn("[ClaudeAgentClient] Migration error:", error);
       return 0;
+    }
+  }
+
+  /**
+   * Fetch threads for a session (for dedup checking)
+   */
+  async fetchThreads(sessionId: string): Promise<Array<{ threadId: string; flashcardId: string; sourceFile: string; question: string }>> {
+    try {
+      const response = await fetch(`${this.proxyUrl}/sessions/${sessionId}/threads`, {
+        headers: this.getHeaders(),
+      });
+      if (!response.ok) return [];
+      const data = await response.json();
+      return data.threads || [];
+    } catch (error) {
+      console.warn("[ClaudeAgentClient] Error fetching threads:", error);
+      return [];
     }
   }
 

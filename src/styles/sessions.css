@@ -83,53 +83,13 @@
   color: var(--text-on-accent);
 }
 
-/* Status filter button */
+/* Toolbar clickable-icons — push refresh to the right */
 
-.claude-agent-sessions-status-filter {
-  padding: 2px 8px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 4px;
-  background: transparent;
-  cursor: pointer;
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.claude-agent-sessions-status-filter:hover {
-  color: var(--text-normal);
-  border-color: var(--text-muted);
-}
-
-/* Refresh button */
-
-.claude-agent-sessions-refresh {
+.claude-agent-sessions-toolbar .clickable-icon:last-child {
   margin-left: auto;
-  padding: 4px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  cursor: pointer;
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
 }
 
-.claude-agent-sessions-refresh svg {
-  width: 14px;
-  height: 14px;
-}
-
-.claude-agent-sessions-refresh:hover {
-  color: var(--text-normal);
-  background-color: var(--background-modifier-hover);
-}
-
-.claude-agent-sessions-refresh:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.claude-agent-sessions-refresh.spinning {
+.claude-agent-sessions-toolbar .clickable-icon.spinning {
   animation: spin 1s linear infinite;
 }
 
@@ -198,6 +158,19 @@
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
+}
+
+.claude-agent-session-type-icon {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 4px;
+  color: var(--text-accent);
+  flex-shrink: 0;
+}
+
+.claude-agent-session-type-icon svg {
+  width: 14px;
+  height: 14px;
 }
 
 .claude-agent-session-card-title:hover {

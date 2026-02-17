@@ -4,7 +4,8 @@ import { Router } from "express";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { log, logError } from "../log.js";
 import { getTranscriptPath, getSummariesPath, readLatestSegmentMessages, generateCompactSummary, appendSummary } from "../transcript.js";
-import { updateSessionEntry, collectFilePaths, extractTitleFromTranscript, countTranscriptMessages } from "../sessions.js";
+import { updateSessionEntry, collectFilePaths, extractTitleFromTranscript, countTranscriptMessages, countUserOnlyMessages } from "../sessions.js";
+import { getThreadsPath, appendThread } from "../threads.js";
 import { computeToolDescription, formatToolInput, extractToolResultContent } from "../toolFormat.js";
 
 /**
@@ -28,7 +29,7 @@ const router = Router();
  * Uses MCP servers configured in ~/.claude/ or vault's .claude/
  */
 router.post("/chat", async (req, res) => {
-  const { message, systemPrompt, sessionId, activeFile, mentionedFiles, selection, model, relevantNotes } = req.body;
+  const { message, systemPrompt, sessionId, activeFile, mentionedFiles, selection, model, relevantNotes, flashcardMeta, sessionMeta } = req.body;
   const vaultPath = req.vaultPath;
 
   log("[Proxy] Received chat request:", {
@@ -286,13 +287,35 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
         const title = extractTitleFromTranscript(transcriptPath);
         const msgCount = countTranscriptMessages(transcriptPath);
 
-        updateSessionEntry(vaultPath, resolvedSessionId, {
+        const registryUpdates = {
           title: title || undefined,
           model: model || "haiku",
           messageCount: msgCount,
           updatedAt: Date.now(),
           files: filePaths,
-        });
+        };
+
+        // Merge session type/epoch if provided (flashcard study sessions)
+        if (sessionMeta) {
+          if (sessionMeta.type) registryUpdates.type = sessionMeta.type;
+          if (sessionMeta.epoch) registryUpdates.epoch = sessionMeta.epoch;
+        }
+
+        updateSessionEntry(vaultPath, resolvedSessionId, registryUpdates);
+
+        // Write thread entry to sidecar if flashcard metadata provided
+        if (flashcardMeta) {
+          const threadsPath = getThreadsPath(vaultPath, resolvedSessionId);
+          const userMsgCount = countUserOnlyMessages(transcriptPath);
+          appendThread(threadsPath, {
+            threadId: crypto.randomUUID(),
+            flashcardId: flashcardMeta.cardId,
+            sourceFile: flashcardMeta.sourceFile,
+            question: flashcardMeta.question,
+            startMessageIndex: userMsgCount > 0 ? userMsgCount - 1 : 0,
+            createdAt: Date.now(),
+          });
+        }
       }
     } catch (regError) {
       logError("[Proxy] Failed to update session registry:", regError);

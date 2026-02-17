@@ -64,6 +64,7 @@ export default class ClaudeAgentPlugin extends Plugin {
   activeConnectionUrl: string | null = null;
   private serverProcess: import("child_process").ChildProcess | null = null;
   private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
+  private isHandlingFlashcard = false;
 
   // Promise that resolves when initialization is complete
   initializationPromise: Promise<void> | null = null;
@@ -132,10 +133,10 @@ export default class ClaudeAgentPlugin extends Plugin {
       },
     });
 
-    // Add command to clear chat (also clears session for fresh conversation)
+    // Add command to start new chat (clears session for fresh conversation)
     this.addCommand({
-      id: "clear-claude-agent-chat",
-      name: "Clear Chat History",
+      id: "new-claude-agent-chat",
+      name: "New Chat",
       callback: async () => {
         const { clearMessages } = await import("./state/chatState");
         clearMessages();
@@ -143,7 +144,7 @@ export default class ClaudeAgentPlugin extends Plugin {
         if (this.claudeClient) {
           this.claudeClient.clearSession();
         }
-        new Notice("Chat history cleared");
+        new Notice("New chat started");
       },
     });
 
@@ -152,18 +153,95 @@ export default class ClaudeAgentPlugin extends Plugin {
       id: "open-model-selector",
       name: "Open Model Selector",
       callback: () => {
-        // Dispatch custom event for ChatView to handle
         window.dispatchEvent(new CustomEvent("claude-agent:open-model-selector"));
       },
     });
 
+    // Add command to open session switcher dropdown
+    this.addCommand({
+      id: "open-session-switcher",
+      name: "Open Session Switcher",
+      callback: () => {
+        this.activateChatView().then(() => {
+          window.dispatchEvent(new CustomEvent("claude-agent:open-session-switcher"));
+        });
+      },
+    });
+
     // Listen for flashcard explain requests from Inline Flashcards plugin
-    const handleExplainFlashcard = (event: CustomEvent<{ question: string; answer: string; context: string }>) => {
-      const { question, answer, context } = event.detail;
-      // Open chat view first, then dispatch the prompt
-      this.activateChatView().then(() => {
-        const prompt = this.buildFlashcardExplainPrompt(question, answer, context);
-        window.dispatchEvent(new CustomEvent('claude-agent:send-message', { detail: { message: prompt } }));
+    const handleExplainFlashcard = (event: CustomEvent<{ question: string; answer: string; context: string; cardId?: string; sourceFile?: string }>) => {
+      const { question, answer, context, cardId, sourceFile } = event.detail;
+
+      // Concurrency guard — prevent rapid-fire duplicate handling
+      if (this.isHandlingFlashcard) {
+        console.log("[ClaudeAgent] Ignoring flashcard request — already handling one");
+        return;
+      }
+      this.isHandlingFlashcard = true;
+
+      this.activateChatView().then(async () => {
+        try {
+          const prompt = this.buildFlashcardExplainPrompt(question, answer, context);
+          const epoch = new Date().toISOString().slice(0, 10);
+
+          // Resolve or prepare daily flashcard session
+          let targetSessionId: string | null = null;
+          if (this.claudeClient) {
+            targetSessionId = await this.resolveFlashcardSession(epoch);
+          }
+
+          const currentSessionId = this.claudeClient?.getSessionId() ?? null;
+          console.log("[ClaudeAgent] Flashcard explain:", { cardId, targetSessionId, currentSessionId });
+
+          // Dedup: if this card already has a thread in today's session, scroll to it
+          if (targetSessionId && cardId) {
+            const threads = await this.claudeClient!.fetchThreads(targetSessionId);
+            const existing = threads.find(t => t.flashcardId === cardId);
+            console.log("[ClaudeAgent] Dedup check:", { threadsCount: threads.length, existingMatch: !!existing });
+            if (existing) {
+              // Only switch if not already viewing the target session
+              if (currentSessionId !== targetSessionId) {
+                window.dispatchEvent(new CustomEvent('claude-agent:switch-session', {
+                  detail: { sessionId: targetSessionId },
+                }));
+                await new Promise(resolve => setTimeout(resolve, 300));
+              }
+              window.dispatchEvent(new CustomEvent('claude-agent:scroll-to-flashcard', {
+                detail: { flashcardId: cardId },
+              }));
+              return;
+            }
+          }
+
+          if (targetSessionId) {
+            // Only switch if not already viewing the target session
+            if (currentSessionId !== targetSessionId) {
+              window.dispatchEvent(new CustomEvent('claude-agent:switch-session', {
+                detail: { sessionId: targetSessionId },
+              }));
+              await new Promise(resolve => setTimeout(resolve, 300));
+            }
+          } else {
+            // Clear session so SDK creates a new one
+            if (this.claudeClient) {
+              this.claudeClient.clearSession();
+              const { clearMessages } = await import("./state/chatState");
+              clearMessages();
+            }
+          }
+
+          const decodedQuestion = question ? decodeURIComponent(question.replace(/\+/g, ' ')) : '';
+
+          window.dispatchEvent(new CustomEvent('claude-agent:send-message', {
+            detail: {
+              message: prompt,
+              flashcardMeta: cardId ? { cardId, sourceFile: sourceFile || '', question: decodedQuestion } : undefined,
+              sessionMeta: { type: "flashcard_study" as const, epoch },
+            },
+          }));
+        } finally {
+          this.isHandlingFlashcard = false;
+        }
       });
     };
     window.addEventListener('claude-agent:explain-flashcard', handleExplainFlashcard as EventListener);
@@ -173,6 +251,16 @@ export default class ClaudeAgentPlugin extends Plugin {
     this.addSettingTab(new ClaudeAgentSettingTab(this.app, this));
 
     console.log("Claude Agent plugin loaded");
+  }
+
+  /**
+   * Find an existing in_progress flashcard_study session for the given epoch (today).
+   * Returns the session ID if found, null otherwise.
+   */
+  private async resolveFlashcardSession(epoch: string): Promise<string | null> {
+    if (!this.claudeClient) return null;
+    const sessions = await this.claudeClient.fetchSessionsByType("flashcard_study", epoch);
+    return sessions.length > 0 ? sessions[0].id : null;
   }
 
   private buildFlashcardExplainPrompt(question: string, answer: string, context: string): string {

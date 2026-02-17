@@ -2,7 +2,7 @@ import React, { useCallback, useState, useEffect, useRef } from "react";
 import { useAtomValue } from "jotai";
 import { App, ItemView, WorkspaceLeaf, MarkdownView, setIcon } from "obsidian";
 import { createRoot, Root } from "react-dom/client";
-import { ActiveFileContext, ClaudeModel, SelectionContext } from "@/types";
+import { ActiveFileContext, ClaudeModel, SelectionContext, ThreadMetadata } from "@/types";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatMessages } from "./ChatMessages";
 import { ActiveFileChip } from "./ActiveFileChip";
@@ -28,11 +28,24 @@ import {
   setIncludeRelevantNotes,
 } from "@/state/relevantNotesState";
 import { connectionStatusAtom, connectionErrorAtom } from "@/state/connectionState";
-import { ChatMessage, CompactMetadata, ToolBlock } from "@/types";
+import { ChatMessage, CompactMetadata, ToolBlock, SessionType, SessionEntry } from "@/types";
 import type ClaudeAgentPlugin from "@/main";
 import { initializeCommands, commandRegistry, CommandContext } from "@/commands";
 
 export const CHAT_VIEW_TYPE = "claude-agent-chat";
+
+/** Map raw history messages to ChatMessage[]. */
+function mapHistoryMessages(raw: Array<Record<string, unknown>>): ChatMessage[] {
+  return raw.map((msg) => ({
+    id: generateMessageId(),
+    role: msg.role as ChatMessage["role"],
+    content: (msg.content as string) || "",
+    timestamp: (msg.timestamp as number) || Date.now(),
+    ...((msg.compactMetadata as CompactMetadata) && { compactMetadata: msg.compactMetadata as CompactMetadata }),
+    ...((msg.toolBlocks as ToolBlock[]) && { toolBlocks: msg.toolBlocks as ToolBlock[] }),
+    ...((msg.threadMetadata as ThreadMetadata) && { threadMetadata: msg.threadMetadata as ThreadMetadata }),
+  }));
+}
 
 interface ChatContainerProps {
   plugin: ClaudeAgentPlugin;
@@ -72,6 +85,23 @@ function getSelectionContext(app: App): SelectionContext | undefined {
   };
 }
 
+function formatEpochDate(epoch: string): string {
+  // epoch is "YYYY-MM-DD" — parse as local date
+  const [y, m, d] = epoch.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/** Simple fuzzy match: characters of query appear in order within text (case-insensitive) */
+function fuzzyMatch(text: string, query: string): boolean {
+  const lower = text.toLowerCase();
+  let j = 0;
+  for (let i = 0; i < lower.length && j < query.length; i++) {
+    if (lower[i] === query[j]) j++;
+  }
+  return j === query.length;
+}
+
 function ChatContainer({ plugin, app }: ChatContainerProps) {
   const isLoading = useAtomValue(isLoadingAtom, { store: chatStore });
   const [activeFile, setActiveFile] = useState<ActiveFileContext | undefined>(
@@ -92,6 +122,14 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   const checkIconRef = useRef<HTMLSpanElement>(null);
   const [inputRef, setInputRef] = useState<ChatInputHandle | null>(null);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
+  const [sessionType, setSessionType] = useState<string | null>(null);
+  const [sessionEpoch, setSessionEpoch] = useState<string | null>(null);
+  const [pendingScrollFlashcardId, setPendingScrollFlashcardId] = useState<string | null>(null);
+  const [sessionDropdown, setSessionDropdown] = useState<SessionEntry[] | null>(null);
+  const [dropdownQuery, setDropdownQuery] = useState("");
+  const [dropdownIndex, setDropdownIndex] = useState(-1);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const dropdownInputRef = useRef<HTMLInputElement>(null);
 
   // Listen for command to open model selector
   useEffect(() => {
@@ -103,14 +141,15 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     return () => window.removeEventListener("claude-agent:open-model-selector", handleOpenSelector);
   }, []);
 
+
   useEffect(() => {
     if (brainIconRef.current) {
       setIcon(brainIconRef.current, "sparkles");
     }
     if (checkIconRef.current) {
-      setIcon(checkIconRef.current, "check");
+      setIcon(checkIconRef.current, includeRelevantNotes ? "circle-plus" : "circle");
     }
-  }, []);
+  }, [includeRelevantNotes]);
 
   // Sync model atom with plugin settings on mount
   useEffect(() => {
@@ -152,14 +191,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       try {
         const historyMessages = await plugin.claudeClient.fetchHistory();
         if (historyMessages.length > 0) {
-          const chatMessages: ChatMessage[] = historyMessages.map((msg) => ({
-            id: generateMessageId(),
-            role: msg.role as ChatMessage["role"],
-            content: (msg.content as string) || "",
-            timestamp: (msg.timestamp as number) || Date.now(),
-            ...((msg.compactMetadata as CompactMetadata) && { compactMetadata: msg.compactMetadata as CompactMetadata }),
-            ...((msg.toolBlocks as ToolBlock[]) && { toolBlocks: msg.toolBlocks as ToolBlock[] }),
-          }));
+          const chatMessages = mapHistoryMessages(historyMessages);
           chatStore.set(messagesAtom, chatMessages);
           console.log("[ChatView] Loaded", chatMessages.length, "history messages");
         }
@@ -222,6 +254,8 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     clearMessages();
     setSessionId(null);
     setSessionTitle(null);
+    setSessionType(null);
+    setSessionEpoch(null);
     // Notify SessionsView
     window.dispatchEvent(new CustomEvent("claude-agent:session-changed", { detail: { sessionId: null } }));
     window.dispatchEvent(new CustomEvent("claude-agent:refresh-sessions"));
@@ -231,6 +265,15 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   useEffect(() => {
     initializeCommands();
   }, []);
+
+  // Listen for "open file" events (e.g. from markdown links in chat)
+  useEffect(() => {
+    const handleOpenFile = (event: CustomEvent<{ path: string }>) => {
+      app.workspace.openLinkText(event.detail.path, "", false);
+    };
+    window.addEventListener("claude-agent:open-file", handleOpenFile as EventListener);
+    return () => window.removeEventListener("claude-agent:open-file", handleOpenFile as EventListener);
+  }, [app]);
 
   // Listen for "add note to chat" events from RelevantNotesView
   useEffect(() => {
@@ -266,15 +309,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       try {
         const historyMessages = await plugin.claudeClient.fetchHistory();
         if (historyMessages.length > 0) {
-          const chatMessages: ChatMessage[] = historyMessages.map((msg) => ({
-            id: generateMessageId(),
-            role: msg.role as ChatMessage["role"],
-            content: (msg.content as string) || "",
-            timestamp: (msg.timestamp as number) || Date.now(),
-            ...((msg.compactMetadata as CompactMetadata) && { compactMetadata: msg.compactMetadata as CompactMetadata }),
-            ...((msg.toolBlocks as ToolBlock[]) && { toolBlocks: msg.toolBlocks as ToolBlock[] }),
-          }));
-          chatStore.set(messagesAtom, chatMessages);
+          chatStore.set(messagesAtom, mapHistoryMessages(historyMessages));
         }
       } catch (error) {
         console.warn("[ChatView] Failed to load session history:", error);
@@ -285,17 +320,42 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     return () => window.removeEventListener("claude-agent:switch-session", handleSwitchSession as EventListener);
   }, [plugin.claudeClient]);
 
-  // Resolve session title from registry when sessionId changes
+  // Listen for "scroll to flashcard" events (dedup — card already explained)
   useEffect(() => {
-    if (!sessionId || !plugin.claudeClient) {
-      setSessionTitle(null);
-      return;
-    }
-    // Fetch from server — no dependency on sessionsAtom in this view
-    plugin.claudeClient.fetchSessions({ status: "all" }).then((sessions) => {
-      const entry = sessions.find(s => s.id === sessionId);
+    const handleScrollToFlashcard = (event: CustomEvent<{ flashcardId: string }>) => {
+      setPendingScrollFlashcardId(event.detail.flashcardId);
+    };
+    window.addEventListener("claude-agent:scroll-to-flashcard", handleScrollToFlashcard as EventListener);
+    return () => window.removeEventListener("claude-agent:scroll-to-flashcard", handleScrollToFlashcard as EventListener);
+  }, []);
+
+  // Resolve session title + type from registry when sessionId changes
+  useEffect(() => {
+    const resolve = async () => {
+      if (plugin.initializationPromise) {
+        await plugin.initializationPromise;
+      }
+
+      // Re-read sessionId — initial state may have been null before client was ready
+      const resolvedId = sessionId || plugin.claudeClient?.getSessionId() || null;
+      if (resolvedId && !sessionId) {
+        setSessionId(resolvedId);
+      }
+
+      if (!resolvedId || !plugin.claudeClient) {
+        setSessionTitle(null);
+        setSessionType(null);
+        setSessionEpoch(null);
+        return;
+      }
+
+      const sessions = await plugin.claudeClient.fetchSessions({ status: "all" });
+      const entry = sessions.find(s => s.id === resolvedId);
       setSessionTitle(entry?.title || null);
-    });
+      setSessionType(entry?.type || null);
+      setSessionEpoch(entry?.epoch || null);
+    };
+    resolve();
   }, [sessionId, plugin.claudeClient]);
 
   const handleMarkDone = useCallback(async () => {
@@ -305,14 +365,42 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     clearMessages();
     setSessionId(null);
     setSessionTitle(null);
+    setSessionType(null);
+    setSessionEpoch(null);
     window.dispatchEvent(new CustomEvent("claude-agent:session-changed", { detail: { sessionId: null } }));
     window.dispatchEvent(new CustomEvent("claude-agent:refresh-sessions"));
   }, [plugin.claudeClient, sessionId]);
 
   const handleSend = useCallback(
-    async (message: string, mentionedFiles: FileSearchResult[]) => {
+    async (
+      message: string,
+      mentionedFiles: FileSearchResult[],
+      flashcardMeta?: { cardId: string; sourceFile: string; question: string },
+      sessionMeta?: { type: SessionType; epoch: string },
+    ) => {
       const fileContext = isContextCleared ? undefined : activeFile;
       const selectionContext = selection;
+
+      // Set session type eagerly for immediate header display
+      if (sessionMeta?.type) {
+        setSessionType(sessionMeta.type);
+      }
+
+      // Insert thread boundary before flashcard explain messages
+      if (flashcardMeta) {
+        addMessage({
+          id: generateMessageId(),
+          role: "thread_boundary",
+          content: "",
+          timestamp: Date.now(),
+          threadMetadata: {
+            threadId: crypto.randomUUID(),
+            flashcardId: flashcardMeta.cardId,
+            sourceFile: flashcardMeta.sourceFile,
+            question: flashcardMeta.question,
+          },
+        });
+      }
 
       if (!message.startsWith("/")) {
         addMessage({
@@ -361,7 +449,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           }
         };
 
-        for await (const chunk of plugin.claudeClient.chat(message, fileContext, mentionedFiles, selectionContext, highMatchNotes)) {
+        for await (const chunk of plugin.claudeClient.chat(message, fileContext, mentionedFiles, selectionContext, highMatchNotes, flashcardMeta, sessionMeta)) {
           switch (chunk.type) {
             case "text":
               fullResponse = chunk.content;
@@ -477,9 +565,11 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
             timestamp: Date.now(),
           });
         }
-        if (commandName === "clear" || commandName === "new" || commandName === "reset" || commandName === "done") {
+        if (commandName === "new" || commandName === "clear" || commandName === "reset" || commandName === "done") {
           setSessionId(null);
           setSessionTitle(null);
+          setSessionType(null);
+          setSessionEpoch(null);
           window.dispatchEvent(new CustomEvent("claude-agent:session-changed", { detail: { sessionId: null } }));
           window.dispatchEvent(new CustomEvent("claude-agent:refresh-sessions"));
         }
@@ -497,10 +587,14 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
 
   // Listen for programmatic send-message events (e.g. from flashcard explain deeplink)
   useEffect(() => {
-    const handleSendMessage = (event: CustomEvent<{ message: string }>) => {
-      const { message } = event.detail;
+    const handleSendMessage = (event: CustomEvent<{
+      message: string;
+      flashcardMeta?: { cardId: string; sourceFile: string; question: string };
+      sessionMeta?: { type: "flashcard_study"; epoch: string };
+    }>) => {
+      const { message, flashcardMeta, sessionMeta } = event.detail;
       if (message) {
-        handleSend(message, []);
+        handleSend(message, [], flashcardMeta, sessionMeta);
       }
     };
     window.addEventListener("claude-agent:send-message", handleSendMessage as EventListener);
@@ -520,12 +614,150 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     plugin.saveSettings();
   }, [plugin]);
 
+  // Session dropdown: fetch active sessions, prioritize file-relevant
+  const handleSessionDropdownToggle = useCallback(async () => {
+    if (sessionDropdown) {
+      setSessionDropdown(null);
+      setDropdownQuery("");
+      return;
+    }
+    if (!plugin.claudeClient) return;
+    const sessions = await plugin.claudeClient.fetchSessions({ status: "in_progress" });
+    const currentFilePath = activeFile?.path;
+    // Sort: file-relevant first, then by updatedAt desc
+    const sorted = sessions.sort((a, b) => {
+      const aRelevant = currentFilePath && a.files.includes(currentFilePath) ? 1 : 0;
+      const bRelevant = currentFilePath && b.files.includes(currentFilePath) ? 1 : 0;
+      if (aRelevant !== bRelevant) return bRelevant - aRelevant;
+      return b.updatedAt - a.updatedAt;
+    });
+    setDropdownQuery("");
+    setDropdownIndex(-1);
+    setSessionDropdown(sorted);
+    // Auto-focus input after render
+    requestAnimationFrame(() => dropdownInputRef.current?.focus());
+  }, [sessionDropdown, plugin.claudeClient, activeFile]);
+
+  const handleSessionSelect = useCallback((targetId: string) => {
+    setSessionDropdown(null);
+    setDropdownQuery("");
+    setDropdownIndex(-1);
+    window.dispatchEvent(new CustomEvent("claude-agent:switch-session", { detail: { sessionId: targetId } }));
+  }, []);
+
+  const filteredDropdown = sessionDropdown?.filter(
+    (s) => !dropdownQuery || fuzzyMatch(s.title || s.id, dropdownQuery)
+  ) ?? null;
+
+  // Reset index when query changes
+  useEffect(() => {
+    setDropdownIndex(-1);
+  }, [dropdownQuery]);
+
+  // Close dropdown on outside click; arrow/enter/escape handled on input
+  useEffect(() => {
+    if (!sessionDropdown) return;
+    const handleClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setSessionDropdown(null);
+        setDropdownQuery("");
+        setDropdownIndex(-1);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [sessionDropdown]);
+
+  // Listen for command to open session switcher (Alt+L)
+  useEffect(() => {
+    const handleOpenSwitcher = () => handleSessionDropdownToggle();
+    window.addEventListener("claude-agent:open-session-switcher", handleOpenSwitcher);
+    return () => window.removeEventListener("claude-agent:open-session-switcher", handleOpenSwitcher);
+  }, [handleSessionDropdownToggle]);
+
   const showFileChip = activeFile && !isContextCleared;
   const showSelectionChip = selection !== undefined;
 
+  const isFlashcardSession = sessionType === "flashcard_study";
+
   return (
     <div className="claude-agent-container">
-      <ChatMessages />
+      <div className={`claude-agent-session-header ${isFlashcardSession ? "flashcard-study" : ""}`} ref={dropdownRef}>
+        {isFlashcardSession ? (
+          <>
+            <span className="claude-agent-session-header-icon">&#128218;</span>
+            <span className="claude-agent-session-header-title" onClick={handleSessionDropdownToggle}>
+              Flashcard Study{sessionEpoch && ` · ${formatEpochDate(sessionEpoch)}`}
+            </span>
+          </>
+        ) : (
+          <span className="claude-agent-session-header-title" onClick={handleSessionDropdownToggle}>
+            {sessionTitle || "New Chat"}
+          </span>
+        )}
+        {sessionId && (
+          <button
+            className="claude-agent-done-button"
+            onClick={handleMarkDone}
+            disabled={isLoading}
+            title="Mark done"
+          >&#10003;</button>
+        )}
+        <button
+          className="claude-agent-new-chat-button"
+          onClick={handleNewChat}
+          disabled={isLoading}
+          title="New chat"
+        >+</button>
+        {sessionDropdown && (
+          <div className="claude-agent-session-dropdown">
+            <input
+              ref={dropdownInputRef}
+              className="claude-agent-session-dropdown-search"
+              type="text"
+              placeholder="Search sessions…"
+              value={dropdownQuery}
+              onChange={(e) => setDropdownQuery(e.target.value)}
+              onKeyDown={(e) => {
+                const items = filteredDropdown ?? [];
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setDropdownIndex((i) => Math.min(i + 1, items.length - 1));
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setDropdownIndex((i) => Math.max(i - 1, -1));
+                } else if (e.key === "Enter" && dropdownIndex >= 0 && dropdownIndex < items.length) {
+                  e.preventDefault();
+                  handleSessionSelect(items[dropdownIndex].id);
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  setSessionDropdown(null);
+                  setDropdownQuery("");
+                  setDropdownIndex(-1);
+                }
+              }}
+            />
+            {filteredDropdown && filteredDropdown.length === 0 ? (
+              <div className="claude-agent-session-dropdown-empty">
+                {dropdownQuery ? "No matches" : "No active sessions"}
+              </div>
+            ) : filteredDropdown?.map((s, i) => (
+              <div
+                key={s.id}
+                className={`claude-agent-session-dropdown-item ${s.id === sessionId ? "active" : ""} ${i === dropdownIndex ? "highlighted" : ""}`}
+                onClick={() => handleSessionSelect(s.id)}
+              >
+                <span className="claude-agent-session-dropdown-title">{s.title || s.id.slice(0, 12)}</span>
+                <span className="claude-agent-session-dropdown-meta">{s.model}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <ChatMessages
+        pendingScrollFlashcardId={pendingScrollFlashcardId}
+        onScrollComplete={() => setPendingScrollFlashcardId(null)}
+      />
       <div className="claude-agent-input-area">
         {(showFileChip || showSelectionChip) && (
           <div className="claude-agent-context-chips">
@@ -562,7 +794,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
             onClick={() => !isLoading && handleIncludeNotesChange(!includeRelevantNotes)}
           >
             <span ref={checkIconRef} className="claude-agent-include-notes-check" />
-            Include relevances
+            Related
           </span>
           <div className={`claude-agent-connection-status ${connectionStatus}`} title={
             connectionError || (connectionStatus === "connected" ? "Connected to server" : connectionStatus === "connecting" ? "Connecting..." : connectionStatus === "error" ? "Connection error" : "Disconnected")

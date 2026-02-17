@@ -44,6 +44,8 @@ export function updateSessionEntry(workingDirectory, sessionId, updates) {
   if (updates.model !== undefined) entry.model = updates.model;
   if (updates.messageCount !== undefined) entry.messageCount = updates.messageCount;
   if (updates.updatedAt !== undefined) entry.updatedAt = updates.updatedAt;
+  if (updates.type !== undefined) entry.type = updates.type;
+  if (updates.epoch !== undefined) entry.epoch = updates.epoch;
 
   // Merge files (deduplicate)
   if (updates.files && updates.files.length > 0) {
@@ -136,6 +138,21 @@ export function countTranscriptMessages(transcriptPath) {
     try {
       const entry = JSON.parse(line);
       if (entry.type === "user" || entry.type === "assistant") count++;
+    } catch { /* skip */ }
+  }
+  return count;
+}
+
+/** Count user-only messages (excluding tool results) — matches history.js user message counting */
+export function countUserOnlyMessages(transcriptPath) {
+  if (!existsSync(transcriptPath)) return 0;
+  const content = readFileSync(transcriptPath, "utf-8");
+  const lines = content.trim().split("\n");
+  let count = 0;
+  for (const line of lines) {
+    try {
+      const entry = JSON.parse(line);
+      if (entry.type === "user" && entry.toolUseResult === undefined) count++;
     } catch { /* skip */ }
   }
   return count;

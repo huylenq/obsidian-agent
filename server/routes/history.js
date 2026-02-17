@@ -2,6 +2,7 @@ import { Router } from "express";
 import { existsSync, readFileSync } from "fs";
 import { log, logError } from "../log.js";
 import { getTranscriptPath, getSummariesPath, extractTextFromEntry, loadSummaries } from "../transcript.js";
+import { getThreadsPath, loadThreads } from "../threads.js";
 import { computeToolDescription, formatToolInput, extractToolResultContent } from "../toolFormat.js";
 
 const router = Router();
@@ -156,6 +157,50 @@ router.post("/history", (req, res) => {
       if (msg.role === "compact_boundary" && summaryIdx < summaries.length) {
         msg.compactMetadata.summary = summaries[summaryIdx].summary;
         summaryIdx++;
+      }
+    }
+
+    // Inject thread boundaries from threads sidecar
+    const threadsPath = getThreadsPath(vaultPath, sessionId);
+    const threads = loadThreads(threadsPath);
+    if (threads.length > 0) {
+      // Count user messages to map startMessageIndex to position in messages array
+      // startMessageIndex is the user message count at thread start
+      const userMessagePositions = [];
+      for (let i = 0; i < messages.length; i++) {
+        if (messages[i].role === "user") {
+          userMessagePositions.push(i);
+        }
+      }
+
+      // Insert thread boundaries in reverse order to preserve indices
+      const toInsert = [];
+      for (const thread of threads) {
+        const userMsgIdx = thread.startMessageIndex;
+        // Map to position in messages array
+        const insertAt = userMsgIdx < userMessagePositions.length
+          ? userMessagePositions[userMsgIdx]
+          : messages.length;
+        toInsert.push({
+          position: insertAt,
+          boundary: {
+            role: "thread_boundary",
+            content: "",
+            timestamp: thread.createdAt,
+            threadMetadata: {
+              threadId: thread.threadId,
+              flashcardId: thread.flashcardId,
+              sourceFile: thread.sourceFile,
+              question: thread.question,
+            },
+          },
+        });
+      }
+
+      // Sort by position descending to insert from end (preserves earlier indices)
+      toInsert.sort((a, b) => b.position - a.position);
+      for (const item of toInsert) {
+        messages.splice(item.position, 0, item.boundary);
       }
     }
 

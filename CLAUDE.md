@@ -211,7 +211,7 @@ Sessions are tracked via a central registry file (see `~/.claude/` section above
 **Cross-view communication** via custom events (same pattern as RelevantNotes → ChatView):
 - `claude-agent:switch-session` — SessionsView → ChatView (loads history for selected session)
 - `claude-agent:session-changed` — ChatView → SessionsView (sync current session ID)
-- `claude-agent:refresh-sessions` — ChatView → SessionsView (after chat completes, /done, /clear)
+- `claude-agent:refresh-sessions` — ChatView → SessionsView (after chat completes, /done, /new)
 
 **Key files:**
 - `src/state/sessionState.ts` — Jotai atoms
@@ -222,7 +222,65 @@ Sessions are tracked via a central registry file (see `~/.claude/` section above
 
 Registered in `src/commands/builtins/` and initialized in `src/commands/index.ts`. Autocomplete triggers when typing `/` in the chat input.
 
-- `/clear` (aliases: `/new`, `/reset`) — start fresh session
+- `/new` (aliases: `/clear`, `/reset`) — start new chat session
 - `/compact` — compact conversation context (routes through chat pipeline, not a local command)
 - `/done` — mark current session as done and start new chat
 - `/sessions` (alias: `/history`) — toggle All Sessions mode in the sessions panel
+
+## Flashcard Explain Integration
+
+Cross-plugin integration with `plugins/inline-flashcards/`. Anki deeplinks trigger flashcard explanations routed to daily study sessions with per-card thread boundaries.
+
+### Event flow
+
+```
+Anki deeplink → obsidian://flashcard-explain?file=...&content=...&back=...&context=...
+  → Inline Flashcards: jumps to card, extracts cardId from <!--ID: \d+-->, dispatches:
+    window "claude-agent:explain-flashcard" { question, answer, context, cardId, sourceFile }
+  → Claude Agent (main.ts handleExplainFlashcard):
+    1. resolveFlashcardSession(epoch) — GET /sessions?type=flashcard_study&epoch=today&status=in_progress
+    2. Dedup: fetchThreads(sessionId), if cardId match → scroll to existing boundary, return
+    3. Switch to daily session (or clear for new), dispatch "claude-agent:send-message"
+  → Server (chat.js finally block):
+    1. Merges type/epoch into session registry
+    2. Writes thread to {sessionId}.threads.json via appendThread()
+    3. startMessageIndex = countUserOnlyMessages(transcript) - 1
+  → History reload (history.js):
+    Injects thread_boundary messages at positions mapped from startMessageIndex to user message array indices
+```
+
+### Thread boundary navigation (agent → inline-flashcards)
+
+Thread boundary clicks dispatch `flashcard:navigate` with `{ sourceFile, flashcardId }`. Inline Flashcards plugin listens, opens the file, finds `<!--ID: {flashcardId}-->`, walks back to the `::` line, scrolls to center, and selection-flashes 3 times. Degrades gracefully if inline-flashcards is not loaded.
+
+### Key files
+
+| File | Role |
+|------|------|
+| `src/main.ts` | `handleExplainFlashcard` — session resolution, dedup guard (`isHandlingFlashcard`), skip-switch optimization |
+| `server/sessions.js` | `countUserOnlyMessages()` — counts user JSONL entries excluding toolUseResult |
+| `server/threads.js` | `getThreadsPath()`, `loadThreads()`, `appendThread()` — threads sidecar CRUD |
+| `server/routes/chat.js` | Thread writing in finally block, uses `countUserOnlyMessages` for startMessageIndex |
+| `server/routes/history.js` | Thread boundary injection — maps startMessageIndex to user message positions |
+| `src/ui/ChatMessages.tsx` | `groupMessagesByBoundary()` — thread boundaries render AFTER group messages (boundary is grouped with preceding messages, rendered after them to appear between groups) |
+| `../plugins/inline-flashcards/main.ts` | `flashcard:navigate` listener, `navigateToFlashcardById()`, `flashLine()` |
+
+### Threads sidecar (`{sessionId}.threads.json`)
+
+```json
+[{ "threadId": "uuid", "flashcardId": "1763625939784", "sourceFile": "path.md", "question": "...", "startMessageIndex": 0, "createdAt": 1739577600000 }]
+```
+
+`startMessageIndex` = 0-based index into user-only messages (excluding tool results). Must match what history.js counts as user messages when building `userMessagePositions`.
+
+### Session registry extensions
+
+Sessions with `type: "flashcard_study"` and `epoch: "YYYY-MM-DD"` are daily study sessions. `GET /sessions` accepts `type` and `epoch` query params.
+
+### Dedup
+
+`isHandlingFlashcard` concurrency guard prevents rapid-fire. If card already has a thread in today's session: skip `switch-session` if already viewing that session (avoids message clear + history reload), scroll to existing `[data-flashcard-id]` element, highlight with CSS animation.
+
+### Critical invariant
+
+`countUserOnlyMessages()` must count the same entries that `history.js` renders as `role: "user"` messages. Both exclude `toolUseResult` entries. If history.js adds new skip conditions (e.g. filtering `/compact` commands), `countUserOnlyMessages` may need updating to match — but flashcard sessions don't use compaction so this is low risk.

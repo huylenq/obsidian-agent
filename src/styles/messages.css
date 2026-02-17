@@ -127,6 +127,96 @@
   color: var(--text-muted);
 }
 
+/* Thread boundary (flashcard study threads) */
+
+.claude-agent-thread-boundary {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 8px 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.claude-agent-thread-boundary-line {
+  height: 1px;
+  background: var(--interactive-accent);
+  opacity: 0.3;
+  flex-shrink: 0;
+}
+
+.claude-agent-thread-boundary-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  color: var(--text-accent);
+  font-size: 0.82em;
+}
+
+.claude-agent-thread-label {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.claude-agent-thread-label:hover {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+
+.claude-agent-thread-source {
+  font-size: 0.85em;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.claude-agent-thread-source:hover {
+  color: var(--text-accent);
+}
+
+/* Thread highlight (scroll-to-flashcard dedup) */
+
+.claude-agent-thread-highlight {
+  animation: claude-agent-thread-glow 2s ease-out forwards;
+}
+
+@keyframes claude-agent-thread-glow {
+  0% {
+    outline: 2px solid var(--interactive-accent);
+    background: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
+    border-radius: 6px;
+  }
+  100% {
+    outline: 2px solid transparent;
+    background: transparent;
+    border-radius: 6px;
+  }
+}
+
+/* Flashcard explain — delta symbol (matches inline-flashcards plugin colors) */
+
+.claude-agent-fc-delta {
+  font-weight: 700;
+  font-size: 1.1em;
+  line-height: 1;
+  color: #1e88e5;
+  flex-shrink: 0;
+}
+
+.theme-dark .claude-agent-fc-delta {
+  color: #42a5f5;
+}
+
 /* Tool blocks */
 
 .claude-agent-message.tool_block {

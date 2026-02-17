@@ -113,7 +113,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-left: 8px;
+  margin-left: 2px;
   font-size: 11px;
   color: var(--text-muted);
   opacity: 0.4;
@@ -133,16 +133,11 @@
 .claude-agent-include-notes-check {
   display: flex;
   align-items: center;
-  visibility: hidden;
 }
 
 .claude-agent-include-notes-check svg {
   width: 12px;
   height: 12px;
-}
-
-.claude-agent-include-notes-toggle.active .claude-agent-include-notes-check {
-  visibility: visible;
 }
 
 .claude-agent-model-icon {

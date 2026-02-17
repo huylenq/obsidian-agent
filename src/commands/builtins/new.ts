@@ -1,9 +1,9 @@
 import { SlashCommand } from "../types";
 
-export const clearCommand: SlashCommand = {
-  name: "clear",
-  aliases: ["new", "reset"],
-  description: "Start a new chat session (clears history and session)",
+export const newCommand: SlashCommand = {
+  name: "new",
+  aliases: ["clear", "reset"],
+  description: "Start a new chat session",
 
   async execute(context) {
     context.plugin.claudeClient?.clearSession();
