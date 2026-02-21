@@ -1,4 +1,4 @@
-import { Notice, Platform, Plugin } from "obsidian";
+import { Notice, Platform, Plugin, TFile } from "obsidian";
 import { ClaudeAgentSettings, DEFAULT_SETTINGS, DEFAULT_GRAPH_VIEW_SETTINGS } from "./types";
 import { ClaudeAgentSettingTab } from "./settings";
 import { ClaudeAgentChatView, CHAT_VIEW_TYPE } from "./ui/ChatView";
@@ -65,6 +65,8 @@ export default class ClaudeAgentPlugin extends Plugin {
   private serverProcess: import("child_process").ChildProcess | null = null;
   private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
   private isHandlingFlashcard = false;
+  /** Content-based dedup: tracks flashcard prompts already sent in this plugin lifecycle */
+  private sentFlashcardPrompts = new Set<string>();
 
   // Promise that resolves when initialization is complete
   initializationPromise: Promise<void> | null = null;
@@ -144,6 +146,7 @@ export default class ClaudeAgentPlugin extends Plugin {
         if (this.claudeClient) {
           this.claudeClient.clearSession();
         }
+        this.sentFlashcardPrompts.clear();
         new Notice("New chat started");
       },
     });
@@ -170,7 +173,10 @@ export default class ClaudeAgentPlugin extends Plugin {
 
     // Listen for flashcard explain requests from Inline Flashcards plugin
     const handleExplainFlashcard = (event: CustomEvent<{ question: string; answer: string; context: string; cardId?: string; sourceFile?: string }>) => {
-      const { question, answer, context, cardId, sourceFile } = event.detail;
+      const { question, answer, context } = event.detail;
+      // sourceFile from deeplink; fallback: extract file path from context ("path.md > heading > ...")
+      const sourceFile = event.detail.sourceFile
+        || (context ? context.split(" > ")[0].trim() : "");
 
       // Concurrency guard — prevent rapid-fire duplicate handling
       if (this.isHandlingFlashcard) {
@@ -182,6 +188,15 @@ export default class ClaudeAgentPlugin extends Plugin {
       this.activateChatView().then(async () => {
         try {
           const prompt = this.buildFlashcardExplainPrompt(question, answer, context);
+          console.log("[FC-dedup] prompt length:", prompt.length, "| sourceFile:", sourceFile, "| question preview:", question?.slice(0, 60));
+
+          // Extract card ID from vault file (source of truth — deeplink cardId is unreliable)
+          let cardId: string | null = null;
+          if (sourceFile && question) {
+            cardId = await this.extractCardIdFromVault(sourceFile, question);
+          }
+          console.log("[FC-dedup] vault-extracted cardId:", cardId);
+
           const epoch = new Date().toISOString().slice(0, 10);
 
           // Resolve or prepare daily flashcard session
@@ -191,36 +206,56 @@ export default class ClaudeAgentPlugin extends Plugin {
           }
 
           const currentSessionId = this.claudeClient?.getSessionId() ?? null;
-          console.log("[ClaudeAgent] Flashcard explain:", { cardId, targetSessionId, currentSessionId });
+          console.log("[FC-dedup] targetSession:", targetSessionId, "| currentSession:", currentSessionId);
 
-          // Dedup: if this card already has a thread in today's session, scroll to it
-          if (targetSessionId && cardId) {
-            const threads = await this.claudeClient!.fetchThreads(targetSessionId);
-            const existing = threads.find(t => t.flashcardId === cardId);
-            console.log("[ClaudeAgent] Dedup check:", { threadsCount: threads.length, existingMatch: !!existing });
-            if (existing) {
-              // Only switch if not already viewing the target session
-              if (currentSessionId !== targetSessionId) {
-                window.dispatchEvent(new CustomEvent('claude-agent:switch-session', {
-                  detail: { sessionId: targetSessionId },
-                }));
-                await new Promise(resolve => setTimeout(resolve, 300));
-              }
-              window.dispatchEvent(new CustomEvent('claude-agent:scroll-to-flashcard', {
-                detail: { flashcardId: cardId },
-              }));
-              return;
-            }
-          }
-
-          if (targetSessionId) {
-            // Only switch if not already viewing the target session
-            if (currentSessionId !== targetSessionId) {
+          // Helper: switch to target session if not already viewing it
+          const ensureTargetSession = async () => {
+            if (targetSessionId && currentSessionId !== targetSessionId) {
+              console.log("[FC-dedup] switching session:", currentSessionId, "→", targetSessionId);
               window.dispatchEvent(new CustomEvent('claude-agent:switch-session', {
                 detail: { sessionId: targetSessionId },
               }));
               await new Promise(resolve => setTimeout(resolve, 300));
             }
+          };
+
+          // Dedup layer 1: thread-based (works across plugin reloads)
+          if (targetSessionId && cardId) {
+            const threads = await this.claudeClient!.fetchThreads(targetSessionId);
+            const existing = threads.find(t => t.flashcardId === cardId);
+            console.log("[FC-dedup] thread check:", threads.length, "threads,", "match:", !!existing);
+            if (existing) {
+              console.log("[FC-dedup] ✓ DEDUP via threads — scrolling to existing");
+              await ensureTargetSession();
+              window.dispatchEvent(new CustomEvent('claude-agent:scroll-to-flashcard', {
+                detail: { flashcardId: cardId },
+              }));
+              return;
+            }
+          } else {
+            console.log("[FC-dedup] thread check skipped — targetSession:", !!targetSessionId, "cardId:", !!cardId);
+          }
+
+          // Dedup layer 2: content-based (catches duplicates during streaming)
+          const contentDedupHit = this.sentFlashcardPrompts.has(prompt);
+          console.log("[FC-dedup] content check: sentPrompts size:", this.sentFlashcardPrompts.size, "| hit:", contentDedupHit);
+          if (contentDedupHit) {
+            await ensureTargetSession();
+            if (cardId) {
+              console.log("[FC-dedup] ✓ DEDUP via content — scrolling to cardId:", cardId);
+              window.dispatchEvent(new CustomEvent('claude-agent:scroll-to-flashcard', {
+                detail: { flashcardId: cardId },
+              }));
+            } else {
+              console.log("[FC-dedup] ✓ DEDUP via content — but NO cardId, cannot scroll (vault extraction failed)");
+            }
+            return;
+          }
+
+          console.log("[FC-dedup] ✗ no dedup match — sending new explain");
+
+          if (targetSessionId) {
+            await ensureTargetSession();
           } else {
             // Clear session so SDK creates a new one
             if (this.claudeClient) {
@@ -232,10 +267,14 @@ export default class ClaudeAgentPlugin extends Plugin {
 
           const decodedQuestion = question ? decodeURIComponent(question.replace(/\+/g, ' ')) : '';
 
+          // Mark as sent BEFORE dispatching to prevent duplicates during streaming
+          this.sentFlashcardPrompts.add(prompt);
+          console.log("[FC-dedup] added to sentPrompts, new size:", this.sentFlashcardPrompts.size);
+
           window.dispatchEvent(new CustomEvent('claude-agent:send-message', {
             detail: {
               message: prompt,
-              flashcardMeta: cardId ? { cardId, sourceFile: sourceFile || '', question: decodedQuestion } : undefined,
+              flashcardMeta: sourceFile ? { cardId: cardId || '', sourceFile, question: decodedQuestion } : undefined,
               sessionMeta: { type: "flashcard_study" as const, epoch },
             },
           }));
@@ -269,6 +308,47 @@ export default class ClaudeAgentPlugin extends Plugin {
       prompt += `\n\n**Context:**\n${context}`;
     }
     return prompt;
+  }
+
+  /** ∆ question?:: answer */
+  private static FLASHCARD_LINE_RE = /^(\s*)(∆)(\s)(.+?)(\?::)(\s*)(.+)$/;
+
+  /**
+   * Extract the Anki card ID from the vault file's <!--ID: \d+--> comment.
+   * This is the source of truth — deeplink cardId is unreliable (especially mobile Anki).
+   */
+  private async extractCardIdFromVault(sourceFile: string, questionHtml: string): Promise<string | null> {
+    const file = this.app.vault.getAbstractFileByPath(
+      sourceFile.endsWith(".md") ? sourceFile : `${sourceFile}.md`
+    );
+    if (!(file instanceof TFile)) return null;
+
+    const content = await this.app.vault.cachedRead(file);
+    const lines = content.split("\n");
+
+    // Normalize the HTML question for matching (strip tags + non-alphanumeric)
+    const normalized = questionHtml
+      .replace(/<[^>]+>/g, "")
+      .replace(/[^\w\s]/g, "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+
+    for (let i = 0; i < lines.length; i++) {
+      const match = lines[i].match(ClaudeAgentPlugin.FLASHCARD_LINE_RE);
+      if (!match) continue;
+
+      const question = match[4].replace(/[^\w\s]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+      if (!(question.includes(normalized) || normalized.includes(question))) continue;
+
+      // Found the flashcard line — check next line for Anki ID
+      if (i + 1 < lines.length) {
+        const idMatch = lines[i + 1].match(/<!--ID:\s*(\d+)-->/);
+        if (idMatch) return idMatch[1];
+      }
+      return null; // flashcard found but no ID comment
+    }
+    return null;
   }
 
   async onunload(): Promise<void> {

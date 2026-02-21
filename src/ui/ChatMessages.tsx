@@ -81,53 +81,6 @@ function CompactBoundary({
   );
 }
 
-function ThreadBoundary({
-  boundary,
-}: {
-  boundary: ChatMessage;
-  isCollapsed: boolean;
-  onToggle: () => void;
-}) {
-  const meta = boundary.threadMetadata;
-  if (!meta) return null;
-
-  const truncatedQuestion = meta.question.length > 80
-    ? meta.question.slice(0, 77) + "..."
-    : meta.question;
-
-  const navigateToFlashcard = () => {
-    if (!meta.sourceFile || !meta.flashcardId) return;
-    window.dispatchEvent(new CustomEvent("flashcard:navigate", {
-      detail: { sourceFile: meta.sourceFile, flashcardId: meta.flashcardId },
-    }));
-  };
-
-  return (
-    <div className="claude-agent-thread-boundary" data-flashcard-id={meta.flashcardId}>
-      <div className="claude-agent-thread-boundary-line" />
-      <div className="claude-agent-thread-boundary-header">
-        <span
-          className="claude-agent-thread-label"
-          onClick={navigateToFlashcard}
-          title="Go to flashcard"
-        >
-          {truncatedQuestion || "Flashcard"}
-        </span>
-        {meta.sourceFile && (
-          <span
-            className="claude-agent-thread-source"
-            onClick={navigateToFlashcard}
-            title={meta.sourceFile}
-          >
-            {meta.sourceFile.split("/").pop()?.replace(/\.md$/, "") || meta.sourceFile}
-          </span>
-        )}
-      </div>
-      <div className="claude-agent-thread-boundary-line" />
-    </div>
-  );
-}
-
 const FLASHCARD_PREFIX = "Explain this flashcard.";
 const FLASHCARD_RE = /\*\*Question:\*\*\n([\s\S]*?)\n\n\*\*Answer:\*\*\n([\s\S]*?)(?:\n\n\*\*Context:\*\*\n([\s\S]*))?$/;
 
@@ -146,7 +99,7 @@ function parseFlashcardContent(content: string): { question: string; answer: str
   };
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({ message, threadMetadata }: { message: ChatMessage; threadMetadata?: { flashcardId?: string; sourceFile?: string; question?: string } }) {
   if (message.role === "tool_block" && message.toolBlocks) {
     return (
       <div className="claude-agent-message tool_block">
@@ -161,13 +114,34 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   if (message.role === "user") {
     const fc = parseFlashcardContent(message.content);
     if (fc) {
+      const canNavigate = !!threadMetadata?.sourceFile;
+      const navigateToFlashcard = () => {
+        if (!canNavigate) return;
+        window.dispatchEvent(new CustomEvent("flashcard:navigate", {
+          detail: {
+            sourceFile: threadMetadata!.sourceFile,
+            flashcardId: threadMetadata!.flashcardId,
+            question: threadMetadata!.question,
+          },
+        }));
+      };
+
       return (
-        <div style={{ display: "flex", alignItems: "center", gap: 0, alignSelf: "flex-end", marginLeft: "auto", maxWidth: "85%" }}>
-          <span className="claude-agent-fc-delta">{"\u0394"}</span>
-          <div className="claude-agent-message user" style={{ padding: 0, flex: 1, minWidth: 0, marginLeft: '1rem' }}>
+        <div
+          className="claude-agent-fc-row"
+          data-flashcard-id={threadMetadata?.flashcardId}
+        >
+          <span
+            className={`claude-agent-fc-delta ${canNavigate ? "clickable" : ""}`}
+            onClick={canNavigate ? navigateToFlashcard : undefined}
+            title={canNavigate ? "Go to flashcard" : undefined}
+          >
+            {"\u0394"}
+          </span>
+          <div className="claude-agent-fc-bubble">
             <div style={{ padding: "10px 14px 8px" }}
               dangerouslySetInnerHTML={{ __html: fc.question }} />
-            <div style={{ height: 1, margin: "0 14px", background: "currentColor", opacity: 0.15 }} />
+            <div className="claude-agent-fc-divider" />
             <div style={{ padding: "8px 14px 10px", opacity: 0.75, fontSize: "0.9em" }}
               dangerouslySetInnerHTML={{ __html: fc.answer }} />
           </div>
@@ -269,24 +243,25 @@ export function ChatMessages({ pendingScrollFlashcardId, onScrollComplete }: Cha
         const isCompact = hasBoundary && group.boundary!.role === "compact_boundary";
         const isCollapsed = isCompact && !expandedGroups.has(groupIndex);
 
+        // Thread boundaries are inserted BEFORE each thread's first user message,
+        // so the boundary in group N is the header for group N+1's messages.
+        // To get the metadata for THIS group's flashcard, look at the PREVIOUS group's boundary.
+        const prevBoundary = groupIndex > 0 ? groups[groupIndex - 1].boundary : undefined;
+        const threadMeta = prevBoundary?.role === "thread_boundary"
+          ? prevBoundary.threadMetadata
+          : undefined;
+
         return (
           <React.Fragment key={groupIndex}>
             {/* Messages in this group */}
             {!isCollapsed &&
               group.messages.map((message) => (
-                <MessageBubble key={message.id} message={message} />
+                <MessageBubble
+                  key={message.id}
+                  message={message}
+                  threadMetadata={threadMeta}
+                />
               ))}
-
-            {/* Thread boundary — rendered AFTER group messages because the
-                grouping assigns the boundary to the preceding messages.
-                Visually this places the marker between this group and the next. */}
-            {isThread && (
-              <ThreadBoundary
-                boundary={group.boundary!}
-                isCollapsed={false}
-                onToggle={() => toggleGroup(groupIndex)}
-              />
-            )}
 
             {/* Compact boundary divider */}
             {isCompact && (

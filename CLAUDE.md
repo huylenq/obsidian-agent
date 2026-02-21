@@ -262,8 +262,14 @@ Thread boundary clicks dispatch `flashcard:navigate` with `{ sourceFile, flashca
 | `server/threads.js` | `getThreadsPath()`, `loadThreads()`, `appendThread()` — threads sidecar CRUD |
 | `server/routes/chat.js` | Thread writing in finally block, uses `countUserOnlyMessages` for startMessageIndex |
 | `server/routes/history.js` | Thread boundary injection — maps startMessageIndex to user message positions |
-| `src/ui/ChatMessages.tsx` | `groupMessagesByBoundary()` — thread boundaries render AFTER group messages (boundary is grouped with preceding messages, rendered after them to appear between groups) |
+| `src/ui/ChatMessages.tsx` | `groupMessagesByBoundary()` — thread boundaries render AFTER group messages. `parseFlashcardContent()` — detects flashcard explain messages by content pattern and renders as Δ card |
 | `../plugins/inline-flashcards/main.ts` | `flashcard:navigate` listener, `navigateToFlashcardById()`, `flashLine()` |
+
+### Flashcard explain bubble
+
+The user message for flashcard explains renders as a styled card instead of the raw prompt text. Detection is **content-based** in the renderer — `parseFlashcardContent()` in `ChatMessages.tsx` matches messages starting with `"Explain this flashcard."` and regex-extracts question/answer/context. No flags or metadata plumbing needed; works identically for live streaming and history reload.
+
+Rendered as: blue Δ symbol (matching inline-flashcards synced color) outside the bubble on the left, user-colored card with question / divider / answer.
 
 ### Threads sidecar (`{sessionId}.threads.json`)
 
