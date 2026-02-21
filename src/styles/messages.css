@@ -193,6 +193,16 @@
   border-color: #42a5f5;
 }
 
+.claude-agent-fc-question {
+  padding: 10px 14px 8px;
+}
+
+.claude-agent-fc-answer {
+  padding: 8px 14px 10px;
+  opacity: 0.75;
+  font-size: 0.9em;
+}
+
 .claude-agent-fc-divider {
   height: 1px;
   margin: 0 14px;

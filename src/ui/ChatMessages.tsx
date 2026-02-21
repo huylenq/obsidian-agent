@@ -139,11 +139,9 @@ function MessageBubble({ message, threadMetadata }: { message: ChatMessage; thre
             {"\u0394"}
           </span>
           <div className="claude-agent-fc-bubble">
-            <div style={{ padding: "10px 14px 8px" }}
-              dangerouslySetInnerHTML={{ __html: fc.question }} />
+            <MarkdownContent content={fc.question} className="claude-agent-fc-question" />
             <div className="claude-agent-fc-divider" />
-            <div style={{ padding: "8px 14px 10px", opacity: 0.75, fontSize: "0.9em" }}
-              dangerouslySetInnerHTML={{ __html: fc.answer }} />
+            <MarkdownContent content={fc.answer} className="claude-agent-fc-answer" />
           </div>
         </div>
       );
