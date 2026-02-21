@@ -28,7 +28,7 @@
   width: 100%;
 }
 
-.claude-agent-input {
+textarea.claude-agent-input {
   flex: 1;
   padding: 10px 14px;
   border: 1px solid var(--background-modifier-border);
