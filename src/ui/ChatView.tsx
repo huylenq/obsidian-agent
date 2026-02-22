@@ -2,7 +2,7 @@ import React, { useCallback, useState, useEffect, useRef } from "react";
 import { useAtomValue } from "jotai";
 import { App, ItemView, WorkspaceLeaf, MarkdownView, setIcon } from "obsidian";
 import { createRoot, Root } from "react-dom/client";
-import { ActiveFileContext, ClaudeModel, SelectionContext, ThreadMetadata } from "@/types";
+import { ActiveFileContext, ClaudeModel, SelectionContext, MarkerMetadata } from "@/types";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatMessages } from "./ChatMessages";
 import { ActiveFileChip } from "./ActiveFileChip";
@@ -43,7 +43,7 @@ function mapHistoryMessages(raw: Array<Record<string, unknown>>): ChatMessage[] 
     timestamp: (msg.timestamp as number) || Date.now(),
     ...((msg.compactMetadata as CompactMetadata) && { compactMetadata: msg.compactMetadata as CompactMetadata }),
     ...((msg.toolBlocks as ToolBlock[]) && { toolBlocks: msg.toolBlocks as ToolBlock[] }),
-    ...((msg.threadMetadata as ThreadMetadata) && { threadMetadata: msg.threadMetadata as ThreadMetadata }),
+    ...((msg.markerMetadata as MarkerMetadata) && { markerMetadata: msg.markerMetadata as MarkerMetadata }),
   }));
 }
 
@@ -386,28 +386,20 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         setSessionType(sessionMeta.type);
       }
 
-      // Insert thread boundary before flashcard explain messages
-      if (flashcardMeta) {
-        addMessage({
-          id: generateMessageId(),
-          role: "thread_boundary",
-          content: "",
-          timestamp: Date.now(),
-          threadMetadata: {
-            threadId: crypto.randomUUID(),
-            flashcardId: flashcardMeta.cardId,
-            sourceFile: flashcardMeta.sourceFile,
-            question: flashcardMeta.question,
-          },
-        });
-      }
-
       if (!message.startsWith("/")) {
         addMessage({
           id: generateMessageId(),
           role: "user",
           content: message,
           timestamp: Date.now(),
+          ...(flashcardMeta && {
+            markerMetadata: {
+              markerId: crypto.randomUUID(),
+              flashcardId: flashcardMeta.cardId,
+              sourceFile: flashcardMeta.sourceFile,
+              question: flashcardMeta.question,
+            },
+          }),
         });
       }
 

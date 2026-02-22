@@ -129,11 +129,11 @@
 
 /* Flashcard explain — highlight on scroll-to-existing dedup */
 
-.claude-agent-thread-highlight {
-  animation: claude-agent-thread-glow 2s ease-out forwards;
+.claude-agent-marker-highlight {
+  animation: claude-agent-marker-glow 2s ease-out forwards;
 }
 
-@keyframes claude-agent-thread-glow {
+@keyframes claude-agent-marker-glow {
   0% {
     outline: 2px solid var(--interactive-accent);
     background: color-mix(in srgb, var(--interactive-accent) 15%, transparent);

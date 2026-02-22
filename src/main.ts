@@ -219,13 +219,13 @@ export default class ClaudeAgentPlugin extends Plugin {
             }
           };
 
-          // Dedup layer 1: thread-based (works across plugin reloads)
+          // Dedup layer 1: marker-based (works across plugin reloads)
           if (targetSessionId && cardId) {
-            const threads = await this.claudeClient!.fetchThreads(targetSessionId);
-            const existing = threads.find(t => t.flashcardId === cardId);
-            console.log("[FC-dedup] thread check:", threads.length, "threads,", "match:", !!existing);
+            const markers = await this.claudeClient!.fetchMarkers(targetSessionId);
+            const existing = markers.find(m => m.flashcardId === cardId);
+            console.log("[FC-dedup] marker check:", markers.length, "markers,", "match:", !!existing);
             if (existing) {
-              console.log("[FC-dedup] ✓ DEDUP via threads — scrolling to existing");
+              console.log("[FC-dedup] ✓ DEDUP via markers — scrolling to existing");
               await ensureTargetSession();
               window.dispatchEvent(new CustomEvent('claude-agent:scroll-to-flashcard', {
                 detail: { flashcardId: cardId },
@@ -233,7 +233,7 @@ export default class ClaudeAgentPlugin extends Plugin {
               return;
             }
           } else {
-            console.log("[FC-dedup] thread check skipped — targetSession:", !!targetSessionId, "cardId:", !!cardId);
+            console.log("[FC-dedup] marker check skipped — targetSession:", !!targetSessionId, "cardId:", !!cardId);
           }
 
           // Dedup layer 2: content-based (catches duplicates during streaming)

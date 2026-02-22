@@ -14,7 +14,7 @@ import {
   countTranscriptMessages,
   getTranscriptTimestamps,
 } from "../sessions.js";
-import { getThreadsPath, loadThreads } from "../threads.js";
+import { getMarkersPath, loadMarkers } from "../markers.js";
 
 const router = Router();
 
@@ -57,18 +57,18 @@ router.get("/sessions", (req, res) => {
 });
 
 /**
- * List threads for a session
+ * List markers for a session
  */
-router.get("/sessions/:sessionId/threads", (req, res) => {
+router.get("/sessions/:sessionId/markers", (req, res) => {
   const { sessionId } = req.params;
   const vaultPath = req.vaultPath;
 
   try {
-    const threadsPath = getThreadsPath(vaultPath, sessionId);
-    const threads = loadThreads(threadsPath);
-    res.json({ threads });
+    const markersPath = getMarkersPath(vaultPath, sessionId);
+    const markers = loadMarkers(markersPath);
+    res.json({ markers });
   } catch (error) {
-    logError("[Proxy] Error loading threads:", error);
+    logError("[Proxy] Error loading markers:", error);
     res.status(500).json({ error: error.message });
   }
 });

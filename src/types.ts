@@ -15,8 +15,8 @@ export interface ToolBlock {
   isRunning?: boolean;
 }
 
-export interface ThreadMetadata {
-  threadId: string;
+export interface MarkerMetadata {
+  markerId: string;
   flashcardId: string;    // cardId from deeplink
   sourceFile: string;     // vault-relative path
   question: string;       // card front (for display)
@@ -24,13 +24,13 @@ export interface ThreadMetadata {
 
 export interface ChatMessage {
   id: string;
-  role: "user" | "assistant" | "tool" | "tool_block" | "compact_boundary" | "thread_boundary";
+  role: "user" | "assistant" | "tool" | "tool_block" | "compact_boundary";
   content: string;
   timestamp: number;
   toolName?: string;
   toolBlocks?: ToolBlock[];
   compactMetadata?: CompactMetadata;
-  threadMetadata?: ThreadMetadata;
+  markerMetadata?: MarkerMetadata;
 }
 
 export interface ActiveFileContext {

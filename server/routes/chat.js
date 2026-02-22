@@ -5,7 +5,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { log, logError } from "../log.js";
 import { getTranscriptPath, getSummariesPath, readLatestSegmentMessages, generateCompactSummary, appendSummary } from "../transcript.js";
 import { updateSessionEntry, collectFilePaths, extractTitleFromTranscript, countTranscriptMessages, countUserOnlyMessages } from "../sessions.js";
-import { getThreadsPath, appendThread } from "../threads.js";
+import { getMarkersPath, appendMarker } from "../markers.js";
 import { computeToolDescription, formatToolInput, extractToolResultContent } from "../toolFormat.js";
 
 /**
@@ -303,16 +303,16 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
 
         updateSessionEntry(vaultPath, resolvedSessionId, registryUpdates);
 
-        // Write thread entry to sidecar if flashcard metadata provided
+        // Write marker entry to sidecar if flashcard metadata provided
         if (flashcardMeta) {
-          const threadsPath = getThreadsPath(vaultPath, resolvedSessionId);
+          const markersPath = getMarkersPath(vaultPath, resolvedSessionId);
           const userMsgCount = countUserOnlyMessages(transcriptPath);
-          appendThread(threadsPath, {
-            threadId: crypto.randomUUID(),
+          appendMarker(markersPath, {
+            markerId: crypto.randomUUID(),
             flashcardId: flashcardMeta.cardId,
             sourceFile: flashcardMeta.sourceFile,
             question: flashcardMeta.question,
-            startMessageIndex: userMsgCount > 0 ? userMsgCount - 1 : 0,
+            userMessageIndex: userMsgCount > 0 ? userMsgCount - 1 : 0,
             createdAt: Date.now(),
           });
         }

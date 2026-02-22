@@ -21,7 +21,7 @@ function groupMessagesByBoundary(messages: ChatMessage[]): MessageGroup[] {
   let current: ChatMessage[] = [];
 
   for (const msg of messages) {
-    if (msg.role === "compact_boundary" || msg.role === "thread_boundary") {
+    if (msg.role === "compact_boundary") {
       groups.push({ messages: current, boundary: msg });
       current = [];
     } else {
@@ -99,7 +99,7 @@ function parseFlashcardContent(content: string): { question: string; answer: str
   };
 }
 
-function MessageBubble({ message, threadMetadata }: { message: ChatMessage; threadMetadata?: { flashcardId?: string; sourceFile?: string; question?: string } }) {
+function MessageBubble({ message, markerMetadata }: { message: ChatMessage; markerMetadata?: { flashcardId?: string; sourceFile?: string; question?: string } }) {
   if (message.role === "tool_block" && message.toolBlocks) {
     return (
       <div className="claude-agent-message tool_block">
@@ -114,14 +114,14 @@ function MessageBubble({ message, threadMetadata }: { message: ChatMessage; thre
   if (message.role === "user") {
     const fc = parseFlashcardContent(message.content);
     if (fc) {
-      const canNavigate = !!threadMetadata?.sourceFile;
+      const canNavigate = !!markerMetadata?.sourceFile;
       const navigateToFlashcard = () => {
         if (!canNavigate) return;
         window.dispatchEvent(new CustomEvent("flashcard:navigate", {
           detail: {
-            sourceFile: threadMetadata!.sourceFile,
-            flashcardId: threadMetadata!.flashcardId,
-            question: threadMetadata!.question,
+            sourceFile: markerMetadata!.sourceFile,
+            flashcardId: markerMetadata!.flashcardId,
+            question: markerMetadata!.question,
           },
         }));
       };
@@ -129,7 +129,7 @@ function MessageBubble({ message, threadMetadata }: { message: ChatMessage; thre
       return (
         <div
           className="claude-agent-fc-row"
-          data-flashcard-id={threadMetadata?.flashcardId}
+          data-flashcard-id={markerMetadata?.flashcardId}
         >
           <span
             className={`claude-agent-fc-delta ${canNavigate ? "clickable" : ""}`}
@@ -199,7 +199,7 @@ export function ChatMessages({ pendingScrollFlashcardId, onScrollComplete }: Cha
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingMessage]);
 
-  // Scroll to existing flashcard thread (dedup)
+  // Scroll to existing flashcard marker (dedup)
   useEffect(() => {
     if (!pendingScrollFlashcardId) return;
 
@@ -210,9 +210,9 @@ export function ChatMessages({ pendingScrollFlashcardId, onScrollComplete }: Cha
 
     const target = elements[elements.length - 1];
     target.scrollIntoView({ behavior: "smooth", block: "center" });
-    target.classList.add("claude-agent-thread-highlight");
+    target.classList.add("claude-agent-marker-highlight");
     target.addEventListener("animationend", () => {
-      target.classList.remove("claude-agent-thread-highlight");
+      target.classList.remove("claude-agent-marker-highlight");
     }, { once: true });
     onScrollComplete?.();
   }, [messages, pendingScrollFlashcardId]);
@@ -236,32 +236,20 @@ export function ChatMessages({ pendingScrollFlashcardId, onScrollComplete }: Cha
   return (
     <div className="claude-agent-messages">
       {groups.map((group, groupIndex) => {
-        const hasBoundary = !!group.boundary;
-        const isThread = hasBoundary && group.boundary!.role === "thread_boundary";
-        const isCompact = hasBoundary && group.boundary!.role === "compact_boundary";
+        const isCompact = !!group.boundary;
         const isCollapsed = isCompact && !expandedGroups.has(groupIndex);
-
-        // Thread boundaries are inserted BEFORE each thread's first user message,
-        // so the boundary in group N is the header for group N+1's messages.
-        // To get the metadata for THIS group's flashcard, look at the PREVIOUS group's boundary.
-        const prevBoundary = groupIndex > 0 ? groups[groupIndex - 1].boundary : undefined;
-        const threadMeta = prevBoundary?.role === "thread_boundary"
-          ? prevBoundary.threadMetadata
-          : undefined;
 
         return (
           <React.Fragment key={groupIndex}>
-            {/* Messages in this group */}
             {!isCollapsed &&
               group.messages.map((message) => (
                 <MessageBubble
                   key={message.id}
                   message={message}
-                  threadMetadata={threadMeta}
+                  markerMetadata={message.markerMetadata}
                 />
               ))}
 
-            {/* Compact boundary divider */}
             {isCompact && (
               <CompactBoundary
                 boundary={group.boundary!}

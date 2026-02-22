@@ -263,7 +263,7 @@ Thread boundary clicks dispatch `flashcard:navigate` with `{ sourceFile, flashca
 | `server/routes/chat.js` | Thread writing in finally block, uses `countUserOnlyMessages` for startMessageIndex |
 | `server/routes/history.js` | Thread boundary injection — maps startMessageIndex to user message positions |
 | `src/ui/ChatMessages.tsx` | `groupMessagesByBoundary()` — thread boundaries render AFTER group messages. `parseFlashcardContent()` — detects flashcard explain messages by content pattern and renders as Δ card |
-| `../plugins/inline-flashcards/main.ts` | `flashcard:navigate` listener, `navigateToFlashcardById()`, `flashLine()` |
+| `../inline-flashcards/main.ts` | `flashcard:navigate` listener, `navigateToFlashcardById()`, `flashLine()` |
 
 ### Flashcard explain bubble
 

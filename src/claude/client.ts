@@ -357,18 +357,18 @@ export class ClaudeAgentClient {
   }
 
   /**
-   * Fetch threads for a session (for dedup checking)
+   * Fetch markers for a session (for dedup checking)
    */
-  async fetchThreads(sessionId: string): Promise<Array<{ threadId: string; flashcardId: string; sourceFile: string; question: string }>> {
+  async fetchMarkers(sessionId: string): Promise<Array<{ markerId: string; flashcardId: string; sourceFile: string; question: string }>> {
     try {
-      const response = await fetch(`${this.proxyUrl}/sessions/${sessionId}/threads`, {
+      const response = await fetch(`${this.proxyUrl}/sessions/${sessionId}/markers`, {
         headers: this.getHeaders(),
       });
       if (!response.ok) return [];
       const data = await response.json();
-      return data.threads || [];
+      return data.markers || [];
     } catch (error) {
-      console.warn("[ClaudeAgentClient] Error fetching threads:", error);
+      console.warn("[ClaudeAgentClient] Error fetching markers:", error);
       return [];
     }
   }
