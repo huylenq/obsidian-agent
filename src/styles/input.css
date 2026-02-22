@@ -9,8 +9,8 @@
   padding: 12px 16px;
 }
 
-/* Mobile: add bottom padding to clear Obsidian's navigation bar */
-.is-mobile .claude-agent-input-area {
+/* Mobile: add bottom padding to clear Obsidian's navigation bar (main leaf only, not sidebar) */
+.is-mobile .mod-root .claude-agent-input-area {
   padding-bottom: 48px;
 }
 
