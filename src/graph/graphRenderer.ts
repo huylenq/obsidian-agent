@@ -20,6 +20,7 @@ import type { GraphNode, GraphEdge, GraphData, GraphViewSettings } from "@/types
 const CENTER_RADIUS = 12;
 const NODE_RADIUS = 7;      // uniform size for all non-center nodes
 const FONT_SIZE = 12;
+const LABEL_FONT = `${FONT_SIZE}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
 
 interface ThemeColors {
   nodeFocused: string;  // center/active node (warm accent)
@@ -70,6 +71,69 @@ interface ColorState {
   target: { r: number; g: number; b: number };
 }
 
+/**
+ * Custom d3 force that pushes nodes apart when their labels overlap horizontally.
+ * Directly modifies x positions (like forceCollide) for immediate effect.
+ * Only applies X-axis displacement — never touches y.
+ */
+function forceLabelRepel(
+  labelWidths: Map<ForceNode, number>,
+  getNodeRadius: (n: ForceNode) => number,
+) {
+  let nodes: ForceNode[] = [];
+  const labelGap = 6; // px padding between labels
+
+  function force(alpha: number) {
+    const strength = alpha * 0.8; // strong during layout, fades at equilibrium
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i];
+      if (a.x == null || a.y == null) continue;
+      const wa = labelWidths.get(a);
+      if (wa == null) continue;
+      const labelYA = a.y! + getNodeRadius(a) + 4 + FONT_SIZE / 2;
+
+      for (let j = i + 1; j < nodes.length; j++) {
+        const b = nodes[j];
+        if (b.x == null || b.y == null) continue;
+        const wb = labelWidths.get(b);
+        if (wb == null) continue;
+        const labelYB = b.y! + getNodeRadius(b) + 4 + FONT_SIZE / 2;
+
+        // Skip if labels don't overlap vertically
+        if (Math.abs(labelYA - labelYB) > FONT_SIZE + 4) continue;
+
+        // Check horizontal overlap (labels are center-aligned)
+        const dx = b.x! - a.x!;
+        const minDist = (wa + wb) / 2 + labelGap;
+        const overlap = minDist - Math.abs(dx);
+        if (overlap <= 0) continue;
+
+        // Push apart — directly modify positions (same pattern as forceCollide)
+        const sign = dx >= 0 ? 1 : -1;
+        // If nodes are exactly coincident, pick arbitrary direction
+        const push = (dx === 0 ? 0.5 : overlap * 0.5) * strength;
+
+        // Pinned nodes (fx set) can't be moved — push the other node double
+        const aFixed = a.fx != null;
+        const bFixed = b.fx != null;
+        if (aFixed && bFixed) continue;
+        if (aFixed) {
+          b.x! += sign * push * 2;
+        } else if (bFixed) {
+          a.x! -= sign * push * 2;
+        } else {
+          a.x! -= sign * push;
+          b.x! += sign * push;
+        }
+      }
+    }
+  }
+
+  force.initialize = (n: ForceNode[]) => { nodes = n; };
+
+  return force;
+}
+
 export class GraphRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -114,6 +178,9 @@ export class GraphRenderer {
 
   // Merged edges: similarity edges that also have a link edge (rendered solid, not dashed)
   private mergedEdges = new Set<ForceLink>();
+
+  // Cached base-font label widths for label-repel force
+  private labelWidths = new Map<ForceNode, number>();
 
   constructor(options: GraphRendererOptions) {
     this.canvas = options.canvas;
@@ -325,6 +392,9 @@ export class GraphRenderer {
     this.labelYOffsets.clear();
     this.hoveredNode = null;
     this.hoveredNeighbors.clear();
+
+    // Pre-compute label widths for label-repel force (before simulation starts)
+    this.computeLabelWidths();
 
     // Initialize animation state with default values
     this.updateAnimationTargets();
@@ -640,6 +710,19 @@ export class GraphRenderer {
     }, 300);
   }
 
+  /**
+   * Measure label widths at base font for the label-repel force.
+   * Called before initSimulation so the force has width data.
+   */
+  private computeLabelWidths(): void {
+    this.labelWidths.clear();
+    this.ctx.font = LABEL_FONT;
+
+    for (const node of this.nodes) {
+      this.labelWidths.set(node, this.ctx.measureText(node.title).width);
+    }
+  }
+
   private initSimulation(seededCount = 0): void {
     if (this.simulation) this.simulation.stop();
     const s = this.settings!;
@@ -655,6 +738,7 @@ export class GraphRenderer {
       .force("charge", forceManyBody().strength(-s.repelForce).distanceMax(600))
       .force("center", forceCenter(0, 0).strength(s.centerForce))
       .force("collide", forceCollide<ForceNode>().radius((d) => (d.isCenter ? CENTER_RADIUS : NODE_RADIUS) + 4))
+      .force("labelRepel", forceLabelRepel(this.labelWidths, (n) => n.isCenter ? CENTER_RADIUS : NODE_RADIUS))
       .alphaDecay(0.05)
       .velocityDecay(0.6)
       .on("tick", () => this.draw());

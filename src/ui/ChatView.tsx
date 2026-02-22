@@ -2,7 +2,7 @@ import React, { useCallback, useState, useEffect, useRef } from "react";
 import { useAtomValue } from "jotai";
 import { App, ItemView, WorkspaceLeaf, MarkdownView, setIcon } from "obsidian";
 import { createRoot, Root } from "react-dom/client";
-import { ActiveFileContext, ClaudeModel, SelectionContext, MarkerMetadata } from "@/types";
+import { ActiveFileContext, ChatViewLocation, ClaudeModel, SelectionContext, MarkerMetadata } from "@/types";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatMessages } from "./ChatMessages";
 import { ActiveFileChip } from "./ActiveFileChip";
@@ -130,6 +130,10 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   const [dropdownIndex, setDropdownIndex] = useState(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const dropdownInputRef = useRef<HTMLInputElement>(null);
+  const viewLocationIconRef = useRef<HTMLSpanElement>(null);
+  const [viewLocation, setViewLocation] = useState<ChatViewLocation>(
+    plugin.settings.chatViewLocation
+  );
 
   // Listen for command to open model selector
   useEffect(() => {
@@ -149,7 +153,11 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     if (checkIconRef.current) {
       setIcon(checkIconRef.current, includeRelevantNotes ? "circle-plus" : "circle");
     }
-  }, [includeRelevantNotes]);
+    if (viewLocationIconRef.current) {
+      // sidebar = panel-right-open, tab = panel-right-close (toggles to opposite)
+      setIcon(viewLocationIconRef.current, viewLocation === "sidebar" ? "panel-right-open" : "panel-right-close");
+    }
+  }, [includeRelevantNotes, viewLocation]);
 
   // Sync model atom with plugin settings on mount
   useEffect(() => {
@@ -606,6 +614,17 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     plugin.saveSettings();
   }, [plugin]);
 
+  const handleViewLocationToggle = useCallback(() => {
+    const newLocation: ChatViewLocation = viewLocation === "sidebar" ? "tab" : "sidebar";
+    setViewLocation(newLocation);
+    plugin.settings.chatViewLocation = newLocation;
+    plugin.saveSettings();
+    // Dispatch event to relocate the view
+    window.dispatchEvent(new CustomEvent("claude-agent:relocate-view", {
+      detail: { location: newLocation },
+    }));
+  }, [plugin, viewLocation]);
+
   // Session dropdown: fetch active sessions, prioritize file-relevant
   const handleSessionDropdownToggle = useCallback(async () => {
     if (sessionDropdown) {
@@ -701,6 +720,13 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           disabled={isLoading}
           title="New chat"
         >+</button>
+        <span
+          className="claude-agent-view-location-toggle"
+          onClick={handleViewLocationToggle}
+          title={viewLocation === "sidebar" ? "Move to center tab" : "Move to sidebar"}
+        >
+          <span ref={viewLocationIconRef} className="claude-agent-view-location-icon" />
+        </span>
         {sessionDropdown && (
           <div className="claude-agent-session-dropdown">
             <input

@@ -20,9 +20,13 @@
   align-self: flex-start;
 }
 
-/* Mobile: remove padding to save screen estate */
+/* Mobile: widen bubbles for tab view */
 .is-mobile .claude-agent-message.assistant {
-  padding: 0;
+  max-width: 100%;
+}
+
+.is-mobile .claude-agent-message.user {
+  max-width: 92%;
 }
 
 .claude-agent-message.error {

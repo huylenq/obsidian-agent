@@ -49,6 +49,8 @@ export interface SelectionContext {
 
 export type ClaudeModel = "haiku" | "sonnet" | "opus";
 
+export type ChatViewLocation = "sidebar" | "tab";
+
 export type ConnectionMode = "local" | "remote";
 export type ConnectionStatus = "connected" | "disconnected" | "connecting" | "error";
 
@@ -91,6 +93,7 @@ export interface ClaudeAgentSettings {
   connectionMode: ConnectionMode;
   remoteServerUrl: string;
   remoteAuthToken: string;
+  chatViewLocation: ChatViewLocation;
 }
 
 export const DEFAULT_SETTINGS: ClaudeAgentSettings = {
@@ -105,6 +108,7 @@ Be concise and accurate.`,
   connectionMode: "local",
   remoteServerUrl: "",
   remoteAuthToken: "",
+  chatViewLocation: "sidebar",
 };
 
 // ============================================================================

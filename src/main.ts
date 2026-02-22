@@ -1,4 +1,4 @@
-import { Notice, Platform, Plugin, TFile } from "obsidian";
+import { Notice, Platform, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import { ClaudeAgentSettings, DEFAULT_SETTINGS, DEFAULT_GRAPH_VIEW_SETTINGS } from "./types";
 import { ClaudeAgentSettingTab } from "./settings";
 import { ClaudeAgentChatView, CHAT_VIEW_TYPE } from "./ui/ChatView";
@@ -160,6 +160,15 @@ export default class ClaudeAgentPlugin extends Plugin {
       },
     });
 
+    // Add command to show plugin version
+    this.addCommand({
+      id: "show-version",
+      name: "Show Version",
+      callback: () => {
+        new Notice(`Claude Agent v${this.manifest.version}`);
+      },
+    });
+
     // Add command to open session switcher dropdown
     this.addCommand({
       id: "open-session-switcher",
@@ -285,6 +294,13 @@ export default class ClaudeAgentPlugin extends Plugin {
     };
     window.addEventListener('claude-agent:explain-flashcard', handleExplainFlashcard as EventListener);
     this.register(() => window.removeEventListener('claude-agent:explain-flashcard', handleExplainFlashcard as EventListener));
+
+    // Listen for view relocation requests (from toggle button in ChatView)
+    const handleRelocateView = (event: CustomEvent<{ location: "sidebar" | "tab" }>) => {
+      this.relocateChatView(event.detail.location);
+    };
+    window.addEventListener('claude-agent:relocate-view', handleRelocateView as EventListener);
+    this.register(() => window.removeEventListener('claude-agent:relocate-view', handleRelocateView as EventListener));
 
     // Add settings tab
     this.addSettingTab(new ClaudeAgentSettingTab(this.app, this));
@@ -690,20 +706,56 @@ export default class ClaudeAgentPlugin extends Plugin {
     let leaf = workspace.getLeavesOfType(CHAT_VIEW_TYPE)[0];
 
     if (!leaf) {
-      // Create a new leaf in the right sidebar
-      const rightLeaf = workspace.getRightLeaf(false);
-      if (rightLeaf) {
-        await rightLeaf.setViewState({
+      // Create leaf based on saved preference
+      if (this.settings.chatViewLocation === "tab") {
+        leaf = workspace.getLeaf("tab");
+      } else {
+        const rightLeaf = workspace.getRightLeaf(false);
+        if (rightLeaf) {
+          leaf = rightLeaf;
+        }
+      }
+      if (leaf) {
+        await leaf.setViewState({
           type: CHAT_VIEW_TYPE,
           active: true,
         });
-        leaf = rightLeaf;
       }
     }
 
     if (leaf) {
       workspace.revealLeaf(leaf);
       // Focus the chat input after revealing (uses existing event listener in ChatInput)
+      window.dispatchEvent(new CustomEvent("claude-agent:focus-input"));
+    }
+  }
+
+  /**
+   * Relocate the chat view between sidebar and center tab
+   */
+  async relocateChatView(location: "sidebar" | "tab"): Promise<void> {
+    const { workspace } = this.app;
+
+    // Close existing chat view
+    const existingLeaves = workspace.getLeavesOfType(CHAT_VIEW_TYPE);
+    for (const leaf of existingLeaves) {
+      leaf.detach();
+    }
+
+    // Create new leaf in the target location
+    let newLeaf: WorkspaceLeaf | null = null;
+    if (location === "tab") {
+      newLeaf = workspace.getLeaf("tab");
+    } else {
+      newLeaf = workspace.getRightLeaf(false);
+    }
+
+    if (newLeaf) {
+      await newLeaf.setViewState({
+        type: CHAT_VIEW_TYPE,
+        active: true,
+      });
+      workspace.revealLeaf(newLeaf);
       window.dispatchEvent(new CustomEvent("claude-agent:focus-input"));
     }
   }

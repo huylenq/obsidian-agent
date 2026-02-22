@@ -1,7 +1,7 @@
 {
   "id": "claude-agent",
   "name": "Claude Agent",
-  "version": "0.1.0",
+  "version": "2025-02-22-1",
   "minAppVersion": "1.0.0",
   "description": "Chat with your Obsidian vault using Claude Agent SDK and RAG-powered semantic search",
   "author": "Huy",
