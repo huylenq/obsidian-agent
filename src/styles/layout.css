@@ -146,6 +146,27 @@
   color: var(--text-normal);
 }
 
+.claude-agent-session-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60px;
+  font-size: 0.75em;
+  font-family: var(--font-monospace);
+  color: var(--text-faint);
+  cursor: pointer;
+  pointer-events: auto;
+  flex-shrink: 0;
+}
+
+.claude-agent-session-id:hover {
+  color: var(--text-muted);
+}
+
+.claude-agent-session-id.copied {
+  color: var(--color-green);
+}
+
 .claude-agent-session-header .claude-agent-done-button {
   margin-left: auto;
   pointer-events: auto;

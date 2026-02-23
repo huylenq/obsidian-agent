@@ -2,7 +2,23 @@ import React, { useCallback, useState, useEffect, useRef } from "react";
 import { useAtomValue } from "jotai";
 import { App, ItemView, WorkspaceLeaf, MarkdownView, setIcon } from "obsidian";
 import { createRoot, Root } from "react-dom/client";
-import { ActiveFileContext, ChatViewLocation, ClaudeModel, SelectionContext, MarkerMetadata } from "@/types";
+import { ActiveFileContext, ChatViewLocation, ClaudeModel, SelectionContext, MarkerMetadata, RankedNote } from "@/types";
+
+/** Build the transcript file path for a session and open it with the OS default app. */
+function openTranscriptFile(vaultPath: string, sessionId: string): void {
+  try {
+    const home = require("os").homedir();
+    const { join } = require("path");
+    const encoded = vaultPath.replace(/[\/\s~]/g, "-");
+    const filePath = join(home, ".claude", "projects", encoded, `${sessionId}.jsonl`);
+    // Electron's shell module is available in renderer process
+    const { shell } = require("electron");
+    shell.openPath(filePath);
+  } catch {
+    // Fallback: copy session ID to clipboard
+    navigator.clipboard.writeText(sessionId);
+  }
+}
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatMessages } from "./ChatMessages";
 import { ActiveFileChip } from "./ActiveFileChip";
@@ -125,6 +141,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   const [sessionType, setSessionType] = useState<string | null>(null);
   const [sessionEpoch, setSessionEpoch] = useState<string | null>(null);
   const [pendingScrollFlashcardId, setPendingScrollFlashcardId] = useState<string | null>(null);
+  const [copiedSessionId, setCopiedSessionId] = useState(false);
   const [sessionDropdown, setSessionDropdown] = useState<SessionEntry[] | null>(null);
   const [dropdownQuery, setDropdownQuery] = useState("");
   const [dropdownIndex, setDropdownIndex] = useState(-1);
@@ -385,8 +402,12 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       mentionedFiles: FileSearchResult[],
       flashcardMeta?: { cardId: string; sourceFile: string; question: string },
       sessionMeta?: { type: SessionType; epoch: string },
+      overrideRelevantNotes?: RankedNote[],
     ) => {
-      const fileContext = isContextCleared ? undefined : activeFile;
+      // Flashcard explains use the deeplink's sourceFile, not whatever Obsidian has focused
+      const fileContext = flashcardMeta
+        ? { path: flashcardMeta.sourceFile, name: flashcardMeta.sourceFile.split("/").pop() || "", extension: "md" }
+        : isContextCleared ? undefined : activeFile;
       const selectionContext = selection;
 
       // Set session type eagerly for immediate header display
@@ -429,9 +450,11 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           );
         }
 
-        const highMatchNotes = includeRelevantNotes
-          ? relevantNotes.filter(note => note.category === "high" || note.finalScore > 0.7)
-          : undefined;
+        const highMatchNotes = overrideRelevantNotes
+          ? overrideRelevantNotes
+          : includeRelevantNotes
+            ? relevantNotes.filter(note => note.category === "high" || note.finalScore > 0.7)
+            : undefined;
 
         let fullResponse = "";
 
@@ -591,10 +614,11 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       message: string;
       flashcardMeta?: { cardId: string; sourceFile: string; question: string };
       sessionMeta?: { type: "flashcard_study"; epoch: string };
+      relevantNotes?: RankedNote[];
     }>) => {
-      const { message, flashcardMeta, sessionMeta } = event.detail;
+      const { message, flashcardMeta, sessionMeta, relevantNotes: eventNotes } = event.detail;
       if (message) {
-        handleSend(message, [], flashcardMeta, sessionMeta);
+        handleSend(message, [], flashcardMeta, sessionMeta, eventNotes);
       }
     };
     window.addEventListener("claude-agent:send-message", handleSendMessage as EventListener);
@@ -704,6 +728,24 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         ) : (
           <span className="claude-agent-session-header-title" onClick={handleSessionDropdownToggle}>
             {sessionTitle || "New Chat"}
+          </span>
+        )}
+        {sessionId && (
+          <span
+            className={`claude-agent-session-id ${copiedSessionId ? "copied" : ""}`}
+            onClick={(e) => {
+              if (e.metaKey) {
+                const vaultPath = (app.vault.adapter as any).basePath;
+                if (vaultPath) openTranscriptFile(vaultPath, sessionId);
+              } else {
+                navigator.clipboard.writeText(sessionId);
+                setCopiedSessionId(true);
+                setTimeout(() => setCopiedSessionId(false), 1500);
+              }
+            }}
+            title="Click to copy · ⌘+click to open transcript"
+          >
+            {copiedSessionId ? "copied!" : sessionId.slice(0, 8)}
           </span>
         )}
         {sessionId && (

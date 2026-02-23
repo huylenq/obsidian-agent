@@ -99,6 +99,49 @@ function parseFlashcardContent(content: string): { question: string; answer: str
   };
 }
 
+function FlashcardBubble({ fc, rawContent, flashcardId, canNavigate, onNavigate }: {
+  fc: { question: string; answer: string; context?: string };
+  rawContent: string;
+  flashcardId?: string;
+  canNavigate: boolean;
+  onNavigate: () => void;
+}) {
+  const [showPrompt, setShowPrompt] = useState(false);
+
+  return (
+    <div
+      className="claude-agent-fc-row"
+      data-flashcard-id={flashcardId}
+    >
+      <div className="claude-agent-fc-card-row">
+        <span
+          className={`claude-agent-fc-delta ${canNavigate ? "clickable" : ""}`}
+          onClick={canNavigate ? onNavigate : undefined}
+          title={canNavigate ? "Go to flashcard" : undefined}
+        >
+          {"\u0394"}
+        </span>
+        <div className="claude-agent-fc-bubble-wrap">
+          <div
+            className="claude-agent-fc-bubble"
+            onClick={() => setShowPrompt(p => !p)}
+            title="Click to reveal prompt"
+          >
+            <MarkdownContent content={fc.question} className="claude-agent-fc-question" />
+            <div className="claude-agent-fc-divider" />
+            <MarkdownContent content={fc.answer} className="claude-agent-fc-answer" />
+          </div>
+        </div>
+      </div>
+      {showPrompt && (
+        <div className="claude-agent-fc-raw-prompt">
+          <MarkdownContent content={rawContent} className="claude-agent-message-content" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MessageBubble({ message, markerMetadata }: { message: ChatMessage; markerMetadata?: { flashcardId?: string; sourceFile?: string; question?: string } }) {
   if (message.role === "tool_block" && message.toolBlocks) {
     return (
@@ -127,23 +170,13 @@ function MessageBubble({ message, markerMetadata }: { message: ChatMessage; mark
       };
 
       return (
-        <div
-          className="claude-agent-fc-row"
-          data-flashcard-id={markerMetadata?.flashcardId}
-        >
-          <span
-            className={`claude-agent-fc-delta ${canNavigate ? "clickable" : ""}`}
-            onClick={canNavigate ? navigateToFlashcard : undefined}
-            title={canNavigate ? "Go to flashcard" : undefined}
-          >
-            {"\u0394"}
-          </span>
-          <div className="claude-agent-fc-bubble">
-            <MarkdownContent content={fc.question} className="claude-agent-fc-question" />
-            <div className="claude-agent-fc-divider" />
-            <MarkdownContent content={fc.answer} className="claude-agent-fc-answer" />
-          </div>
-        </div>
+        <FlashcardBubble
+          fc={fc}
+          rawContent={message.content}
+          flashcardId={markerMetadata?.flashcardId}
+          canNavigate={canNavigate}
+          onNavigate={navigateToFlashcard}
+        />
       );
     }
   }

@@ -6,6 +6,8 @@ import { RelevantNotesView, RELEVANT_NOTES_VIEW_TYPE } from "./ui/RelevantNotesV
 import { SessionsView, SESSIONS_VIEW_TYPE } from "./ui/SessionsView";
 import { GraphView, GRAPH_VIEW_TYPE } from "./ui/GraphView";
 import { ClaudeAgentClient } from "./claude/client";
+import { CopilotIndexReader, rankNotes } from "./embeddings";
+import type { RankedNote } from "./types";
 import { setConnectionStatus, setConnectionError } from "./state/connectionState";
 
 // Node.js imports - only available on desktop.
@@ -60,6 +62,7 @@ function getConnectionConfig(settings: ClaudeAgentSettings, isMobile: boolean): 
 export default class ClaudeAgentPlugin extends Plugin {
   settings: ClaudeAgentSettings = DEFAULT_SETTINGS;
   claudeClient: ClaudeAgentClient | null = null;
+  vectorStore: CopilotIndexReader | null = null;
   /** The resolved connection URL (may come from auto-discovery or settings) */
   activeConnectionUrl: string | null = null;
   private serverProcess: import("child_process").ChildProcess | null = null;
@@ -81,6 +84,9 @@ export default class ClaudeAgentPlugin extends Plugin {
     // This prevents a race condition where Obsidian restores a view before
     // initializationPromise is assigned, causing "client not initialized" errors.
     this.initializationPromise = this.initializeClient();
+
+    // Fire-and-forget vector store init for flashcard enrichment
+    this.initVectorStore();
 
     // Register the chat view
     this.registerView(CHAT_VIEW_TYPE, (leaf) => new ClaudeAgentChatView(leaf, this));
@@ -196,13 +202,17 @@ export default class ClaudeAgentPlugin extends Plugin {
 
       this.activateChatView().then(async () => {
         try {
-          const prompt = this.buildFlashcardExplainPrompt(question, answer, context);
-          console.log("[FC-dedup] prompt length:", prompt.length, "| sourceFile:", sourceFile, "| question preview:", question?.slice(0, 60));
+          // Content-based dedup key (stable — doesn't include enrichment that varies per call)
+          const dedupKey = `${question}\n${answer}\n${context}`;
+          console.log("[FC-dedup] dedupKey length:", dedupKey.length, "| sourceFile:", sourceFile, "| question preview:", question?.slice(0, 60));
 
-          // Extract card ID from vault file (source of truth — deeplink cardId is unreliable)
+          // Extract card ID + file content from vault (source of truth — deeplink cardId is unreliable)
           let cardId: string | null = null;
+          let fileContent = "";
           if (sourceFile && question) {
-            cardId = await this.extractCardIdFromVault(sourceFile, question);
+            const extracted = await this.extractCardIdFromVault(sourceFile, question);
+            cardId = extracted.cardId;
+            fileContent = extracted.fileContent;
           }
           console.log("[FC-dedup] vault-extracted cardId:", cardId);
 
@@ -246,7 +256,7 @@ export default class ClaudeAgentPlugin extends Plugin {
           }
 
           // Dedup layer 2: content-based (catches duplicates during streaming)
-          const contentDedupHit = this.sentFlashcardPrompts.has(prompt);
+          const contentDedupHit = this.sentFlashcardPrompts.has(dedupKey);
           console.log("[FC-dedup] content check: sentPrompts size:", this.sentFlashcardPrompts.size, "| hit:", contentDedupHit);
           if (contentDedupHit) {
             await ensureTargetSession();
@@ -274,10 +284,19 @@ export default class ClaudeAgentPlugin extends Plugin {
             }
           }
 
+          // Gather vault context (vector-similar notes + sibling cards)
+          const { relevantNotes: fcRelevantNotes, siblingCards } = await this.gatherFlashcardContext(
+            sourceFile, context, fileContent, question
+          );
+
+          const prompt = this.buildFlashcardExplainPrompt(question, answer, context, siblingCards);
+
+          console.log("[FC] prompt:", prompt);
+
           const decodedQuestion = question ? decodeURIComponent(question.replace(/\+/g, ' ')) : '';
 
           // Mark as sent BEFORE dispatching to prevent duplicates during streaming
-          this.sentFlashcardPrompts.add(prompt);
+          this.sentFlashcardPrompts.add(dedupKey);
           console.log("[FC-dedup] added to sentPrompts, new size:", this.sentFlashcardPrompts.size);
 
           window.dispatchEvent(new CustomEvent('claude-agent:send-message', {
@@ -285,6 +304,7 @@ export default class ClaudeAgentPlugin extends Plugin {
               message: prompt,
               flashcardMeta: sourceFile ? { cardId: cardId || '', sourceFile, question: decodedQuestion } : undefined,
               sessionMeta: { type: "flashcard_study" as const, epoch },
+              relevantNotes: fcRelevantNotes.length > 0 ? fcRelevantNotes : undefined,
             },
           }));
         } finally {
@@ -308,6 +328,72 @@ export default class ClaudeAgentPlugin extends Plugin {
     console.log("Claude Agent plugin loaded");
   }
 
+  private async initVectorStore(): Promise<void> {
+    const reader = new CopilotIndexReader(this.app);
+    if (await reader.initialize()) {
+      this.vectorStore = reader;
+      console.log("[ClaudeAgent] Vector store initialized for flashcard enrichment");
+    }
+  }
+
+  /**
+   * Gather vault context for a flashcard: vector-similar notes + sibling cards under same heading.
+   */
+  private async gatherFlashcardContext(
+    sourceFile: string, context: string, fileContent: string, question: string
+  ): Promise<{ relevantNotes: RankedNote[]; siblingCards: string[] }> {
+    // Vector search + link-graph ranking
+    let fcRelevantNotes: RankedNote[] = [];
+    if (this.vectorStore) {
+      const raw = await this.vectorStore.searchSimilarToPath(sourceFile, { limit: 5, minSimilarity: 0.45 });
+      fcRelevantNotes = rankNotes(raw, sourceFile, this.app);
+    }
+
+    // Sibling flashcard extraction from the same heading section
+    const siblingCards: string[] = [];
+    if (fileContent && context) {
+      const headingPath = context.split(" > ").slice(1); // drop file name
+      const anchor = headingPath.length > 0 ? headingPath[headingPath.length - 1].trim() : null;
+
+      if (anchor) {
+        const lines = fileContent.split("\n");
+        let inSection = false;
+        let anchorLevel = 0;
+
+        for (const line of lines) {
+          const headingMatch = line.match(/^(#{1,6})\s+(.+)/);
+          if (headingMatch) {
+            const level = headingMatch[1].length;
+            const title = headingMatch[2].trim();
+            if (!inSection && title === anchor) {
+              inSection = true;
+              anchorLevel = level;
+              continue;
+            }
+            if (inSection && level <= anchorLevel) {
+              break; // left the section
+            }
+          }
+          if (inSection) {
+            const fcMatch = line.match(ClaudeAgentPlugin.FLASHCARD_LINE_RE);
+            if (fcMatch) {
+              const q = fcMatch[4].trim();
+              const a = fcMatch[7].trim();
+              // Skip the card being explained (fuzzy match on question)
+              const qNorm = q.replace(/[^\w\s]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+              const questionNorm = question.replace(/<[^>]+>/g, "").replace(/[^\w\s]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+              if (qNorm.includes(questionNorm) || questionNorm.includes(qNorm)) continue;
+              siblingCards.push(`${q}:: ${a}`);
+            }
+          }
+        }
+      }
+    }
+
+    console.log("[ClaudeAgent] Flashcard context:", fcRelevantNotes.length, "relevant notes,", siblingCards.length, "sibling cards");
+    return { relevantNotes: fcRelevantNotes, siblingCards };
+  }
+
   /**
    * Find an existing in_progress flashcard_study session for the given epoch (today).
    * Returns the session ID if found, null otherwise.
@@ -318,8 +404,17 @@ export default class ClaudeAgentPlugin extends Plugin {
     return sessions.length > 0 ? sessions[0].id : null;
   }
 
-  private buildFlashcardExplainPrompt(question: string, answer: string, context: string): string {
-    let prompt = `Explain this flashcard. The question gives context, elaborate on the answer to help understand the fact intuitively. Focus on the terminologies in the answer.\n\n**Question:**\n${question}\n\n**Answer:**\n${answer}`;
+  private buildFlashcardExplainPrompt(question: string, answer: string, context: string, siblingCards: string[]): string {
+    // Preamble sections go BEFORE **Question:** so parseFlashcardContent regex ignores them
+    let preamble = "Explain this flashcard. Giving the relevant connections from this Obsidian vault.\nThe question gives context, elaborate on the answer to help understand the fact intuitively. Focus on the terminologies in the answer.";
+
+    if (siblingCards.length > 0) {
+      preamble += `\n\nOther flashcards under the same heading (for context, don't explain these):\n${siblingCards.map(c => `- ${c}`).join("\n")}`;
+    }
+
+    preamble += "\n\nYou have MCP tools available (Readwise highlights, Orama vault search, Karakeep bookmarks). Use them if the answer references concepts worth cross-referencing.";
+
+    let prompt = `${preamble}\n\n**Question:**\n${question}\n\n**Answer:**\n${answer}`;
     if (context) {
       prompt += `\n\n**Context:**\n${context}`;
     }
@@ -333,11 +428,11 @@ export default class ClaudeAgentPlugin extends Plugin {
    * Extract the Anki card ID from the vault file's <!--ID: \d+--> comment.
    * This is the source of truth — deeplink cardId is unreliable (especially mobile Anki).
    */
-  private async extractCardIdFromVault(sourceFile: string, questionHtml: string): Promise<string | null> {
+  private async extractCardIdFromVault(sourceFile: string, questionHtml: string): Promise<{ cardId: string | null; fileContent: string }> {
     const file = this.app.vault.getAbstractFileByPath(
       sourceFile.endsWith(".md") ? sourceFile : `${sourceFile}.md`
     );
-    if (!(file instanceof TFile)) return null;
+    if (!(file instanceof TFile)) return { cardId: null, fileContent: "" };
 
     const content = await this.app.vault.cachedRead(file);
     const lines = content.split("\n");
@@ -360,11 +455,11 @@ export default class ClaudeAgentPlugin extends Plugin {
       // Found the flashcard line — check next line for Anki ID
       if (i + 1 < lines.length) {
         const idMatch = lines[i + 1].match(/<!--ID:\s*(\d+)-->/);
-        if (idMatch) return idMatch[1];
+        if (idMatch) return { cardId: idMatch[1], fileContent: content };
       }
-      return null; // flashcard found but no ID comment
+      return { cardId: null, fileContent: content }; // flashcard found but no ID comment
     }
-    return null;
+    return { cardId: null, fileContent: content };
   }
 
   async onunload(): Promise<void> {
