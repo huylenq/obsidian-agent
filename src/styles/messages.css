@@ -40,6 +40,19 @@
 .claude-agent-message-content {
   user-select: text;
   -webkit-user-select: text;
+  min-width: 0;
+}
+
+/* Code blocks: wrap instead of overflowing the bubble */
+.claude-agent-message pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* Inline code: allow wrapping */
+.claude-agent-message code:not(pre code) {
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .claude-agent-message.tool-call {
@@ -133,20 +146,37 @@
 
 /* Flashcard explain — highlight on scroll-to-existing dedup */
 
-.claude-agent-marker-highlight {
+.claude-agent-marker-highlight > .claude-agent-fc-bubble {
   animation: claude-agent-marker-glow 2s ease-out forwards;
 }
 
 @keyframes claude-agent-marker-glow {
   0% {
-    outline: 2px solid var(--interactive-accent);
-    background: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
-    border-radius: 6px;
+    border-width: 2px;
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--interactive-accent) 40%, transparent);
   }
   100% {
-    outline: 2px solid transparent;
-    background: transparent;
-    border-radius: 6px;
+    border-width: 1px;
+    border-color: #1e88e5;
+    box-shadow: none;
+  }
+}
+
+.theme-dark .claude-agent-marker-highlight > .claude-agent-fc-bubble {
+  animation: claude-agent-marker-glow-dark 2s ease-out forwards;
+}
+
+@keyframes claude-agent-marker-glow-dark {
+  0% {
+    border-width: 2px;
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--interactive-accent) 40%, transparent);
+  }
+  100% {
+    border-width: 1px;
+    border-color: #42a5f5;
+    box-shadow: none;
   }
 }
 

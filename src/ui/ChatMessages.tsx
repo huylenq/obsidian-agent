@@ -211,7 +211,8 @@ export function ChatMessages({ pendingScrollFlashcardId, onScrollComplete }: Cha
     const target = elements[elements.length - 1];
     target.scrollIntoView({ behavior: "smooth", block: "center" });
     target.classList.add("claude-agent-marker-highlight");
-    target.addEventListener("animationend", () => {
+    const bubble = target.querySelector(".claude-agent-fc-bubble");
+    (bubble ?? target).addEventListener("animationend", () => {
       target.classList.remove("claude-agent-marker-highlight");
     }, { once: true });
     onScrollComplete?.();

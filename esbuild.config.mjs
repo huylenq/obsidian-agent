@@ -53,7 +53,7 @@ const jsContext = await esbuild.context({
   logLevel: "info",
   sourcemap: prod ? false : "inline",
   treeShaking: true,
-  outfile: "main.js",
+  outfile: "dist/main.js",
   define: {
     global: "window",
     "process.env.NODE_ENV": prod ? '"production"' : '"development"',
@@ -64,7 +64,7 @@ const jsContext = await esbuild.context({
 const cssContext = await esbuild.context({
   entryPoints: ["src/styles/index.css"],
   bundle: true,
-  outfile: "styles.css",
+  outfile: "dist/styles.css",
   logLevel: "info",
   minify: false,
 });

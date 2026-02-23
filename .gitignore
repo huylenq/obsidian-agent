@@ -1,6 +1,5 @@
 # Build output
-main.js
-styles.css
+/dist/
 
 node_modules/
 
