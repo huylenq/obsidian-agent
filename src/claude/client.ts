@@ -1,4 +1,4 @@
-import { ClaudeAgentSettings, ActiveFileContext, SelectionContext, RankedNote, SessionEntry, SessionStatus, SessionType } from "@/types";
+import { ClaudeAgentSettings, ActiveFileContext, SelectionContext, RankedNote, SessionEntry, SessionStatus, SessionType, ImageAttachment } from "@/types";
 import { FileSearchResult } from "@/utils/fileSearch";
 
 export interface ChatResponse {
@@ -109,9 +109,10 @@ export class ClaudeAgentClient {
     relevantNotes?: RankedNote[],
     flashcardMeta?: { cardId: string; sourceFile: string; question: string },
     sessionMeta?: { type: SessionType; epoch: string },
+    images?: ImageAttachment[],
   ): AsyncGenerator<ChatResponse> {
     try {
-      console.log("[ClaudeAgentClient] Sending chat with workingDirectory:", this.vaultPath, "activeFile:", activeFile?.path, "mentionedFiles:", mentionedFiles?.length || 0, "selection:", selection?.text?.slice(0, 50) || "none", "relevantNotes:", relevantNotes?.length || 0);
+      console.log("[ClaudeAgentClient] Sending chat with workingDirectory:", this.vaultPath, "activeFile:", activeFile?.path, "mentionedFiles:", mentionedFiles?.length || 0, "selection:", selection?.text?.slice(0, 50) || "none", "relevantNotes:", relevantNotes?.length || 0, "images:", images?.length || 0);
 
       // Retry logic for transient connection issues
       let response: Response | null = null;
@@ -133,6 +134,7 @@ export class ClaudeAgentClient {
               relevantNotes,
               ...(flashcardMeta && { flashcardMeta }),
               ...(sessionMeta && { sessionMeta }),
+              ...(images?.length && { images }),
             }),
           });
           // Fail fast on auth errors
@@ -291,6 +293,7 @@ export class ClaudeAgentClient {
     activeFile?: ActiveFileContext,
     mentionedFiles?: FileSearchResult[],
     selection?: SelectionContext,
+    images?: ImageAttachment[],
   ): Promise<boolean> {
     if (!this.activeQueryId) return false;
     try {
@@ -299,7 +302,10 @@ export class ClaudeAgentClient {
         {
           method: "POST",
           headers: this.getHeaders({ "Content-Type": "application/json" }),
-          body: JSON.stringify({ message }),
+          body: JSON.stringify({
+            message,
+            ...(images?.length && { images }),
+          }),
         }
       );
       return response.ok;

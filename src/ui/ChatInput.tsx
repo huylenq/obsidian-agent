@@ -4,13 +4,16 @@ import { MentionAutocomplete } from "./MentionAutocomplete";
 import { CommandAutocomplete } from "./CommandAutocomplete";
 import { searchVaultItems, FileSearchResult } from "@/utils/fileSearch";
 import { parseInput, commandRegistry, SlashCommand } from "@/commands";
+import { ImageAttachment } from "@/types";
+import { blobToImageAttachment } from "@/utils/imageUtils";
 
 export interface ChatInputHandle {
   insertMention: (path: string) => void;
+  triggerAttach: () => void;
 }
 
 interface ChatInputProps {
-  onSend: (message: string, mentionedFiles: FileSearchResult[]) => void;
+  onSend: (message: string, mentionedFiles: FileSearchResult[], images?: ImageAttachment[]) => void;
   onCommand: (commandName: string, args: string) => void;
   disabled: boolean;
   isStreaming?: boolean;
@@ -87,6 +90,7 @@ function getCommandState(text: string): CommandState {
 
 export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrupt, app, onRef }: ChatInputProps) {
   const [input, setInput] = useState("");
+  const [images, setImages] = useState<ImageAttachment[]>([]);
   const [mentionState, setMentionState] = useState<MentionState>({
     isActive: false,
     startIndex: -1,
@@ -99,9 +103,14 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
   });
   const [commandSelectedIndex, setCommandSelectedIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const sendIconCallback = useCallback((el: HTMLSpanElement | null) => {
     if (el) setIcon(el, "corner-down-left");
+  }, []);
+
+  const handleAttachClick = useCallback(() => {
+    fileInputRef.current?.click();
   }, []);
 
   const searchResults = useMemo(() => {
@@ -164,9 +173,9 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
 
   useEffect(() => {
     if (onRef) {
-      onRef({ insertMention });
+      onRef({ insertMention, triggerAttach: handleAttachClick });
     }
-  }, [onRef, insertMention]);
+  }, [onRef, insertMention, handleAttachClick]);
 
   const handleSelect = useCallback(
     (file: FileSearchResult) => {
@@ -205,16 +214,19 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
 
   const handleSubmit = useCallback(() => {
     const trimmed = input.trim();
-    if (!trimmed) return;
+    if (!trimmed && images.length === 0) return;
 
-    const parsed = parseInput(trimmed);
+    if (trimmed) {
+      const parsed = parseInput(trimmed);
 
-    if (parsed.isCommand) {
-      onCommand(parsed.commandName!, parsed.args || "");
-      setInput("");
-      setMentionState({ isActive: false, startIndex: -1, query: "" });
-      setCommandState({ isActive: false, query: "" });
-      return;
+      if (parsed.isCommand) {
+        onCommand(parsed.commandName!, parsed.args || "");
+        setInput("");
+        setImages([]);
+        setMentionState({ isActive: false, startIndex: -1, query: "" });
+        setCommandState({ isActive: false, query: "" });
+        return;
+      }
     }
 
     const mentionedPaths = extractMentionedPaths(trimmed);
@@ -233,11 +245,12 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
       })
       .filter((f): f is FileSearchResult => f !== null);
 
-    onSend(trimmed, mentionedFiles);
+    onSend(trimmed, mentionedFiles, images.length > 0 ? images : undefined);
     setInput("");
+    setImages([]);
     setMentionState({ isActive: false, startIndex: -1, query: "" });
     setCommandState({ isActive: false, query: "" });
-  }, [input, app, onSend, onCommand]);
+  }, [input, images, app, onSend, onCommand]);
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -316,8 +329,90 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
     ]
   );
 
+  // ── Image paste handler ──
+  const handlePaste = useCallback(
+    async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const items = e.clipboardData?.files;
+      if (!items || items.length === 0) return;
+
+      const imageFiles = Array.from(items).filter((f) => f.type.startsWith("image/"));
+      if (imageFiles.length === 0) return;
+
+      e.preventDefault();
+
+      try {
+        const attachments = await Promise.all(
+          imageFiles.map((f) => blobToImageAttachment(f, f.name))
+        );
+        setImages((prev) => [...prev, ...attachments]);
+      } catch (err) {
+        console.error("[ChatInput] Failed to process pasted image:", err);
+      }
+    },
+    []
+  );
+
+  // ── Image drop handler ──
+  const handleDrop = useCallback(
+    async (e: React.DragEvent<HTMLDivElement>) => {
+      const files = e.dataTransfer?.files;
+      if (!files || files.length === 0) return;
+
+      const imageFiles = Array.from(files).filter((f) => f.type.startsWith("image/"));
+      if (imageFiles.length === 0) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      try {
+        const attachments = await Promise.all(
+          imageFiles.map((f) => blobToImageAttachment(f, f.name))
+        );
+        setImages((prev) => [...prev, ...attachments]);
+      } catch (err) {
+        console.error("[ChatInput] Failed to process dropped image:", err);
+      }
+    },
+    []
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+  }, []);
+
+  // ── OS file picker ──
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAttachClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileInputChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+
+      try {
+        const attachments = await Promise.all(
+          Array.from(files).map((f) => blobToImageAttachment(f, f.name))
+        );
+        setImages((prev) => [...prev, ...attachments]);
+      } catch (err) {
+        console.error("[ChatInput] Failed to load image file:", err);
+      }
+
+      // Reset so the same file can be re-selected
+      e.target.value = "";
+    },
+    []
+  );
+
+  const removeImage = useCallback((index: number) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   return (
-    <div className="claude-agent-input-wrapper">
+    <div className="claude-agent-input-wrapper" onDrop={handleDrop} onDragOver={handleDragOver}>
       {commandState.isActive && filteredCommands.length > 0 && (
         <CommandAutocomplete
           commands={filteredCommands}
@@ -332,7 +427,36 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
           onSelect={handleSelect}
         />
       )}
+      {images.length > 0 && (
+        <div className="claude-agent-image-previews">
+          {images.map((img, i) => (
+            <div key={i} className="claude-agent-image-preview">
+              <img src={`data:${img.mediaType};base64,${img.data}`} alt={img.name || "attachment"} />
+              <button
+                className="claude-agent-image-preview-remove"
+                onClick={() => removeImage(i)}
+                aria-label="Remove image"
+              >&times;</button>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="claude-agent-input-container">
+        <button
+          className="claude-agent-attach-button clickable-icon"
+          onClick={handleAttachClick}
+          aria-label="Attach image"
+        >
+          <span ref={attachIconCallback} />
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/gif,image/webp"
+          multiple
+          style={{ display: "none" }}
+          onChange={handleFileInputChange}
+        />
         <textarea
           ref={textareaRef}
           className="claude-agent-input"
@@ -340,10 +464,11 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
           value={input}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           disabled={false}
           rows={1}
         />
-        {isStreaming && !input.trim() ? (
+        {isStreaming && !input.trim() && images.length === 0 ? (
           <button
             className="claude-agent-interrupt-button clickable-icon"
             onClick={onInterrupt}
@@ -355,7 +480,7 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
           <button
             className="claude-agent-send-button clickable-icon"
             onClick={handleSubmit}
-            disabled={!input.trim()}
+            disabled={!input.trim() && images.length === 0}
             aria-label="Send"
           >
             <span ref={sendIconCallback} />

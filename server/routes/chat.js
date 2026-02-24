@@ -32,7 +32,7 @@ const router = Router();
  * Uses MCP servers configured in ~/.claude/ or vault's .claude/
  */
 router.post("/chat", async (req, res) => {
-  const { message, systemPrompt, sessionId, activeFile, mentionedFiles, selection, model, relevantNotes, flashcardMeta, sessionMeta } = req.body;
+  const { message, systemPrompt, sessionId, activeFile, mentionedFiles, selection, model, relevantNotes, flashcardMeta, sessionMeta, images } = req.body;
   const vaultPath = req.vaultPath;
 
   log("[Proxy] Received chat request:", {
@@ -45,8 +45,8 @@ router.post("/chat", async (req, res) => {
     relevantNotes: relevantNotes?.length || 0
   });
 
-  if (!message) {
-    return res.status(400).json({ error: "Message is required" });
+  if (!message && (!images || images.length === 0)) {
+    return res.status(400).json({ error: "Message or images required" });
   }
 
   // Set up SSE
@@ -113,10 +113,22 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
   // Create the async iterable controller for streaming input
   const inputController = createAsyncIterableController();
 
+  // Build content: multimodal array if images present, plain string otherwise
+  const buildContent = (text, imgs) => {
+    if (!imgs || imgs.length === 0) return text || "";
+    return [
+      ...(text ? [{ type: "text", text }] : []),
+      ...imgs.map(img => ({
+        type: "image",
+        source: { type: "base64", media_type: img.mediaType, data: img.data },
+      })),
+    ];
+  };
+
   // Push the initial user message into the iterable
   inputController.push({
     type: "user",
-    message: { role: "user", content: message },
+    message: { role: "user", content: buildContent(message, images) },
     parent_tool_use_id: null,
   });
 
@@ -329,6 +341,12 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
         if (sessionMeta) {
           if (sessionMeta.type) registryUpdates.type = sessionMeta.type;
           if (sessionMeta.epoch) registryUpdates.epoch = sessionMeta.epoch;
+          // Use a readable title instead of the first user message
+          if (sessionMeta.type === "flashcard_study" && sessionMeta.epoch) {
+            const [y, m, d] = sessionMeta.epoch.split("-").map(Number);
+            const formatted = new Date(y, m - 1, d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+            registryUpdates.title = `Flashcard Study · ${formatted}`;
+          }
         }
 
         updateSessionEntry(vaultPath, resolvedSessionId, registryUpdates);
@@ -361,12 +379,23 @@ router.post("/chat/:queryId/inject", (req, res) => {
   const entry = getQuery(req.params.queryId);
   if (!entry) return res.status(404).json({ error: "Query not found or expired" });
 
-  const { message } = req.body;
-  if (!message) return res.status(400).json({ error: "Message required" });
+  const { message, images } = req.body;
+  if (!message && (!images || images.length === 0)) return res.status(400).json({ error: "Message or images required" });
+
+  // Reuse the same multimodal content builder from POST /chat
+  const content = (images && images.length > 0)
+    ? [
+        ...(message ? [{ type: "text", text: message }] : []),
+        ...images.map(img => ({
+          type: "image",
+          source: { type: "base64", media_type: img.mediaType, data: img.data },
+        })),
+      ]
+    : message;
 
   entry.inputController.push({
     type: "user",
-    message: { role: "user", content: message },
+    message: { role: "user", content },
     parent_tool_use_id: null,
   });
 

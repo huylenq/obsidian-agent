@@ -85,6 +85,18 @@ const FLASHCARD_PREFIX = "Explain this flashcard.";
 const FLASHCARD_RE = /\*\*Question:\*\*\n([\s\S]*?)\n\n\*\*Answer:\*\*\n([\s\S]*?)(?:\n\n\*\*Context:\*\*\n([\s\S]*))?$/;
 
 /**
+ * Collapse single-character-per-line sequences produced by Anki's MathJax
+ * text extraction (each Unicode math char ends up on its own line).
+ */
+function collapseMathLines(s: string): string {
+  // Replace runs of "single-char\n" into a joined string.
+  // Matches: a single non-whitespace char followed by \n, repeated 2+ times.
+  return s.replace(/(?:^|\n)((?:.\n){2,})/gm, (_match, group: string) => {
+    return group.replace(/\n/g, '');
+  });
+}
+
+/**
  * Parse a flashcard explain prompt into question/answer/context.
  * Returns null if content doesn't match the expected pattern.
  */
@@ -93,8 +105,8 @@ function parseFlashcardContent(content: string): { question: string; answer: str
   const m = content.match(FLASHCARD_RE);
   if (!m) return null;
   return {
-    question: m[1].trim(),
-    answer: m[2].trim(),
+    question: collapseMathLines(m[1].trim()),
+    answer: collapseMathLines(m[2].trim()),
     context: m[3]?.trim() || undefined,
   };
 }
@@ -185,15 +197,29 @@ function MessageBubble({ message, markerMetadata }: { message: ChatMessage; mark
     <div
       className={`claude-agent-message ${message.role} ${message.toolName ? "tool-call" : ""}`}
     >
+      {message.images && message.images.length > 0 && (
+        <div className="claude-agent-message-images">
+          {message.images.map((img, i) => (
+            <img
+              key={i}
+              src={`data:${img.mediaType};base64,${img.data}`}
+              className="claude-agent-message-image"
+              alt={img.name || "attached image"}
+            />
+          ))}
+        </div>
+      )}
       {message.toolName && (
         <div className="claude-agent-tool-label">
           {message.toolName}
         </div>
       )}
-      <MarkdownContent
-        content={message.content}
-        className="claude-agent-message-content"
-      />
+      {message.content && (
+        <MarkdownContent
+          content={message.content}
+          className="claude-agent-message-content"
+        />
+      )}
     </div>
   );
 }

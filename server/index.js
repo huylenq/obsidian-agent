@@ -18,7 +18,7 @@ const VAULT_PATH = resolve(__dirname, "..", "..", "..", "..");
 const app = express();
 
 app.use(cors());
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "20mb" }));
 app.use(authMiddleware);
 
 // Inject server-side vault path into all requests

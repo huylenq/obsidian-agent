@@ -22,6 +22,12 @@ export interface MarkerMetadata {
   question: string;       // card front (for display)
 }
 
+export interface ImageAttachment {
+  data: string;        // base64-encoded image data (no data: prefix)
+  mediaType: string;   // "image/png" | "image/jpeg" | "image/gif" | "image/webp"
+  name?: string;       // original filename if from vault
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "tool" | "tool_block" | "compact_boundary";
@@ -31,6 +37,7 @@ export interface ChatMessage {
   toolBlocks?: ToolBlock[];
   compactMetadata?: CompactMetadata;
   markerMetadata?: MarkerMetadata;
+  images?: ImageAttachment[];
 }
 
 export interface ActiveFileContext {

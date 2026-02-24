@@ -2,7 +2,7 @@ import React, { useCallback, useState, useEffect, useRef } from "react";
 import { useAtomValue } from "jotai";
 import { App, ItemView, WorkspaceLeaf, MarkdownView, setIcon } from "obsidian";
 import { createRoot, Root } from "react-dom/client";
-import { ActiveFileContext, ChatViewLocation, ClaudeModel, SelectionContext, MarkerMetadata, RankedNote } from "@/types";
+import { ActiveFileContext, ChatViewLocation, ClaudeModel, SelectionContext, MarkerMetadata, RankedNote, ImageAttachment } from "@/types";
 
 /** Build the transcript file path for a session and open it with the OS default app. */
 function openTranscriptFile(vaultPath: string, sessionId: string): void {
@@ -103,6 +103,7 @@ function getSelectionContext(app: App): SelectionContext | undefined {
     endLine: to?.line !== undefined ? to.line + 1 : undefined,
   };
 }
+
 
 function formatEpochDate(epoch: string): string {
   // epoch is "YYYY-MM-DD" — parse as local date
@@ -383,7 +384,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         setSessionTitle(null);
         setSessionType(null);
         setSessionEpoch(null);
-        return;
+            return;
       }
 
       const sessions = await plugin.claudeClient.fetchSessions({ status: "all" });
@@ -425,6 +426,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       flashcardMeta?: { cardId: string; sourceFile: string; question: string },
       sessionMeta?: { type: SessionType; epoch: string },
       overrideRelevantNotes?: RankedNote[],
+      images?: ImageAttachment[],
     ) => {
       // Flashcard explains use the deeplink's sourceFile, not whatever Obsidian has focused
       const fileContext = flashcardMeta
@@ -441,13 +443,14 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           role: "user",
           content: message,
           timestamp: Date.now(),
+          ...(images?.length && { images }),
         });
 
         // Inject into active query — re-show stop button
         setStreaming(true);
         setLoading(true);
         const queueId = addToQueue(message);
-        const success = await plugin.claudeClient.injectMessage(message);
+        const success = await plugin.claudeClient.injectMessage(message, undefined, undefined, undefined, images);
         updateQueueStatus(queueId, success ? "injected" : "failed");
         return;
       }
@@ -463,6 +466,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           role: "user",
           content: message,
           timestamp: Date.now(),
+          ...(images?.length && { images }),
           ...(flashcardMeta && {
             markerMetadata: {
               markerId: crypto.randomUUID(),
@@ -516,7 +520,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           }
         };
 
-        for await (const chunk of plugin.claudeClient.chat(message, fileContext, mentionedFiles, selectionContext, highMatchNotes, flashcardMeta, sessionMeta)) {
+        for await (const chunk of plugin.claudeClient.chat(message, fileContext, mentionedFiles, selectionContext, highMatchNotes, flashcardMeta, sessionMeta, images)) {
           switch (chunk.type) {
             case "text":
               fullResponse = chunk.content;
@@ -680,7 +684,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           setSessionTitle(null);
           setSessionType(null);
           setSessionEpoch(null);
-          window.dispatchEvent(new CustomEvent("claude-agent:session-changed", { detail: { sessionId: null } }));
+                window.dispatchEvent(new CustomEvent("claude-agent:session-changed", { detail: { sessionId: null } }));
           window.dispatchEvent(new CustomEvent("claude-agent:refresh-sessions"));
         }
         if (commandName === "sessions" || commandName === "history") {
@@ -805,18 +809,10 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   return (
     <div className="claude-agent-container">
       <div className={`claude-agent-session-header ${isFlashcardSession ? "flashcard-study" : ""}`} ref={dropdownRef}>
-        {isFlashcardSession ? (
-          <>
-            <span className="claude-agent-session-header-icon">&#128218;</span>
-            <span className="claude-agent-session-header-title" onClick={handleSessionDropdownToggle}>
-              Flashcard Study{sessionEpoch && ` · ${formatEpochDate(sessionEpoch)}`}
-            </span>
-          </>
-        ) : (
-          <span className="claude-agent-session-header-title" onClick={handleSessionDropdownToggle}>
-            {sessionTitle || "New Chat"}
-          </span>
-        )}
+        {isFlashcardSession && <span className="claude-agent-session-header-icon">&#128218;</span>}
+        <span className="claude-agent-session-header-title" onClick={handleSessionDropdownToggle}>
+          {sessionTitle || "New Chat"}
+        </span>
         {sessionId && (
           <span
             className={`claude-agent-session-id ${copiedSessionId ? "copied" : ""}`}
@@ -917,7 +913,9 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           </div>
         )}
         <ChatInput
-          onSend={handleSend}
+          onSend={(message: string, mentionedFiles: FileSearchResult[], images?: ImageAttachment[]) =>
+            handleSend(message, mentionedFiles, undefined, undefined, undefined, images)
+          }
           onCommand={handleCommand}
           disabled={false}
           isStreaming={isStreaming}
