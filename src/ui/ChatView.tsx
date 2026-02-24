@@ -145,6 +145,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   const [sessionType, setSessionType] = useState<string | null>(null);
   const [sessionEpoch, setSessionEpoch] = useState<string | null>(null);
   const [pendingScrollFlashcardId, setPendingScrollFlashcardId] = useState<string | null>(null);
+  const [sessionRefreshTrigger, setSessionRefreshTrigger] = useState(0);
   const [copiedSessionId, setCopiedSessionId] = useState(false);
   const [sessionDropdown, setSessionDropdown] = useState<SessionEntry[] | null>(null);
   const [dropdownQuery, setDropdownQuery] = useState("");
@@ -324,6 +325,13 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     };
   }, [inputRef]);
 
+  // Re-resolve session metadata when refresh-sessions fires (e.g. after /rename, chat completion)
+  useEffect(() => {
+    const handler = () => setSessionRefreshTrigger((n) => n + 1);
+    window.addEventListener("claude-agent:refresh-sessions", handler);
+    return () => window.removeEventListener("claude-agent:refresh-sessions", handler);
+  }, []);
+
   // Listen for "switch session" events from SessionsView
   useEffect(() => {
     const handleSwitchSession = async (event: CustomEvent<{ sessionId: string }>) => {
@@ -385,7 +393,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       setSessionEpoch(entry?.epoch || null);
     };
     resolve();
-  }, [sessionId, plugin.claudeClient]);
+  }, [sessionId, plugin.claudeClient, sessionRefreshTrigger]);
 
   const handleMarkDone = useCallback(async () => {
     if (!plugin.claudeClient || !sessionId) return;

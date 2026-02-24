@@ -163,6 +163,7 @@ For the IWE vault, that resolves to:
 | File pattern | Owner | Description |
 |---|---|---|
 | `{sessionId}.summaries.json` | Proxy server | Compact summaries sidecar. Array of `{ timestamp, preTokens, summary }`. One entry per `/compact` invocation. Written by the proxy after generating a synthetic summary via Haiku. |
+| `{sessionId}.markers.json` | Proxy server | Flashcard marker positions. Array of `{ markerId, flashcardId, sourceFile, question, userMessageIndex, createdAt }`. One entry per flashcard explain. Lazy-migrated from legacy `.threads.json` on read. |
 | `session-registry.json` | Proxy server | Central session registry. Single JSON file tracking all sessions with metadata (title, status, timestamps, model, associated files). See schema below. |
 
 ### Session Registry schema (`session-registry.json`)
@@ -278,11 +279,12 @@ Registered in `src/commands/builtins/` and initialized in `src/commands/index.ts
 - `/new` (aliases: `/clear`, `/reset`) — start new chat session
 - `/compact` — compact conversation context (routes through chat pipeline, not a local command)
 - `/done` — mark current session as done and start new chat
+- `/rename` — rename the current session
 - `/sessions` (alias: `/history`) — toggle All Sessions mode in the sessions panel
 
 ## Flashcard Explain Integration
 
-Cross-plugin integration with `plugins/inline-flashcards/`. Anki deeplinks trigger flashcard explanations routed to daily study sessions with per-card thread boundaries.
+Cross-plugin integration with `plugins/inline-flashcards/`. Anki deeplinks trigger flashcard explanations routed to daily study sessions with per-card markers.
 
 ### Event flow
 
@@ -292,19 +294,19 @@ Anki deeplink → obsidian://flashcard-explain?file=...&content=...&back=...&con
     window "claude-agent:explain-flashcard" { question, answer, context, cardId, sourceFile }
   → Claude Agent (main.ts handleExplainFlashcard):
     1. resolveFlashcardSession(epoch) — GET /sessions?type=flashcard_study&epoch=today&status=in_progress
-    2. Dedup: fetchThreads(sessionId), if cardId match → scroll to existing boundary, return
+    2. Dedup: fetchMarkers(sessionId), if cardId match → scroll to existing marker, return
     3. Switch to daily session (or clear for new), dispatch "claude-agent:send-message"
   → Server (chat.js finally block):
     1. Merges type/epoch into session registry
-    2. Writes thread to {sessionId}.threads.json via appendThread()
-    3. startMessageIndex = countUserOnlyMessages(transcript) - 1
+    2. Writes marker to {sessionId}.markers.json via appendMarker()
+    3. userMessageIndex = countUserOnlyMessages(transcript) - 1
   → History reload (history.js):
-    Injects thread_boundary messages at positions mapped from startMessageIndex to user message array indices
+    Annotates user messages with markerMetadata at positions mapped from userMessageIndex
 ```
 
-### Thread boundary navigation (agent → inline-flashcards)
+### Marker navigation (agent → inline-flashcards)
 
-Thread boundary clicks dispatch `flashcard:navigate` with `{ sourceFile, flashcardId }`. Inline Flashcards plugin listens, opens the file, finds `<!--ID: {flashcardId}-->`, walks back to the `::` line, scrolls to center, and selection-flashes 3 times. Degrades gracefully if inline-flashcards is not loaded.
+Flashcard bubble clicks dispatch `flashcard:navigate` with `{ sourceFile, flashcardId }`. Inline Flashcards plugin listens, opens the file, finds `<!--ID: {flashcardId}-->`, walks back to the `::` line, scrolls to center, and selection-flashes 3 times. Degrades gracefully if inline-flashcards is not loaded.
 
 ### Key files
 
@@ -312,10 +314,10 @@ Thread boundary clicks dispatch `flashcard:navigate` with `{ sourceFile, flashca
 |------|------|
 | `src/main.ts` | `handleExplainFlashcard` — session resolution, dedup guard (`isHandlingFlashcard`), skip-switch optimization |
 | `server/sessions.js` | `countUserOnlyMessages()` — counts user JSONL entries excluding toolUseResult |
-| `server/threads.js` | `getThreadsPath()`, `loadThreads()`, `appendThread()` — threads sidecar CRUD |
-| `server/routes/chat.js` | Thread writing in finally block, uses `countUserOnlyMessages` for startMessageIndex |
-| `server/routes/history.js` | Thread boundary injection — maps startMessageIndex to user message positions |
-| `src/ui/ChatMessages.tsx` | `groupMessagesByBoundary()` — thread boundaries render AFTER group messages. `parseFlashcardContent()` — detects flashcard explain messages by content pattern and renders as Δ card |
+| `server/markers.js` | `getMarkersPath()`, `loadMarkers()`, `appendMarker()` — markers sidecar CRUD (lazy-migrates legacy `.threads.json`) |
+| `server/routes/chat.js` | Marker writing in finally block, uses `countUserOnlyMessages` for userMessageIndex |
+| `server/routes/history.js` | Marker injection — annotates user messages with markerMetadata at userMessageIndex positions |
+| `src/ui/ChatMessages.tsx` | `parseFlashcardContent()` — detects flashcard explain messages by content pattern and renders as Δ card |
 | `../inline-flashcards/main.ts` | `flashcard:navigate` listener, `navigateToFlashcardById()`, `flashLine()` |
 
 ### Flashcard explain bubble
@@ -324,13 +326,13 @@ The user message for flashcard explains renders as a styled card instead of the 
 
 Rendered as: blue Δ symbol (matching inline-flashcards synced color) outside the bubble on the left, user-colored card with question / divider / answer.
 
-### Threads sidecar (`{sessionId}.threads.json`)
+### Markers sidecar (`{sessionId}.markers.json`)
 
 ```json
-[{ "threadId": "uuid", "flashcardId": "1763625939784", "sourceFile": "path.md", "question": "...", "startMessageIndex": 0, "createdAt": 1739577600000 }]
+[{ "markerId": "uuid", "flashcardId": "1763625939784", "sourceFile": "path.md", "question": "...", "userMessageIndex": 0, "createdAt": 1739577600000 }]
 ```
 
-`startMessageIndex` = 0-based index into user-only messages (excluding tool results). Must match what history.js counts as user messages when building `userMessagePositions`.
+`userMessageIndex` = 0-based index into user-only messages (excluding tool results). Must match what history.js counts as user messages when building `userMessagePositions`. Legacy files (`.threads.json` with `threadId`/`startMessageIndex` fields) are lazy-migrated on read by `server/markers.js`.
 
 ### Session registry extensions
 
@@ -338,8 +340,12 @@ Sessions with `type: "flashcard_study"` and `epoch: "YYYY-MM-DD"` are daily stud
 
 ### Dedup
 
-`isHandlingFlashcard` concurrency guard prevents rapid-fire. If card already has a thread in today's session: skip `switch-session` if already viewing that session (avoids message clear + history reload), scroll to existing `[data-flashcard-id]` element, highlight with CSS animation.
+`isHandlingFlashcard` concurrency guard prevents rapid-fire. If card already has a marker in today's session: skip `switch-session` if already viewing that session (avoids message clear + history reload), scroll to existing `[data-flashcard-id]` element, highlight with CSS animation.
 
 ### Critical invariant
 
 `countUserOnlyMessages()` must count the same entries that `history.js` renders as `role: "user"` messages. Both exclude `toolUseResult` entries. If history.js adds new skip conditions (e.g. filtering `/compact` commands), `countUserOnlyMessages` may need updating to match — but flashcard sessions don't use compaction so this is low risk.
+
+## Reactive Session Header
+
+The chat view header displays the session title (or "New Chat" / "Flashcard Study · date"). The title is resolved from the session registry via a `useEffect` that depends on `sessionId`, `plugin.claudeClient`, and a `sessionRefreshTrigger` counter. The counter is bumped by a `claude-agent:refresh-sessions` event listener, which fires after chat completion, `/rename`, `/done`, etc. — ensuring the header stays in sync with server-side title changes without requiring a `sessionId` change.
