@@ -13,6 +13,8 @@ interface ChatInputProps {
   onSend: (message: string, mentionedFiles: FileSearchResult[]) => void;
   onCommand: (commandName: string, args: string) => void;
   disabled: boolean;
+  isStreaming?: boolean;
+  onInterrupt?: () => void;
   app: App;
   onRef?: (handle: ChatInputHandle) => void;
 }
@@ -83,7 +85,7 @@ function getCommandState(text: string): CommandState {
   return { isActive: true, query };
 }
 
-export function ChatInput({ onSend, onCommand, disabled, app, onRef }: ChatInputProps) {
+export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrupt, app, onRef }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [mentionState, setMentionState] = useState<MentionState>({
     isActive: false,
@@ -97,12 +99,9 @@ export function ChatInput({ onSend, onCommand, disabled, app, onRef }: ChatInput
   });
   const [commandSelectedIndex, setCommandSelectedIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const sendIconRef = useRef<HTMLSpanElement>(null);
 
-  useEffect(() => {
-    if (sendIconRef.current) {
-      setIcon(sendIconRef.current, "corner-down-left");
-    }
+  const sendIconCallback = useCallback((el: HTMLSpanElement | null) => {
+    if (el) setIcon(el, "corner-down-left");
   }, []);
 
   const searchResults = useMemo(() => {
@@ -206,7 +205,7 @@ export function ChatInput({ onSend, onCommand, disabled, app, onRef }: ChatInput
 
   const handleSubmit = useCallback(() => {
     const trimmed = input.trim();
-    if (!trimmed || disabled) return;
+    if (!trimmed) return;
 
     const parsed = parseInput(trimmed);
 
@@ -238,7 +237,7 @@ export function ChatInput({ onSend, onCommand, disabled, app, onRef }: ChatInput
     setInput("");
     setMentionState({ isActive: false, startIndex: -1, query: "" });
     setCommandState({ isActive: false, query: "" });
-  }, [input, disabled, app, onSend, onCommand]);
+  }, [input, app, onSend, onCommand]);
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -341,17 +340,27 @@ export function ChatInput({ onSend, onCommand, disabled, app, onRef }: ChatInput
           value={input}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          disabled={disabled}
+          disabled={false}
           rows={1}
         />
-        <button
-          className="claude-agent-send-button"
-          onClick={handleSubmit}
-          disabled={disabled || !input.trim()}
-          aria-label="Send"
-        >
-          <span ref={sendIconRef} />
-        </button>
+        {isStreaming && !input.trim() ? (
+          <button
+            className="claude-agent-interrupt-button"
+            onClick={onInterrupt}
+            aria-label="Stop"
+          >
+            &#9632;
+          </button>
+        ) : (
+          <button
+            className="claude-agent-send-button"
+            onClick={handleSubmit}
+            disabled={!input.trim()}
+            aria-label="Send"
+          >
+            <span ref={sendIconCallback} />
+          </button>
+        )}
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ import { ClaudeAgentSettings, ActiveFileContext, SelectionContext, RankedNote, S
 import { FileSearchResult } from "@/utils/fileSearch";
 
 export interface ChatResponse {
-  type: "text" | "tool_use" | "tool_result" | "error" | "done" | "session" | "compact_boundary" | "result";
+  type: "text" | "tool_use" | "tool_result" | "error" | "done" | "session" | "compact_boundary" | "result" | "query_ready";
   content: string;
   toolName?: string;
   toolUseId?: string;
@@ -10,6 +10,7 @@ export interface ChatResponse {
   input?: string;
   isError?: boolean;
   sessionId?: string;
+  queryId?: string;
   resultMetadata?: {
     durationMs?: number;
     numTurns?: number;
@@ -30,6 +31,7 @@ export class ClaudeAgentClient {
   private vaultPath: string;
   private proxyUrl: string;
   private authToken?: string;
+  private activeQueryId: string | null = null;
   private onSessionChange: ((sessionId: string | null) => void) | null = null;
 
   constructor(settings: ClaudeAgentSettings, vaultPath: string, proxyUrl: string, authToken?: string) {
@@ -196,10 +198,13 @@ export class ClaudeAgentClient {
         }
       }
 
+      this.activeQueryId = null;
+
       if (!yieldedAny) {
         throw new Error("Server returned empty response — no SSE events received");
       }
     } catch (error) {
+      this.activeQueryId = null;
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error occurred";
       yield { type: "error", content: errorMessage };
@@ -251,6 +256,10 @@ export class ClaudeAgentClient {
             summary: data.summary as string,
           },
         };
+      case "query_ready":
+        this.activeQueryId = data.queryId as string;
+        console.log("[ClaudeAgentClient] Query ready, queryId:", data.queryId);
+        return { type: "query_ready", content: "", queryId: data.queryId as string };
       case "session":
         // Store session ID for conversation continuity
         if (data.sessionId) {
@@ -269,6 +278,59 @@ export class ClaudeAgentClient {
       default:
         return { type: "text", content: "" };
     }
+  }
+
+  /**
+   * Inject a message into the currently active query.
+   * Returns true if injection succeeded.
+   */
+  async injectMessage(
+    message: string,
+    activeFile?: ActiveFileContext,
+    mentionedFiles?: FileSearchResult[],
+    selection?: SelectionContext,
+  ): Promise<boolean> {
+    if (!this.activeQueryId) return false;
+    try {
+      const response = await fetch(
+        `${this.proxyUrl}/chat/${this.activeQueryId}/inject`,
+        {
+          method: "POST",
+          headers: this.getHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify({ message }),
+        }
+      );
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Interrupt the currently active query.
+   * Returns true if interrupt succeeded.
+   */
+  async interrupt(): Promise<boolean> {
+    if (!this.activeQueryId) return false;
+    try {
+      const response = await fetch(
+        `${this.proxyUrl}/chat/${this.activeQueryId}/interrupt`,
+        {
+          method: "POST",
+          headers: this.getHeaders(),
+        }
+      );
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Check if there's an active query that can accept injections.
+   */
+  isQueryActive(): boolean {
+    return this.activeQueryId !== null;
   }
 
   /**

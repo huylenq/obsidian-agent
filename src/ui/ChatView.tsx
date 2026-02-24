@@ -31,6 +31,8 @@ import {
   setLoading,
   setError,
   isLoadingAtom,
+  isStreamingAtom,
+  setStreaming,
   chatStore,
   generateMessageId,
   clearMessages,
@@ -38,6 +40,7 @@ import {
   modelAtom,
   updateToolMessage,
 } from "@/state/chatState";
+import { addToQueue, updateQueueStatus, clearQueue } from "@/state/messageQueueState";
 import {
   relevantNotesAtom,
   includeRelevantNotesAtom,
@@ -120,6 +123,7 @@ function fuzzyMatch(text: string, query: string): boolean {
 
 function ChatContainer({ plugin, app }: ChatContainerProps) {
   const isLoading = useAtomValue(isLoadingAtom, { store: chatStore });
+  const isStreaming = useAtomValue(isStreamingAtom, { store: chatStore });
   const [activeFile, setActiveFile] = useState<ActiveFileContext | undefined>(
     getActiveFileContext(app)
   );
@@ -396,6 +400,15 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     window.dispatchEvent(new CustomEvent("claude-agent:refresh-sessions"));
   }, [plugin.claudeClient, sessionId]);
 
+  const handleInterrupt = useCallback(async () => {
+    const success = await plugin.claudeClient?.interrupt();
+    if (success) {
+      setStreaming(false);
+      setLoading(false);
+      clearQueue();
+    }
+  }, [plugin]);
+
   const handleSend = useCallback(
     async (
       message: string,
@@ -409,6 +422,26 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         ? { path: flashcardMeta.sourceFile, name: flashcardMeta.sourceFile.split("/").pop() || "", extension: "md" }
         : isContextCleared ? undefined : activeFile;
       const selectionContext = selection;
+
+      // If query is active, inject into it instead of starting a new one.
+      // Note: isStreaming may be false (turn finished) but queryId still alive.
+      if (plugin.claudeClient?.isQueryActive()) {
+        // Show user message immediately
+        addMessage({
+          id: generateMessageId(),
+          role: "user",
+          content: message,
+          timestamp: Date.now(),
+        });
+
+        // Inject into active query — re-show stop button
+        setStreaming(true);
+        setLoading(true);
+        const queueId = addToQueue(message);
+        const success = await plugin.claudeClient.injectMessage(message);
+        updateQueueStatus(queueId, success ? "injected" : "failed");
+        return;
+      }
 
       // Set session type eagerly for immediate header display
       if (sessionMeta?.type) {
@@ -449,6 +482,8 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
             "Claude client is not initialized. Please check that the proxy server is running."
           );
         }
+
+        setStreaming(true);
 
         const highMatchNotes = overrideRelevantNotes
           ? overrideRelevantNotes
@@ -519,15 +554,14 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
               });
               break;
 
+            case "query_ready":
+              // queryId captured by client internally, nothing to render
+              break;
+
             case "result":
-              // Metadata about the completed query (optional future use)
-              break;
-
-            case "error":
-              setError(chunk.content || "Unknown error (no details from server)");
-              break;
-
-            case "done":
+              // Turn complete — flush any accumulated text and clear streaming state.
+              // In streaming-input mode, this fires after each turn while the SSE
+              // connection stays open. "done" only fires when the query truly ends.
               if (fullResponse && !/^compacted$/i.test(fullResponse.trim())) {
                 clearStreamingMessage();
                 addMessage({
@@ -540,6 +574,30 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
               } else {
                 clearStreamingMessage();
               }
+              setStreaming(false);
+              setLoading(false);
+              break;
+
+            case "error":
+              setError(chunk.content || "Unknown error (no details from server)");
+              break;
+
+            case "done":
+              // Final cleanup — query fully closed (iterable exhausted).
+              if (fullResponse && !/^compacted$/i.test(fullResponse.trim())) {
+                clearStreamingMessage();
+                addMessage({
+                  id: generateMessageId(),
+                  role: "assistant",
+                  content: fullResponse,
+                  timestamp: Date.now(),
+                });
+                fullResponse = "";
+              } else {
+                clearStreamingMessage();
+              }
+              setStreaming(false);
+              setLoading(false);
               break;
           }
         }
@@ -549,13 +607,14 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         setError(errorMessage);
         console.error("Chat error:", error);
       } finally {
+        setStreaming(false);
         setLoading(false);
         // Notify SessionsView to refresh (new session may have been created)
         window.dispatchEvent(new CustomEvent("claude-agent:refresh-sessions"));
         window.dispatchEvent(new CustomEvent("claude-agent:session-changed", { detail: { sessionId: plugin.claudeClient?.getSessionId() ?? null } }));
       }
     },
-    [plugin, activeFile, isContextCleared, selection, includeRelevantNotes, relevantNotes]
+    [plugin, activeFile, isContextCleared, selection, includeRelevantNotes, relevantNotes, isStreaming]
   );
 
   const handleCommand = useCallback(
@@ -832,7 +891,9 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         <ChatInput
           onSend={handleSend}
           onCommand={handleCommand}
-          disabled={isLoading}
+          disabled={false}
+          isStreaming={isStreaming}
+          onInterrupt={handleInterrupt}
           app={app}
           onRef={setInputRef}
         />

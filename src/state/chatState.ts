@@ -19,6 +19,13 @@ export const streamingMessageAtom = atom<string>("");
 // Error message atom
 export const errorAtom = atom<string | null>(null);
 
+// Streaming state — true when a query is active and can accept injected messages
+export const isStreamingAtom = atom<boolean>(false);
+
+export function setStreaming(streaming: boolean): void {
+  chatStore.set(isStreamingAtom, streaming);
+}
+
 // Helper function to generate unique message IDs
 export function generateMessageId(): string {
   return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;

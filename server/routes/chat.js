@@ -1,5 +1,6 @@
 import { existsSync } from "fs";
 import { execSync } from "child_process";
+import crypto from "crypto";
 import { Router } from "express";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { log, logError } from "../log.js";
@@ -7,6 +8,8 @@ import { getTranscriptPath, getSummariesPath, readLatestSegmentMessages, generat
 import { updateSessionEntry, collectFilePaths, extractTitleFromTranscript, countTranscriptMessages, countUserOnlyMessages } from "../sessions.js";
 import { getMarkersPath, appendMarker } from "../markers.js";
 import { computeToolDescription, formatToolInput, extractToolResultContent } from "../toolFormat.js";
+import { createAsyncIterableController } from "../asyncIterableController.js";
+import { registerQuery, getQuery, removeQuery, updateQuerySession } from "../queryRegistry.js";
 
 /**
  * Resolve the current node binary path.
@@ -104,6 +107,22 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
     return prompt;
   };
 
+  // Generate a queryId for this request so clients can inject messages / interrupt
+  const queryId = crypto.randomUUID();
+
+  // Create the async iterable controller for streaming input
+  const inputController = createAsyncIterableController();
+
+  // Push the initial user message into the iterable
+  inputController.push({
+    type: "user",
+    message: { role: "user", content: message },
+    parent_tool_use_id: null,
+  });
+
+  // Send the queryId to the client immediately after SSE headers
+  sendEvent("query_ready", { queryId });
+
   // Track the resolved session ID (set in runQuery, used in finally for registry update)
   let resolvedSessionId = sessionId || null;
 
@@ -122,9 +141,12 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
     log("[Proxy] Starting query with cwd:", vaultPath, resumeSessionId ? `(resuming ${resumeSessionId})` : "(new session)");
 
     const response = query({
-      prompt: message,
+      prompt: inputController.iterable,
       options: buildQueryOptions(resumeSessionId),
     });
+
+    // Register in the query registry so /inject and /interrupt can find it
+    registerQuery(queryId, response, inputController, resumeSessionId);
 
     let messageCount = 0;
     let lastContent = "";
@@ -183,6 +205,7 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
           if (msg.subtype === "init" && msg.session_id) {
             currentSessionId = msg.session_id;
             resolvedSessionId = msg.session_id;
+            updateQuerySession(queryId, currentSessionId);
             log("[Proxy] Session ID:", currentSessionId);
             sendEvent("session", { sessionId: currentSessionId });
           }
@@ -279,6 +302,10 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
       sendEvent("error", { content: error.message || "Unknown error" });
     }
   } finally {
+    // Clean up query registry
+    removeQuery(queryId);
+    inputController.close();
+
     // Update session registry
     try {
       if (resolvedSessionId) {
@@ -322,6 +349,49 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
     }
     res.end();
   }
+});
+
+/**
+ * Inject a follow-up message into an active streaming query.
+ */
+router.post("/chat/:queryId/inject", (req, res) => {
+  const entry = getQuery(req.params.queryId);
+  if (!entry) return res.status(404).json({ error: "Query not found or expired" });
+
+  const { message } = req.body;
+  if (!message) return res.status(400).json({ error: "Message required" });
+
+  entry.inputController.push({
+    type: "user",
+    message: { role: "user", content: message },
+    parent_tool_use_id: null,
+  });
+
+  res.status(202).json({ status: "injected", queryId: req.params.queryId });
+});
+
+/**
+ * Interrupt an active streaming query.
+ */
+router.post("/chat/:queryId/interrupt", async (req, res) => {
+  const entry = getQuery(req.params.queryId);
+  if (!entry) return res.status(404).json({ error: "Query not found or expired" });
+
+  try {
+    await entry.query.interrupt();
+    res.status(202).json({ status: "interrupted", queryId: req.params.queryId });
+  } catch (err) {
+    logError("[Proxy] Interrupt failed:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Check whether a query is still active (for reconnection logic).
+ */
+router.get("/chat/:queryId/status", (req, res) => {
+  const entry = getQuery(req.params.queryId);
+  res.json({ active: !!entry, ...(entry && { sessionId: entry.sessionId }) });
 });
 
 export default router;
