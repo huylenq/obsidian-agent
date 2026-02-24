@@ -405,6 +405,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     if (success) {
       setStreaming(false);
       setLoading(false);
+      setError(null);
       clearQueue();
     }
   }, [plugin]);
@@ -580,6 +581,25 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
 
             case "error":
               setError(chunk.content || "Unknown error (no details from server)");
+              break;
+
+            case "interrupted":
+              // User-initiated interrupt — flush partial text and clean up silently
+              if (fullResponse && !/^compacted$/i.test(fullResponse.trim())) {
+                clearStreamingMessage();
+                addMessage({
+                  id: generateMessageId(),
+                  role: "assistant",
+                  content: fullResponse,
+                  timestamp: Date.now(),
+                });
+                fullResponse = "";
+              } else {
+                clearStreamingMessage();
+              }
+              setStreaming(false);
+              setLoading(false);
+              setError(null);
               break;
 
             case "done":
@@ -807,20 +827,20 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
             {copiedSessionId ? "copied!" : sessionId.slice(0, 8)}
           </span>
         )}
+        <button
+          className="claude-agent-new-chat-button clickable-icon"
+          onClick={handleNewChat}
+          disabled={isLoading}
+          title="New chat"
+        >+</button>
         {sessionId && (
           <button
-            className="claude-agent-done-button"
+            className="claude-agent-done-button clickable-icon"
             onClick={handleMarkDone}
             disabled={isLoading}
             title="Mark done"
           >&#10003;</button>
         )}
-        <button
-          className="claude-agent-new-chat-button"
-          onClick={handleNewChat}
-          disabled={isLoading}
-          title="New chat"
-        >+</button>
         <span
           className="claude-agent-view-location-toggle"
           onClick={handleViewLocationToggle}

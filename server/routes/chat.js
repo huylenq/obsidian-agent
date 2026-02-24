@@ -242,6 +242,9 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
               numTurns: msg.num_turns,
               totalCostUsd: msg.total_cost_usd,
             });
+          } else if (msg.subtype === "error_during_execution") {
+            // SDK emits this when query.interrupt() is called — not a real error
+            sendEvent("interrupted", {});
           } else if (msg.subtype?.startsWith("error")) {
             sendEvent("error", {
               content: msg.error_message || `Error: ${msg.subtype}`

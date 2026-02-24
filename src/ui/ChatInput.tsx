@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { App, setIcon, TFile, TFolder } from "obsidian";
+import { App, Platform, setIcon, TFile, TFolder } from "obsidian";
 import { MentionAutocomplete } from "./MentionAutocomplete";
 import { CommandAutocomplete } from "./CommandAutocomplete";
 import { searchVaultItems, FileSearchResult } from "@/utils/fileSearch";
@@ -298,7 +298,7 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
         }
       }
 
-      if (e.key === "Enter" && !e.shiftKey) {
+      if (e.key === "Enter" && !e.shiftKey && !Platform.isMobile) {
         e.preventDefault();
         handleSubmit();
       }

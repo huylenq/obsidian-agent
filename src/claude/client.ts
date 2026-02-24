@@ -2,7 +2,7 @@ import { ClaudeAgentSettings, ActiveFileContext, SelectionContext, RankedNote, S
 import { FileSearchResult } from "@/utils/fileSearch";
 
 export interface ChatResponse {
-  type: "text" | "tool_use" | "tool_result" | "error" | "done" | "session" | "compact_boundary" | "result" | "query_ready";
+  type: "text" | "tool_use" | "tool_result" | "error" | "done" | "session" | "compact_boundary" | "result" | "query_ready" | "interrupted";
   content: string;
   toolName?: string;
   toolUseId?: string;
@@ -260,6 +260,8 @@ export class ClaudeAgentClient {
         this.activeQueryId = data.queryId as string;
         console.log("[ClaudeAgentClient] Query ready, queryId:", data.queryId);
         return { type: "query_ready", content: "", queryId: data.queryId as string };
+      case "interrupted":
+        return { type: "interrupted", content: "" };
       case "session":
         // Store session ID for conversation continuity
         if (data.sessionId) {

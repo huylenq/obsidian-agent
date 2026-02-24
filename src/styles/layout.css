@@ -44,23 +44,6 @@
   font-style: italic;
 }
 
-.claude-agent-new-chat-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px;
-  background: transparent;
-  color: var(--text-muted);
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.claude-agent-new-chat-button:hover {
-  background-color: var(--background-modifier-hover);
-  color: var(--text-normal);
-}
-
 .claude-agent-new-chat-button:disabled {
   opacity: 0.3;
   cursor: not-allowed;
@@ -167,38 +150,15 @@
   color: var(--color-green);
 }
 
-.claude-agent-session-header .claude-agent-done-button {
+.claude-agent-session-header .claude-agent-new-chat-button {
   margin-left: auto;
   pointer-events: auto;
-  background: color-mix(in srgb, var(--text-muted) 15%, transparent);
-  border-radius: 50%;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  font-size: 0.75em;
-  line-height: 1;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.claude-agent-session-header .claude-agent-done-button:hover {
-  background-color: var(--color-green);
-  color: white;
-}
-
-.claude-agent-session-header .claude-agent-new-chat-button {
-  pointer-events: auto;
-  background: color-mix(in srgb, var(--text-muted) 15%, transparent);
-  border-radius: 50%;
-  width: 22px;
-  height: 22px;
-  padding: 0;
   font-size: 0.9em;
-  line-height: 1;
+}
+
+.claude-agent-session-header .claude-agent-done-button {
+  pointer-events: auto;
+  font-size: 0.75em;
 }
 
 
