@@ -892,8 +892,21 @@ export class ClaudeAgentChatView extends ItemView {
     const container = this.containerEl.children[1];
     container.empty();
 
+    // Add class to indicate if this view is in the main workspace (not sidebar)
+    // Used for mobile-specific styling (bottom padding when keyboard is hidden)
+    this.updateMainLeafClass();
+
     this.root = createRoot(container);
     this.root.render(<ChatContainer plugin={this.plugin} app={this.plugin.app} />);
+  }
+
+  /**
+   * Check if this leaf is in the root workspace (main area) vs sidebar.
+   * Adds/removes 'is-main-leaf' class on containerEl accordingly.
+   */
+  private updateMainLeafClass(): void {
+    const isMainLeaf = this.leaf.getRoot() === this.plugin.app.workspace.rootSplit;
+    this.containerEl.toggleClass("is-main-leaf", isMainLeaf);
   }
 
   async onClose(): Promise<void> {

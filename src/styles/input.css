@@ -9,9 +9,14 @@
   padding: 12px 16px;
 }
 
-/* Mobile: add bottom padding to clear Obsidian's navigation bar (main leaf only, not sidebar) */
+/* Mobile: add bottom padding to clear Obsidian's bottom navigation bar (main leaf only, not sidebar).
+   Remove padding when input is focused (keyboard visible, nav bar hidden). */
 .is-mobile .mod-root .claude-agent-input-area {
-  padding-bottom: 48px;
+  padding-bottom: 84px;
+}
+
+.is-mobile .mod-root .claude-agent-input-area:focus-within {
+  padding-bottom: 4px;
 }
 
 .claude-agent-input-container {
