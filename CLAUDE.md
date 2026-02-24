@@ -12,12 +12,15 @@ An Obsidian plugin that provides chat with your vault using Claude Agent SDK.
 │  Obsidian Plugin    │ ←───────────────→ │   Proxy Server      │
 │  (src/)             │                   │   (server/)         │
 │                     │                   │                     │
-│  - React UI         │                   │  - Express          │
-│  - Session mgmt     │                   │  - Claude Agent SDK │
+│  - React UI         │   POST /chat      │  - Express          │
+│  - Session mgmt     │   POST /inject    │  - Claude Agent SDK │
+│  - Message queue    │   POST /interrupt │  - Query Registry   │
 └─────────────────────┘                   └─────────────────────┘
 ```
 
 **Why a proxy?** Claude Agent SDK uses Node.js APIs incompatible with Obsidian's Electron environment.
+
+**Bidirectional communication:** SSE streams responses (server → client). Message injection and interruption use separate HTTP POST endpoints (client → server) targeting an active query by `queryId`.
 
 ## Connection Modes
 
@@ -64,12 +67,17 @@ The connection file has `{ url, authToken, timestamp }`. Files older than 24h ar
 - `server/log.js` - Logging utilities (`log()`, `logError()`)
 - `server/transcript.js` - Transcript & summary helpers (read/write JSONL, compact summaries)
 - `server/sessions.js` - Session registry helpers (load/save/update registry, transcript inspection)
-- `server/routes/health.js` - GET /health (unauthenticated)
-- `server/routes/chat.js` - POST /chat (SSE streaming, SDK query)
+- `server/asyncIterableController.js` - Pushable AsyncIterable for SDK streaming input
+- `server/queryRegistry.js` - In-memory map of active queries (queryId → Query + input controller)
+- `server/routes/health.js` - GET /health (unauthenticated, advertises `capabilities`)
+- `server/routes/chat.js` - POST /chat (SSE streaming, SDK query), POST /chat/:queryId/inject, POST /chat/:queryId/interrupt, GET /chat/:queryId/status
 - `server/routes/history.js` - POST /history (transcript parsing)
 - `server/routes/sessions.js` - GET/PATCH /sessions, POST /sessions/migrate
-- `src/claude/client.ts` - HTTP client with dynamic URL + auth, manages sessions
+- `src/claude/client.ts` - HTTP client with dynamic URL + auth, manages sessions, injects messages, interrupts queries
+- `src/state/chatState.ts` - Jotai atoms for messages, loading, streaming, error
+- `src/state/messageQueueState.ts` - Jotai atoms for injected message queue
 - `src/ui/ChatView.tsx` - React chat interface
+- `src/ui/ChatInput.tsx` - Input field with send/stop button, @mentions, /commands
 
 ## Running
 
@@ -217,6 +225,51 @@ Sessions are tracked via a central registry file (see `~/.claude/` section above
 - `src/state/sessionState.ts` — Jotai atoms
 - `src/ui/SessionsView.tsx` — Standalone ItemView (data fetching + rendering)
 - `src/ui/Sessions/SessionCard.tsx` — Card component
+
+## Streaming Input (Message Injection)
+
+Users can send messages while Claude is actively working. Messages are injected into the running SDK session mid-execution, enabling real-time steering.
+
+**Protocol:**
+
+```
+POST /chat         → opens SSE stream, sends query_ready { queryId }
+                     SDK query() receives AsyncIterable, not a string
+POST /chat/:queryId/inject    → pushes SDKUserMessage into the iterable → 202
+POST /chat/:queryId/interrupt → calls query.interrupt() → 202
+GET  /chat/:queryId/status    → { active: bool, sessionId? }
+```
+
+**Server-side flow:**
+1. `POST /chat` creates an `AsyncIterableController` and pushes the initial user message
+2. The iterable is passed to `query({ prompt: iterable })` — SDK consumes messages as they arrive
+3. The query + input controller are registered in `queryRegistry.js` keyed by `queryId`
+4. `/inject` pushes new messages into the controller; SDK processes them as follow-up turns
+5. `/interrupt` calls `query.interrupt()` to stop execution gracefully
+6. On query completion or SSE disconnect, the registry entry is cleaned up (30-min TTL fallback)
+
+**Client-side flow:**
+1. `ClaudeAgentClient.chat()` captures `queryId` from the `query_ready` SSE event
+2. `isQueryActive()` returns true while `queryId` is set
+3. `ChatView.handleSend()` checks `isQueryActive()` — if true, calls `injectMessage()` instead of starting a new query
+4. User message appears immediately in chat (optimistic UI); injection status tracked in `messageQueueState`
+5. `isStreamingAtom` controls the stop button; cleared on `result` event (turn complete), re-set on injection
+
+**Turn lifecycle with streaming input:**
+- SDK emits `result` (subtype `"success"`) when a turn completes — this is the "idle" signal
+- `done` only fires when the entire query closes (iterable exhausted or interrupted)
+- The SSE connection stays open between turns, allowing follow-up injections
+- Text flush and `setStreaming(false)` happen on `result`, not `done`
+
+**Stop button:** Replaces the send button in `ChatInput` when `isStreaming && !input.trim()`. When user types text, the send button reappears (to submit the injection). Uses a ref callback for the send icon to survive conditional remounting.
+
+**Key files:**
+- `server/asyncIterableController.js` — `{ iterable, push(value), close() }` utility
+- `server/queryRegistry.js` — `registerQuery()`, `getQuery()`, `removeQuery()`, `updateQuerySession()`
+- `server/routes/chat.js` — inject/interrupt/status endpoints
+- `src/claude/client.ts` — `injectMessage()`, `interrupt()`, `isQueryActive()`, `activeQueryId`
+- `src/state/messageQueueState.ts` — `addToQueue()`, `updateQueueStatus()`, `clearQueue()`
+- `src/state/chatState.ts` — `isStreamingAtom`, `setStreaming()`
 
 ## Slash Commands
 

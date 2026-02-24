@@ -345,7 +345,7 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
         />
         {isStreaming && !input.trim() ? (
           <button
-            className="claude-agent-interrupt-button"
+            className="claude-agent-interrupt-button clickable-icon"
             onClick={onInterrupt}
             aria-label="Stop"
           >
@@ -353,7 +353,7 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
           </button>
         ) : (
           <button
-            className="claude-agent-send-button"
+            className="claude-agent-send-button clickable-icon"
             onClick={handleSubmit}
             disabled={!input.trim()}
             aria-label="Send"

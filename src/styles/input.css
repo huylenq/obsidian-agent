@@ -56,52 +56,17 @@ textarea.claude-agent-input {
   border-color: var(--interactive-accent);
 }
 
-.claude-agent-send-button {
-  all: unset;
-  padding: 8px;
-  color: var(--text-muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-}
-
-.claude-agent-send-button:hover {
-  background-color: var(--background-modifier-hover);
-  color: var(--text-normal);
-}
-
-.claude-agent-send-button:disabled {
+.claude-agent-send-button.clickable-icon[disabled] {
   opacity: 0.3;
   cursor: not-allowed;
 }
 
-.claude-agent-send-button:disabled:hover {
-  background: transparent;
-  color: var(--text-muted);
-}
-
 /* Interrupt button — replaces send button when streaming */
 
-.claude-agent-interrupt-button {
-  padding: 8px;
-  border: none;
-  border-radius: 6px;
-  background: var(--text-error);
-  color: var(--text-on-accent);
+.claude-agent-interrupt-button.clickable-icon {
+  color: var(--text-error);
   font-size: 14px;
   line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.85;
-  transition: opacity 0.15s;
-}
-
-.claude-agent-interrupt-button:hover {
-  opacity: 1;
 }
 
 /* Footer controls */
