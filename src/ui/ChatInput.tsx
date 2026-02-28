@@ -20,6 +20,10 @@ interface ChatInputProps {
   onInterrupt?: () => void;
   app: App;
   onRef?: (handle: ChatInputHandle) => void;
+  hasContext?: boolean;
+  onClearContext?: () => void;
+  hasSelection?: boolean;
+  onClearSelection?: () => void;
 }
 
 interface MentionState {
@@ -88,7 +92,7 @@ function getCommandState(text: string): CommandState {
   return { isActive: true, query };
 }
 
-export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrupt, app, onRef }: ChatInputProps) {
+export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrupt, app, onRef, hasContext, onClearContext, hasSelection, onClearSelection }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [images, setImages] = useState<ImageAttachment[]>([]);
   const [mentionState, setMentionState] = useState<MentionState>({
@@ -311,6 +315,17 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
         }
       }
 
+      if (e.key === "Backspace" && !input) {
+        if (hasSelection && onClearSelection) {
+          onClearSelection();
+          return;
+        }
+        if (hasContext && onClearContext) {
+          onClearContext();
+          return;
+        }
+      }
+
       if (e.key === "Enter" && !e.shiftKey && !Platform.isMobile) {
         e.preventDefault();
         handleSubmit();
@@ -326,6 +341,11 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
       selectedIndex,
       handleSelect,
       handleSubmit,
+      input,
+      hasContext,
+      onClearContext,
+      hasSelection,
+      onClearSelection,
     ]
   );
 
@@ -378,13 +398,6 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-  }, []);
-
-  // ── OS file picker ──
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleAttachClick = useCallback(() => {
-    fileInputRef.current?.click();
   }, []);
 
   const handleFileInputChange = useCallback(
@@ -442,13 +455,6 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
         </div>
       )}
       <div className="claude-agent-input-container">
-        <button
-          className="claude-agent-attach-button clickable-icon"
-          onClick={handleAttachClick}
-          aria-label="Attach image"
-        >
-          <span ref={attachIconCallback} />
-        </button>
         <input
           ref={fileInputRef}
           type="file"

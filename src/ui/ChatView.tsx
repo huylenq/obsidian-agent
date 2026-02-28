@@ -63,6 +63,7 @@ function mapHistoryMessages(raw: Array<Record<string, unknown>>): ChatMessage[] 
     ...((msg.compactMetadata as CompactMetadata) && { compactMetadata: msg.compactMetadata as CompactMetadata }),
     ...((msg.toolBlocks as ToolBlock[]) && { toolBlocks: msg.toolBlocks as ToolBlock[] }),
     ...((msg.markerMetadata as MarkerMetadata) && { markerMetadata: msg.markerMetadata as MarkerMetadata }),
+    ...(Array.isArray(msg.images) && msg.images.length > 0 && { images: msg.images as ImageAttachment[] }),
   }));
 }
 
@@ -333,6 +334,19 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     return () => window.removeEventListener("claude-agent:refresh-sessions", handler);
   }, []);
 
+  // Listen for "session deleted" events from SessionsView — clear chat if active session was nuked
+  useEffect(() => {
+    const handleSessionDeleted = () => {
+      clearMessages();
+      setSessionId(null);
+      setSessionTitle(null);
+      setSessionType(null);
+      setSessionEpoch(null);
+    };
+    window.addEventListener("claude-agent:session-deleted", handleSessionDeleted);
+    return () => window.removeEventListener("claude-agent:session-deleted", handleSessionDeleted);
+  }, []);
+
   // Listen for "switch session" events from SessionsView
   useEffect(() => {
     const handleSwitchSession = async (event: CustomEvent<{ sessionId: string }>) => {
@@ -351,6 +365,9 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         }
       } catch (error) {
         console.warn("[ChatView] Failed to load session history:", error);
+      } finally {
+        // Signal that the switch (including history load) is complete
+        window.dispatchEvent(new CustomEvent("claude-agent:switch-session-done"));
       }
     };
 
@@ -436,7 +453,9 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
 
       // If query is active, inject into it instead of starting a new one.
       // Note: isStreaming may be false (turn finished) but queryId still alive.
-      if (plugin.claudeClient?.isQueryActive()) {
+      // Skip injection when sessionMeta is set — the message targets a specific session
+      // (e.g. flashcard explain → daily study session), not the currently active query.
+      if (plugin.claudeClient?.isQueryActive() && !sessionMeta) {
         // Show user message immediately
         addMessage({
           id: generateMessageId(),
@@ -922,6 +941,10 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           onInterrupt={handleInterrupt}
           app={app}
           onRef={setInputRef}
+          hasContext={showFileChip}
+          onClearContext={handleClearContext}
+          hasSelection={showSelectionChip}
+          onClearSelection={handleClearSelection}
         />
         <div className="claude-agent-input-footer">
           <span ref={brainIconRef} className="claude-agent-model-icon" />
@@ -943,6 +966,12 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
             <span ref={checkIconRef} className="claude-agent-include-notes-check" />
             Related
           </span>
+          <span
+            className="claude-agent-attach-button clickable-icon"
+            onClick={() => inputRef?.triggerAttach()}
+            title="Attach image"
+            ref={(el) => { if (el) setIcon(el, "paperclip"); }}
+          />
           <div className={`claude-agent-connection-status ${connectionStatus}`} title={
             connectionError || (connectionStatus === "connected" ? "Connected to server" : connectionStatus === "connecting" ? "Connecting..." : connectionStatus === "error" ? "Connection error" : "Disconnected")
           }>
