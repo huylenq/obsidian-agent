@@ -183,6 +183,21 @@ function SessionsContainer({ plugin, app }: SessionsContainerProps) {
     fetchSessions();
   };
 
+  const handleDeleteSession = async (sessionId: string) => {
+    if (!plugin.claudeClient) return;
+    const ok = await plugin.claudeClient.deleteSession(sessionId);
+    if (!ok) return;
+
+    // If we just nuked the active session, reset ChatView to new chat
+    if (sessionId === currentSessionId) {
+      plugin.claudeClient.clearSession();
+      window.dispatchEvent(new CustomEvent("claude-agent:session-deleted"));
+      setCurrentSessionId(null);
+    }
+
+    fetchSessions();
+  };
+
   return (
     <div className="claude-agent-sessions-standalone">
       <div className="claude-agent-sessions-toolbar">
@@ -243,6 +258,7 @@ function SessionsContainer({ plugin, app }: SessionsContainerProps) {
                 session.status === "done" ? "in_progress" : "done"
               )
             }
+            onDelete={() => handleDeleteSession(session.id)}
           />
         ))}
       </div>

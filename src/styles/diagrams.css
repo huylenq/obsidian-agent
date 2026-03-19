@@ -27,34 +27,53 @@
   filter: invert(0.88) hue-rotate(180deg);
 }
 
-/* Action buttons (Copy DOT / Copy SVG) */
-.claude-agent-dot-buttons {
+/* ── Shared copy-button style (code blocks, DOT, LaTeX) ──
+   All copy buttons use Obsidian's copy-code-button class for base styling.
+   We just override appearance for chat context. */
+
+/* Our chat isn't inside .markdown-rendered, so Obsidian's base
+   copy-code-button styles (position: absolute, etc.) don't apply.
+   We replicate them here. */
+.claude-agent-message .copy-code-button {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  display: flex;
-  gap: 4px;
+  top: 0;
+  right: 0;
+  margin: 6px;
+  padding: 6px 8px;
+  height: auto;
   opacity: 0;
   transition: opacity 0.15s;
+  background: var(--background-modifier-hover);
+  color: var(--text-muted);
+  border: none;
+  box-shadow: none;
 }
 
-.claude-agent-dot-diagram:hover .claude-agent-dot-buttons {
+.claude-agent-message .copy-code-button:hover {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+/* Show copy button on hover — code blocks, DOT diagrams, LaTeX */
+.claude-agent-message pre:hover > .copy-code-button,
+.claude-agent-dot-diagram:hover .copy-code-button,
+.claude-agent-math-block:hover .copy-code-button {
   opacity: 1;
 }
 
-.claude-agent-dot-btn {
-  padding: 4px 8px;
-  font-size: 11px;
-  border: none;
-  border-radius: 4px;
-  background-color: var(--background-modifier-hover);
-  color: var(--text-muted);
-  cursor: pointer;
+/* Copy-button group container (DOT, LaTeX, future snippets) */
+
+.claude-agent-copy-buttons {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  gap: 4px;
 }
 
-.claude-agent-dot-btn:hover {
-  background-color: var(--interactive-accent);
-  color: var(--text-on-accent);
+/* Override Obsidian's position: absolute on copy-code-button when inside our group */
+.claude-agent-copy-buttons .copy-code-button {
+  position: static;
 }
 
 /* Error state */
@@ -75,18 +94,8 @@
   opacity: 0.7;
 }
 
-/* LaTeX/MathJax - Click to copy LaTeX source */
+/* LaTeX/MathJax display-math wrapper (copy button host) */
 
-.claude-agent-message-content mjx-container {
-  pointer-events: auto !important;
-  cursor: pointer;
-}
-
-.claude-agent-message-content mjx-container * {
-  pointer-events: auto !important;
-}
-
-.claude-agent-message-content .katex {
-  pointer-events: auto !important;
-  cursor: pointer;
+.claude-agent-math-block {
+  position: relative;
 }

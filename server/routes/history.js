@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { existsSync, readFileSync } from "fs";
 import { log, logError } from "../log.js";
-import { getTranscriptPath, getSummariesPath, extractTextFromEntry, loadSummaries } from "../transcript.js";
+import { getTranscriptPath, getSummariesPath, extractTextFromEntry, extractImagesFromEntry, loadSummaries } from "../transcript.js";
 import { getMarkersPath, loadMarkers } from "../markers.js";
 import { computeToolDescription, formatToolInput, extractToolResultContent } from "../toolFormat.js";
 
@@ -131,16 +131,18 @@ router.post("/history", (req, res) => {
 
           // Regular user message
           const textContent = extractTextFromEntry(entry);
-          if (!textContent) continue;
+          const images = extractImagesFromEntry(entry);
+          if (!textContent && images.length === 0) continue;
 
           // Filter compaction artifacts
-          if (/^\/compact\b/.test(textContent.trim())) continue;
-          if (textContent.includes("<local-command-caveat>")) continue;
+          if (textContent && /^\/compact\b/.test(textContent.trim())) continue;
+          if (textContent && textContent.includes("<local-command-caveat>")) continue;
 
           messages.push({
             role: "user",
             content: textContent,
             timestamp: entry.timestamp || Date.now(),
+            ...(images.length > 0 && { images }),
           });
         }
       } catch (parseError) {

@@ -33,6 +33,22 @@ export function extractTextFromEntry(entry) {
   return "";
 }
 
+/**
+ * Extract image content blocks from a transcript entry.
+ * Returns an array of { data, mediaType, name? } or empty array.
+ */
+export function extractImagesFromEntry(entry) {
+  if (!entry.message) return [];
+  const msg = typeof entry.message === "string" ? JSON.parse(entry.message) : entry.message;
+  if (!Array.isArray(msg?.content)) return [];
+  return msg.content
+    .filter(block => block.type === "image" && block.source?.type === "base64")
+    .map(block => ({
+      data: block.source.data,
+      mediaType: block.source.media_type,
+    }));
+}
+
 /** Read user/assistant messages from the latest segment (after last compact_boundary) */
 export function readLatestSegmentMessages(transcriptPath) {
   if (!existsSync(transcriptPath)) return [];

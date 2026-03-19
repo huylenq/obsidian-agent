@@ -68,7 +68,9 @@
 .claude-agent-message pre {
   white-space: pre-wrap;
   word-wrap: break-word;
+  position: relative;
 }
+
 
 /* Inline code: allow wrapping */
 .claude-agent-message code:not(pre code) {

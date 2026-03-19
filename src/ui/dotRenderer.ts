@@ -1,4 +1,5 @@
 import type { Viz } from "@viz-js/viz";
+import { createCopyButton, createCopyButtonGroup } from "./copyButtons";
 
 let vizInstance: Viz | null = null;
 
@@ -42,31 +43,8 @@ export async function renderDotBlocks(container: HTMLElement): Promise<void> {
       // No JS color manipulation — dark mode handled via CSS filter
       wrapper.appendChild(svg);
 
-      // Action buttons
-      const btnGroup = document.createElement("div");
-      btnGroup.className = "claude-agent-dot-buttons";
-
-      const copyDotBtn = document.createElement("button");
-      copyDotBtn.className = "claude-agent-dot-btn";
-      copyDotBtn.textContent = "Copy DOT";
-      copyDotBtn.addEventListener("click", () => {
-        navigator.clipboard.writeText(dotSource);
-        copyDotBtn.textContent = "Copied!";
-        setTimeout(() => (copyDotBtn.textContent = "Copy DOT"), 1500);
-      });
-
-      const copySvgBtn = document.createElement("button");
-      copySvgBtn.className = "claude-agent-dot-btn";
-      copySvgBtn.textContent = "Copy SVG";
-      copySvgBtn.addEventListener("click", () => {
-        const svgMarkup = new XMLSerializer().serializeToString(svg);
-        navigator.clipboard.writeText(svgMarkup);
-        copySvgBtn.textContent = "Copied!";
-        setTimeout(() => (copySvgBtn.textContent = "Copy SVG"), 1500);
-      });
-
-      btnGroup.append(copyDotBtn, copySvgBtn);
-      wrapper.appendChild(btnGroup);
+      // Copy DOT source button
+      wrapper.appendChild(createCopyButtonGroup(createCopyButton(() => dotSource)));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       wrapper.classList.add("dot-error");

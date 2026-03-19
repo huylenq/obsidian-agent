@@ -200,6 +200,20 @@
   text-transform: lowercase;
 }
 
+.claude-agent-session-delete {
+  opacity: 0;
+  color: var(--text-muted);
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.claude-agent-session-card:hover .claude-agent-session-delete {
+  opacity: 1;
+}
+
+.claude-agent-session-delete:hover {
+  color: var(--text-error);
+}
+
 /* File chips on session cards */
 
 .claude-agent-session-card-files {

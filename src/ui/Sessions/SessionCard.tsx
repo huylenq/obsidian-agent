@@ -7,20 +7,28 @@ interface SessionCardProps {
   isActive: boolean;
   onSwitch: () => void;
   onToggleStatus: () => void;
+  onDelete: () => void;
 }
 
-export function SessionCard({ session, isActive, onSwitch, onToggleStatus }: SessionCardProps) {
+export function SessionCard({ session, isActive, onSwitch, onToggleStatus, onDelete }: SessionCardProps) {
   const isDone = session.status === "done";
   const dateStr = formatRelativeDate(session.updatedAt);
 
   const isFlashcard = session.type === "flashcard_study";
   const typeIconRef = useRef<HTMLSpanElement>(null);
+  const deleteIconRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     if (isFlashcard && typeIconRef.current) {
       setIcon(typeIconRef.current, "book-open");
     }
   }, [isFlashcard]);
+
+  useEffect(() => {
+    if (deleteIconRef.current) {
+      setIcon(deleteIconRef.current, "trash-2");
+    }
+  }, []);
 
   return (
     <div className={`claude-agent-session-card ${isActive ? "active" : ""}`}>
@@ -46,6 +54,15 @@ export function SessionCard({ session, isActive, onSwitch, onToggleStatus }: Ses
         <div className="claude-agent-session-card-meta">
           <span className="claude-agent-session-card-date">{dateStr}</span>
           <span className="claude-agent-session-card-model">{session.model}</span>
+          <span
+            ref={deleteIconRef}
+            className="claude-agent-session-delete clickable-icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            title="Delete session"
+          />
         </div>
       </div>
       {session.files.length > 0 && (

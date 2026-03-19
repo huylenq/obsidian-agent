@@ -406,6 +406,23 @@ export class ClaudeAgentClient {
   }
 
   /**
+   * Delete a session and all associated files.
+   * Returns true if deletion succeeded.
+   */
+  async deleteSession(sessionId: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.proxyUrl}/sessions/${sessionId}`, {
+        method: "DELETE",
+        headers: this.getHeaders(),
+      });
+      return response.ok;
+    } catch (error) {
+      console.warn("[ClaudeAgentClient] Error deleting session:", error);
+      return false;
+    }
+  }
+
+  /**
    * Trigger one-time migration of JSONL files to registry
    */
   async migrateSessionRegistry(): Promise<number> {

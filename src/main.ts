@@ -70,6 +70,8 @@ export default class ClaudeAgentPlugin extends Plugin {
   private isHandlingFlashcard = false;
   /** Content-based dedup: tracks flashcard prompts already sent in this plugin lifecycle */
   private sentFlashcardPrompts = new Set<string>();
+  /** Tracks the epoch of the most recently dispatched flashcard session (guards TOCTOU race with registry) */
+  private pendingFlashcardEpoch: string | null = null;
 
   // Promise that resolves when initialization is complete
   initializationPromise: Promise<void> | null = null;
@@ -153,6 +155,7 @@ export default class ClaudeAgentPlugin extends Plugin {
           this.claudeClient.clearSession();
         }
         this.sentFlashcardPrompts.clear();
+        this.pendingFlashcardEpoch = null;
         new Notice("New chat started");
       },
     });
@@ -231,10 +234,22 @@ export default class ClaudeAgentPlugin extends Plugin {
           const ensureTargetSession = async () => {
             if (targetSessionId && currentSessionId !== targetSessionId) {
               console.log("[FC-dedup] switching session:", currentSessionId, "→", targetSessionId);
+              const switchDone = new Promise<void>(resolve => {
+                const handler = () => {
+                  window.removeEventListener('claude-agent:switch-session-done', handler);
+                  resolve();
+                };
+                window.addEventListener('claude-agent:switch-session-done', handler);
+                // Safety timeout in case the event never fires
+                setTimeout(() => {
+                  window.removeEventListener('claude-agent:switch-session-done', handler);
+                  resolve();
+                }, 3000);
+              });
               window.dispatchEvent(new CustomEvent('claude-agent:switch-session', {
                 detail: { sessionId: targetSessionId },
               }));
-              await new Promise(resolve => setTimeout(resolve, 300));
+              await switchDone;
             }
           };
 
@@ -297,6 +312,9 @@ export default class ClaudeAgentPlugin extends Plugin {
 
           // Mark as sent BEFORE dispatching to prevent duplicates during streaming
           this.sentFlashcardPrompts.add(dedupKey);
+          // Track pending epoch so resolveFlashcardSession can find this session
+          // before the registry is updated (TOCTOU guard)
+          this.pendingFlashcardEpoch = epoch;
           console.log("[FC-dedup] added to sentPrompts, new size:", this.sentFlashcardPrompts.size);
 
           window.dispatchEvent(new CustomEvent('claude-agent:send-message', {
@@ -397,16 +415,33 @@ export default class ClaudeAgentPlugin extends Plugin {
   /**
    * Find an existing in_progress flashcard_study session for the given epoch (today).
    * Returns the session ID if found, null otherwise.
+   *
+   * Handles TOCTOU race: the registry is only updated with type/epoch in the
+   * `finally` block of POST /chat. If a second explain arrives before the first
+   * chat completes, the registry query returns nothing. We fall back to the
+   * current session if we recently dispatched a flashcard request for this epoch.
    */
   private async resolveFlashcardSession(epoch: string): Promise<string | null> {
     if (!this.claudeClient) return null;
+
+    // Check server registry first (authoritative once updated)
     const sessions = await this.claudeClient.fetchSessionsByType("flashcard_study", epoch);
-    return sessions.length > 0 ? sessions[0].id : null;
+    if (sessions.length > 0) return sessions[0].id;
+
+    // Fallback: registry not yet updated — use current session if we dispatched
+    // a flashcard request for this same epoch
+    const currentId = this.claudeClient.getSessionId();
+    if (currentId && this.pendingFlashcardEpoch === epoch) {
+      console.log("[FC-resolve] registry miss, using pending session:", currentId);
+      return currentId;
+    }
+
+    return null;
   }
 
   private buildFlashcardExplainPrompt(question: string, answer: string, context: string, siblingCards: string[]): string {
     // Preamble sections go BEFORE **Question:** so parseFlashcardContent regex ignores them
-    let preamble = "Explain this flashcard. Giving the relevant connections from this Obsidian vault.\nThe question gives context, elaborate on the answer to help understand the fact intuitively. Focus on the terminologies in the answer.";
+    let preamble = "Explain this flashcard in the style of Andrej Karpathy — build understanding from first principles. Start from something the reader already knows, layer up to the answer so the 'aha' feels inevitable. Use concrete analogies and simple examples to make abstract ideas tangible. Unpack key terminologies so they *click*, not just stick. Keep it concise — if a 3-sentence explanation nails it, don't write 10. Connect to relevant notes in this Obsidian vault where possible.";
 
     if (siblingCards.length > 0) {
       preamble += `\n\nOther flashcards under the same heading (for context, don't explain these):\n${siblingCards.map(c => `- ${c}`).join("\n")}`;

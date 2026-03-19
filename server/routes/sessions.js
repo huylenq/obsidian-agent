@@ -8,6 +8,7 @@ import {
   loadRegistry,
   saveRegistry,
   updateSessionEntry,
+  deleteSession,
   isWarmupTranscript,
   extractTitleFromTranscript,
   extractFilePathsFromTranscript,
@@ -91,6 +92,23 @@ router.patch("/sessions/:sessionId", (req, res) => {
   } catch (error) {
     logError("[Proxy] Error updating session:", error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Delete a session and all associated files
+ */
+router.delete("/sessions/:sessionId", (req, res) => {
+  const { sessionId } = req.params;
+  const vaultPath = req.vaultPath;
+
+  try {
+    deleteSession(vaultPath, sessionId);
+    log(`[Proxy] Deleted session ${sessionId}`);
+    res.json({ deleted: true });
+  } catch (error) {
+    logError("[Proxy] Error deleting session:", error);
+    res.status(error.message?.includes("not found") ? 404 : 500).json({ error: error.message });
   }
 });
 

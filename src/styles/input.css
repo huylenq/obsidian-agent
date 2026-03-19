@@ -225,8 +225,15 @@ textarea.claude-agent-input {
   opacity: 0.85;
 }
 
-/* Attach button (paperclip icon) */
+/* Attach button (paperclip icon in footer row) */
 
 .claude-agent-attach-button.clickable-icon {
-  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  color: var(--text-faint);
+}
+
+.claude-agent-attach-button.clickable-icon svg {
+  width: 12px;
+  height: 12px;
 }

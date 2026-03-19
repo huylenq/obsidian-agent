@@ -235,8 +235,22 @@ export function ChatMessages({ pendingScrollFlashcardId, onScrollComplete }: Cha
   const isLoading = useAtomValue(isLoadingAtom, { store: chatStore });
   const error = useAtomValue(errorAtom, { store: chatStore });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isNearBottomRef = useRef(true);
 
   const groups = useMemo(() => groupMessagesByBoundary(messages), [messages]);
+
+  // Track whether user is scrolled near the bottom
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      isNearBottomRef.current = scrollHeight - scrollTop - clientHeight < 80;
+    };
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, []);
 
   // Collapsed state: all compacted groups start collapsed
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
@@ -253,9 +267,11 @@ export function ChatMessages({ pendingScrollFlashcardId, onScrollComplete }: Cha
     });
   };
 
-  // Auto-scroll to bottom when messages change
+  // Auto-scroll to bottom when messages change, only if user is near bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (isNearBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, streamingMessage]);
 
   // Scroll to existing flashcard marker (dedup)
@@ -294,7 +310,7 @@ export function ChatMessages({ pendingScrollFlashcardId, onScrollComplete }: Cha
   }
 
   return (
-    <div className="claude-agent-messages">
+    <div className="claude-agent-messages" ref={containerRef}>
       {groups.map((group, groupIndex) => {
         const isCompact = !!group.boundary;
         const isCollapsed = isCompact && !expandedGroups.has(groupIndex);

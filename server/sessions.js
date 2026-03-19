@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, writeFileSync, mkdirSync } from "fs";
+import { readFileSync, existsSync, writeFileSync, mkdirSync, unlinkSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 import { encodePath, extractTextFromEntry } from "./transcript.js";
@@ -58,6 +58,28 @@ export function updateSessionEntry(workingDirectory, sessionId, updates) {
 
   saveRegistry(workingDirectory, registry);
   return entry;
+}
+
+/** Delete a session: remove from registry and nuke all associated files */
+export function deleteSession(workingDirectory, sessionId) {
+  const registry = loadRegistry(workingDirectory);
+  const idx = registry.sessions.findIndex(s => s.id === sessionId);
+  if (idx === -1) throw new Error(`Session ${sessionId} not found in registry`);
+
+  registry.sessions.splice(idx, 1);
+  saveRegistry(workingDirectory, registry);
+
+  // Nuke transcript + sidecars
+  const projectDir = join(homedir(), ".claude", "projects", encodePath(workingDirectory));
+  const files = [
+    `${sessionId}.jsonl`,
+    `${sessionId}.summaries.json`,
+    `${sessionId}.markers.json`,
+  ];
+  for (const f of files) {
+    const p = join(projectDir, f);
+    if (existsSync(p)) unlinkSync(p);
+  }
 }
 
 /** Collect vault-relative file paths from chat request body */

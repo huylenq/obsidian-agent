@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useCallback } from "react";
 import { MarkdownRenderer, Component, App } from "obsidian";
 import { renderDotBlocks } from "./dotRenderer";
+import { attachLatexCopyButtons } from "./copyButtons";
 
 // Obsidian exposes `app` as a global
 declare const app: App;
@@ -57,7 +58,10 @@ export function MarkdownContent({ content, className }: MarkdownContentProps) {
       "",
       componentRef.current
     ).then(() => {
-      if (!cancelled) renderDotBlocks(container);
+      if (!cancelled) {
+        renderDotBlocks(container);
+        attachLatexCopyButtons(container, content);
+      }
     });
 
     return () => {

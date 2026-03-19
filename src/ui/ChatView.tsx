@@ -961,7 +961,10 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           </select>
           <span
             className={`claude-agent-include-notes-toggle ${includeRelevantNotes ? "active" : ""}`}
-            onClick={() => !isLoading && handleIncludeNotesChange(!includeRelevantNotes)}
+            onClick={() => {
+              console.log("[Related toggle] clicked, isLoading:", isLoading, "current:", includeRelevantNotes);
+              if (!isLoading) handleIncludeNotesChange(!includeRelevantNotes);
+            }}
           >
             <span ref={checkIconRef} className="claude-agent-include-notes-check" />
             Related
