@@ -38,6 +38,7 @@ export interface ChatMessage {
   compactMetadata?: CompactMetadata;
   markerMetadata?: MarkerMetadata;
   images?: ImageAttachment[];
+  selectionContext?: Pick<SelectionContext, "fileName" | "startLine" | "endLine">;
 }
 
 export interface ActiveFileContext {

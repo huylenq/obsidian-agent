@@ -450,6 +450,9 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         ? { path: flashcardMeta.sourceFile, name: flashcardMeta.sourceFile.split("/").pop() || "", extension: "md" }
         : isContextCleared ? undefined : activeFile;
       const selectionContext = selection;
+      const msgSelection = selectionContext
+        ? { fileName: selectionContext.fileName, startLine: selectionContext.startLine, endLine: selectionContext.endLine }
+        : undefined;
 
       // If query is active, inject into it instead of starting a new one.
       // Note: isStreaming may be false (turn finished) but queryId still alive.
@@ -463,6 +466,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           content: message,
           timestamp: Date.now(),
           ...(images?.length && { images }),
+          ...(msgSelection && { selectionContext: msgSelection }),
         });
 
         // Inject into active query — re-show stop button
@@ -494,6 +498,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
               question: flashcardMeta.question,
             },
           }),
+          ...(msgSelection && { selectionContext: msgSelection }),
         });
       }
 

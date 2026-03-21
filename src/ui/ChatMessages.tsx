@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import { setIcon } from "obsidian";
 import { useAtomValue } from "jotai";
 import {
   messagesAtom,
@@ -193,6 +194,18 @@ function MessageBubble({ message, markerMetadata }: { message: ChatMessage; mark
     }
   }
 
+  const sel = message.selectionContext;
+  const selLabel = sel
+    ? `${sel.fileName}${
+        sel.startLine !== undefined
+          ? sel.startLine === sel.endLine ? ` L${sel.startLine}` : ` L${sel.startLine}-${sel.endLine}`
+          : ""
+      }`
+    : null;
+  const selIconRef = useCallback((el: HTMLSpanElement | null) => {
+    if (el) setIcon(el, "text-select");
+  }, []);
+
   return (
     <div
       className={`claude-agent-message ${message.role} ${message.toolName ? "tool-call" : ""}`}
@@ -207,6 +220,12 @@ function MessageBubble({ message, markerMetadata }: { message: ChatMessage; mark
               alt={img.name || "attached image"}
             />
           ))}
+        </div>
+      )}
+      {selLabel && (
+        <div className="claude-agent-selection-label">
+          <span ref={selIconRef} />
+          {selLabel}
         </div>
       )}
       {message.toolName && (
