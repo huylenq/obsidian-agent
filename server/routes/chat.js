@@ -28,6 +28,16 @@ function resolveNodeBinary() {
 const router = Router();
 
 /**
+ * Map UI model aliases to explicit model IDs for 1M context support.
+ * Opus 4.6 and Sonnet 4.6 have native 1M context windows.
+ */
+const MODEL_ID_MAP = {
+  haiku: "claude-haiku-4-5",
+  sonnet: "claude-sonnet-4-6",
+  opus: "claude-opus-4-6",
+};
+
+/**
  * Chat endpoint - streams responses via SSE
  * Uses MCP servers configured in ~/.claude/ or vault's .claude/
  */
@@ -138,16 +148,22 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
   // Track the resolved session ID (set in runQuery, used in finally for registry update)
   let resolvedSessionId = sessionId || null;
 
-  const buildQueryOptions = (resumeSessionId) => ({
-    model: model || "haiku",
-    systemPrompt: buildSystemPrompt(),
-    permissionMode: "bypassPermissions",
-    maxTurns: 100,
-    settingSources: ["user", "project", "local"],
-    cwd: vaultPath,
-    executable: resolveNodeBinary(),
-    ...(resumeSessionId && { resume: resumeSessionId }),
-  });
+  const buildQueryOptions = (resumeSessionId) => {
+    // Resolve alias to explicit model ID for 1M context support
+    const modelAlias = model || "haiku";
+    const modelId = MODEL_ID_MAP[modelAlias] || modelAlias;
+
+    return {
+      model: modelId,
+      systemPrompt: buildSystemPrompt(),
+      permissionMode: "bypassPermissions",
+      maxTurns: 100,
+      settingSources: ["user", "project", "local"],
+      cwd: vaultPath,
+      executable: resolveNodeBinary(),
+      ...(resumeSessionId && { resume: resumeSessionId }),
+    };
+  };
 
   const runQuery = async (resumeSessionId) => {
     log("[Proxy] Starting query with cwd:", vaultPath, resumeSessionId ? `(resuming ${resumeSessionId})` : "(new session)");
