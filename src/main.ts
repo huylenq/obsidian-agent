@@ -6,7 +6,7 @@ import { RelevantNotesView, RELEVANT_NOTES_VIEW_TYPE } from "./ui/RelevantNotesV
 import { SessionsView, SESSIONS_VIEW_TYPE } from "./ui/SessionsView";
 import { GraphView, GRAPH_VIEW_TYPE } from "./ui/GraphView";
 import { ClaudeAgentClient } from "./claude/client";
-import { CopilotIndexReader, rankNotes } from "./embeddings";
+import { AgentIndexClient, rankNotes } from "./embeddings";
 import type { RankedNote } from "./types";
 import { setConnectionStatus, setConnectionError } from "./state/connectionState";
 
@@ -62,7 +62,7 @@ function getConnectionConfig(settings: ClaudeAgentSettings, isMobile: boolean): 
 export default class ClaudeAgentPlugin extends Plugin {
   settings: ClaudeAgentSettings = DEFAULT_SETTINGS;
   claudeClient: ClaudeAgentClient | null = null;
-  vectorStore: CopilotIndexReader | null = null;
+  vectorStore: AgentIndexClient | null = null;
   /** The resolved connection URL (may come from auto-discovery or settings) */
   activeConnectionUrl: string | null = null;
   private serverProcess: import("child_process").ChildProcess | null = null;
@@ -87,8 +87,8 @@ export default class ClaudeAgentPlugin extends Plugin {
     // initializationPromise is assigned, causing "client not initialized" errors.
     this.initializationPromise = this.initializeClient();
 
-    // Fire-and-forget vector store init for flashcard enrichment
-    this.initVectorStore();
+    // Init vector store after client is ready (needs proxyUrl)
+    this.initializationPromise.then(() => this.initVectorStore());
 
     // Register the chat view
     this.registerView(CHAT_VIEW_TYPE, (leaf) => new ClaudeAgentChatView(leaf, this));
@@ -347,9 +347,13 @@ export default class ClaudeAgentPlugin extends Plugin {
   }
 
   private async initVectorStore(): Promise<void> {
-    const reader = new CopilotIndexReader(this.app);
-    if (await reader.initialize()) {
-      this.vectorStore = reader;
+    if (!this.claudeClient) return;
+    const client = new AgentIndexClient(
+      this.claudeClient.proxyUrl,
+      this.claudeClient.authToken
+    );
+    if (await client.initialize()) {
+      this.vectorStore = client;
       console.log("[ClaudeAgent] Vector store initialized for flashcard enrichment");
     }
   }
@@ -456,8 +460,8 @@ export default class ClaudeAgentPlugin extends Plugin {
     return prompt;
   }
 
-  /** ∆ question?:: answer */
-  private static FLASHCARD_LINE_RE = /^(\s*)(∆)(\s)(.+?)(\?::)(\s*)(.+)$/;
+  /** ∆ question?:: answer — also matches bullet list items (- ∆, * ∆, + ∆) */
+  private static FLASHCARD_LINE_RE = /^(\s*(?:[-*+]\s+)?)(∆)(\s)(.+?)(\?::)(\s*)(.+)$/;
 
   /**
    * Extract the Anki card ID from the vault file's <!--ID: \d+--> comment.

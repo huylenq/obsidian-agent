@@ -17,7 +17,7 @@ import {
 } from "@/state/relevantNotesState";
 import type { SearchMode, ActiveFileContext, RelevantNote } from "@/types";
 import { RelevantNoteCard } from "./RelevantNotes/RelevantNoteCard";
-import { CopilotIndexReader, rankNotes } from "@/embeddings";
+import { AgentIndexClient, rankNotes } from "@/embeddings";
 import type ClaudeAgentPlugin from "@/main";
 
 export const RELEVANT_NOTES_VIEW_TYPE = "claude-agent-relevant-notes";
@@ -34,22 +34,24 @@ function RelevantNotesContainer({ plugin, app }: RelevantNotesContainerProps) {
   const indexAvailable = useAtomValue(indexAvailableAtom, { store: chatStore });
   const error = useAtomValue(relevantNotesErrorAtom, { store: chatStore });
 
-  const indexReaderRef = useRef<CopilotIndexReader | null>(null);
+  const indexClientRef = useRef<AgentIndexClient | null>(null);
   const [activeFile, setActiveFile] = useState<ActiveFileContext | undefined>(undefined);
 
-  // Initialize Copilot index reader
+  // Initialize index client (connects to server)
   useEffect(() => {
+    if (!plugin.claudeClient) return;
+    const { proxyUrl, authToken } = plugin.claudeClient;
     const initIndex = async () => {
-      const reader = new CopilotIndexReader(app);
-      const success = await reader.initialize();
-      indexReaderRef.current = reader;
+      const client = new AgentIndexClient(proxyUrl, authToken);
+      const success = await client.initialize();
+      indexClientRef.current = client;
       setIndexAvailable(success);
       if (success) {
-        console.log("[RelevantNotesView] Copilot index loaded successfully");
+        console.log("[RelevantNotesView] Index server connected");
       }
     };
     initIndex();
-  }, [app]);
+  }, [plugin.claudeClient]);
 
   // Get current active file
   const getActiveFileContext = useCallback((): ActiveFileContext | undefined => {
@@ -79,7 +81,7 @@ function RelevantNotesContainer({ plugin, app }: RelevantNotesContainerProps) {
 
   // Search for relevant notes
   const searchRelevantNotes = useCallback(async () => {
-    const reader = indexReaderRef.current;
+    const reader = indexClientRef.current;
     if (!reader || !reader.isInitialized()) return;
 
     setSearchingNotes(true);
@@ -141,7 +143,7 @@ function RelevantNotesContainer({ plugin, app }: RelevantNotesContainerProps) {
     return (
       <div className="claude-agent-relevant-notes-standalone">
         <div className="claude-agent-relevant-notes-empty">
-          Copilot index not found. Install and enable obsidian-copilot to use this feature.
+          Index not available. Make sure the server is running and OPENAI_API_KEY is set.
         </div>
       </div>
     );

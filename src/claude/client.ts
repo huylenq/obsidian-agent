@@ -29,8 +29,8 @@ export interface ChatResponse {
 export class ClaudeAgentClient {
   private settings: ClaudeAgentSettings;
   private vaultPath: string;
-  private proxyUrl: string;
-  private authToken?: string;
+  readonly proxyUrl: string;
+  readonly authToken?: string;
   private activeQueryId: string | null = null;
   private onSessionChange: ((sessionId: string | null) => void) | null = null;
 

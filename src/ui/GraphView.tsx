@@ -24,7 +24,7 @@ import {
   updatePinnedNodeConfig,
 } from "@/state/graphViewState";
 import type { GraphNode, GraphViewSettings, ActiveFileContext } from "@/types";
-import { CopilotIndexReader } from "@/embeddings";
+import { AgentIndexClient } from "@/embeddings";
 import { buildGraph } from "@/graph/buildGraph";
 import { GraphCanvas } from "./GraphView/GraphCanvas";
 import { GraphControls } from "./GraphView/GraphControls";
@@ -45,7 +45,7 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
   const error = useAtomValue(graphErrorAtom, { store: chatStore });
   const indexAvailable = useAtomValue(graphIndexAvailableAtom, { store: chatStore });
 
-  const indexReaderRef = useRef<CopilotIndexReader | null>(null);
+  const indexClientRef = useRef<AgentIndexClient | null>(null);
   const activeFileRef = useRef<ActiveFileContext | undefined>(undefined);
   const [activeFile, setActiveFile] = useState<ActiveFileContext | undefined>(undefined);
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null);
@@ -56,16 +56,18 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
     setGraphSettings(plugin.settings.graphSettings);
   }, []);
 
-  // Initialize Copilot index reader
+  // Initialize index client (connects to server)
   useEffect(() => {
+    if (!plugin.claudeClient) return;
+    const { proxyUrl, authToken } = plugin.claudeClient;
     const init = async () => {
-      const reader = new CopilotIndexReader(app);
-      const success = await reader.initialize();
-      indexReaderRef.current = reader;
+      const client = new AgentIndexClient(proxyUrl, authToken);
+      const success = await client.initialize();
+      indexClientRef.current = client;
       setGraphIndexAvailable(success);
     };
     init();
-  }, [app]);
+  }, [plugin.claudeClient]);
 
   // Track active file
   const getActiveFileContext = useCallback((): ActiveFileContext | undefined => {
@@ -103,7 +105,7 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
       const data = await buildGraph(
         file.path,
         app,
-        indexReaderRef.current,
+        indexClientRef.current,
         chatStore.get(graphSettingsAtom),
       );
       setGraphData(data);
@@ -243,7 +245,7 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
 
         {!indexAvailable && (
           <div className="claude-agent-graph-notice">
-            Copilot index unavailable — showing link-only graph
+            Index unavailable — showing link-only graph
           </div>
         )}
       </div>

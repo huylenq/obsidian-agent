@@ -3,7 +3,7 @@
  */
 
 import type { App } from "obsidian";
-import type { CopilotIndexReader } from "@/embeddings";
+import type { IIndexClient } from "@/embeddings";
 import type { GraphNode, GraphEdge, GraphData, GraphViewSettings, PinnedNodeConfig } from "@/types";
 
 const MAX_NODES = 200;
@@ -31,18 +31,6 @@ function titleFromPath(path: string): string {
   const parts = path.split("/");
   const filename = parts[parts.length - 1];
   return filename.replace(/\.md$/, "");
-}
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) return 0;
-  let dot = 0, normA = 0, normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  const mag = Math.sqrt(normA) * Math.sqrt(normB);
-  return mag === 0 ? 0 : dot / mag;
 }
 
 /**
@@ -152,21 +140,24 @@ function discoverLinkEdges(
  */
 async function discoverCenterSimilarity(
   centerPath: string,
-  indexReader: CopilotIndexReader,
+  indexClient: IIndexClient,
   nodes: Map<string, GraphNode>,
   edges: Map<string, GraphEdge>,
   settings: GraphViewSettings,
 ): Promise<void> {
-  const similarNotes = await indexReader.searchSimilarToPath(centerPath, {
+  const similarNotes = await indexClient.searchSimilarToPath(centerPath, {
     minSimilarity: settings.similarityThreshold,
     limit: settings.maxSimilarityEdges,
   });
+
+  // If we got results, the center path is in the index
+  const centerNode = nodes.get(centerPath);
+  if (centerNode) centerNode.inVectorIndex = similarNotes.length > 0;
 
   for (const note of similarNotes) {
     if (nodes.has(note.path)) {
       nodes.get(note.path)!.inVectorIndex = true;
     } else if (nodes.size < MAX_NODES) {
-      // Similarity-only node at periphery
       nodes.set(note.path, {
         id: note.path,
         title: note.title || titleFromPath(note.path),
@@ -187,13 +178,6 @@ async function discoverCenterSimilarity(
         weight: note.similarity,
       });
     }
-  }
-
-  // Mark center node
-  const centerNode = nodes.get(centerPath);
-  if (centerNode) {
-    const embedding = await indexReader.getEmbeddingForPath(centerPath);
-    centerNode.inVectorIndex = embedding !== null;
   }
 }
 
@@ -266,7 +250,7 @@ function bfsPinnedNodes(
  */
 async function discoverPinnedSimilarity(
   pins: PinnedNodeConfig[],
-  indexReader: CopilotIndexReader,
+  indexClient: IIndexClient,
   nodes: Map<string, GraphNode>,
   edges: Map<string, GraphEdge>,
   settings: GraphViewSettings,
@@ -274,10 +258,13 @@ async function discoverPinnedSimilarity(
   for (const pin of pins) {
     const threshold = pin.similarityThreshold ?? settings.similarityThreshold;
 
-    const similarNotes = await indexReader.searchSimilarToPath(pin.path, {
+    const similarNotes = await indexClient.searchSimilarToPath(pin.path, {
       minSimilarity: threshold,
       limit: settings.maxSimilarityEdges,
     });
+
+    const pinNode = nodes.get(pin.path);
+    if (pinNode) pinNode.inVectorIndex = similarNotes.length > 0;
 
     for (const note of similarNotes) {
       if (nodes.has(note.path)) {
@@ -304,62 +291,49 @@ async function discoverPinnedSimilarity(
         });
       }
     }
-
-    // Mark pin's vector index presence
-    const pinNode = nodes.get(pin.path);
-    if (pinNode) {
-      const embedding = await indexReader.getEmbeddingForPath(pin.path);
-      if (embedding) pinNode.inVectorIndex = true;
-    }
   }
 }
 
 /**
  * Phase 4: Discover pairwise similarity edges between ALL visible nodes.
- * Fetches embeddings for every visible node and computes cosine similarity for each pair.
+ * Delegates to server which computes O(n²) cosine on stored vectors.
  */
 async function discoverPairwiseSimilarity(
-  indexReader: CopilotIndexReader,
+  indexClient: IIndexClient,
   nodes: Map<string, GraphNode>,
   edges: Map<string, GraphEdge>,
   threshold: number,
 ): Promise<void> {
-  // Gather embeddings for all visible nodes
-  const embeddings = new Map<string, number[]>();
-  for (const path of nodes.keys()) {
-    const emb = await indexReader.getEmbeddingForPath(path);
-    if (emb) {
-      embeddings.set(path, emb);
-      nodes.get(path)!.inVectorIndex = true;
-    }
+  const paths = Array.from(nodes.keys());
+  const { edges: pairEdges, indexedPaths } = await indexClient.getPairwiseSimilarities(paths, threshold);
+
+  // Mark which nodes are in the vector index
+  for (const p of indexedPaths) {
+    const node = nodes.get(p);
+    if (node) node.inVectorIndex = true;
   }
 
-  // Pairwise comparison
-  const paths = Array.from(embeddings.keys());
-  for (let i = 0; i < paths.length; i++) {
-    for (let j = i + 1; j < paths.length; j++) {
-      const key = simEdgeKey(paths[i], paths[j]);
-      if (edges.has(key)) continue; // already have this edge (e.g. from center similarity)
+  // Add edges
+  for (const { source, target, similarity } of pairEdges) {
+    const key = simEdgeKey(source, target);
+    if (edges.has(key)) continue;
+    if (!nodes.has(source) || !nodes.has(target)) continue;
 
-      const sim = cosineSimilarity(embeddings.get(paths[i])!, embeddings.get(paths[j])!);
-      if (sim >= threshold) {
-        edges.set(key, {
-          id: key,
-          source: paths[i],
-          target: paths[j],
-          type: "similarity",
-          direction: "outgoing",
-          weight: sim,
-        });
-      }
-    }
+    edges.set(key, {
+      id: key,
+      source,
+      target,
+      type: "similarity",
+      direction: "outgoing",
+      weight: similarity,
+    });
   }
 }
 
 export async function buildGraph(
   centerPath: string,
   app: App,
-  indexReader: CopilotIndexReader | null,
+  indexClient: IIndexClient | null,
   settings: GraphViewSettings,
 ): Promise<GraphData> {
   // Phase 1: BFS to collect nodes from center
@@ -383,13 +357,13 @@ export async function buildGraph(
   }
 
   // Phase 2: Similarity edges from center (may add new periphery nodes)
-  if (indexReader?.isInitialized() && settings.showSimilarityEdges) {
-    await discoverCenterSimilarity(centerPath, indexReader, nodes, edges, settings);
+  if (indexClient?.isInitialized() && settings.showSimilarityEdges) {
+    await discoverCenterSimilarity(centerPath, indexClient, nodes, edges, settings);
   }
 
   // Phase 2b: Similarity edges from pinned nodes
-  if (indexReader?.isInitialized() && settings.showSimilarityEdges && pins.length > 0) {
-    await discoverPinnedSimilarity(pins, indexReader, nodes, edges, settings);
+  if (indexClient?.isInitialized() && settings.showSimilarityEdges && pins.length > 0) {
+    await discoverPinnedSimilarity(pins, indexClient, nodes, edges, settings);
   }
 
   // Phase 3: Link edges between ALL visible nodes
@@ -398,8 +372,8 @@ export async function buildGraph(
   }
 
   // Phase 4: Pairwise similarity edges between ALL visible nodes
-  if (indexReader?.isInitialized() && settings.showSimilarityEdges) {
-    await discoverPairwiseSimilarity(indexReader, nodes, edges, settings.similarityThreshold);
+  if (indexClient?.isInitialized() && settings.showSimilarityEdges) {
+    await discoverPairwiseSimilarity(indexClient, nodes, edges, settings.similarityThreshold);
   }
 
   return {
