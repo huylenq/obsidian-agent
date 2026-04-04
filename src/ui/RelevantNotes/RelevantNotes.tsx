@@ -86,7 +86,7 @@ export function RelevantNotes({
           <span>Relevant Notes</span>
         </div>
         <div className="claude-agent-relevant-notes-empty">
-          Copilot index not found. Install and enable obsidian-copilot to use this feature.
+          Index not available. Make sure the server is running and OPENAI_API_KEY is set.
         </div>
       </div>
     );

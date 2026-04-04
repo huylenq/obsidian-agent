@@ -19,7 +19,7 @@ export const isGraphLoadingAtom = atom<boolean>(false);
 // Error state
 export const graphErrorAtom = atom<string | null>(null);
 
-// Whether copilot index is available for similarity edges
+// Whether vector index is available for similarity edges
 export const graphIndexAvailableAtom = atom<boolean>(false);
 
 // Actions

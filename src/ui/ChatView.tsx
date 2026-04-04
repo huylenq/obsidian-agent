@@ -451,7 +451,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         : isContextCleared ? undefined : activeFile;
       const selectionContext = selection;
       const msgSelection = selectionContext
-        ? { fileName: selectionContext.fileName, startLine: selectionContext.startLine, endLine: selectionContext.endLine }
+        ? { text: selectionContext.text.slice(0, 300), fileName: selectionContext.fileName, startLine: selectionContext.startLine, endLine: selectionContext.endLine }
         : undefined;
 
       // If query is active, inject into it instead of starting a new one.

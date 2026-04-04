@@ -17,8 +17,8 @@ export default function authMiddleware(req, res, next) {
     return next();
   }
 
-  // Allow unauthenticated health checks
-  if (req.method === "GET" && req.path === "/health") {
+  // Allow unauthenticated health checks and index status
+  if (req.method === "GET" && (req.path === "/health" || req.path === "/index/status")) {
     return next();
   }
 

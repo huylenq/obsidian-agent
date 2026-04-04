@@ -135,6 +135,23 @@ export class ClaudeAgentSettingTab extends PluginSettingTab {
         );
     }
 
+    // Indexing
+    containerEl.createEl("h3", { text: "Indexing" });
+
+    new Setting(containerEl)
+      .setName("OpenAI API Key")
+      .setDesc("Required for vault indexing (text-embedding-3-small). Used by the server to generate embeddings for Relevant Notes and Semantic Graph.")
+      .addText((text) => {
+        text
+          .setPlaceholder("sk-...")
+          .setValue(this.plugin.settings.openaiApiKey)
+          .onChange(async (value) => {
+            this.plugin.settings.openaiApiKey = value;
+            await this.plugin.saveSettings();
+          });
+        text.inputEl.type = "password";
+      });
+
     // System Prompt
     new Setting(containerEl)
       .setName("System Prompt")

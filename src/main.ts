@@ -543,6 +543,7 @@ export default class ClaudeAgentPlugin extends Plugin {
         PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ""}`,
         PORT: String(PROXY_PORT),
         ...(this.settings.remoteAuthToken ? { AUTH_TOKEN: this.settings.remoteAuthToken } : {}),
+        ...(this.settings.openaiApiKey ? { OPENAI_API_KEY: this.settings.openaiApiKey } : {}),
       },
     });
 

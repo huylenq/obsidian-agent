@@ -64,16 +64,36 @@
   max-height: 150px;
 }
 
-/* Selection context label on user messages */
+/* Selection context block on user messages */
 
-.claude-agent-selection-label {
+.claude-agent-selection-block {
+  margin: 8px 0 4px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.12);
+  font-size: 0.85em;
+}
+
+.theme-light .claude-agent-selection-block {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.claude-agent-selection-block-header {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.75em;
-  opacity: 0.7;
-  padding-top: 8px;
-  padding-bottom: 2px;
+  font-size: 0.85em;
+  opacity: 0.8;
+  margin-bottom: 3px;
+}
+
+.claude-agent-selection-block-text {
+  font-family: var(--font-monospace);
+  font-size: 0.88em;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.4;
+  opacity: 0.9;
 }
 
 /* Code blocks: wrap instead of overflowing the bubble */

@@ -103,21 +103,23 @@ Then reload Obsidian (or disable/enable the plugin) to pick up changes.
 
 ## Relevant Notes (Vector Search)
 
-Reuses obsidian-copilot's existing vector index instead of building our own.
+Self-owned LanceDB vector index managed by the proxy server.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  Copilot Index (read-only)                                      │
-│  .obsidian/copilot-index-chunk-{hash}-{0..N}.json               │
-│  └─ docs.docs[id] = { path, title, content, embedding[1536] }   │
+│  Proxy Server (server/embeddings/)                              │
+│  - Scans vault .md files, chunks by headings (6000 chars)       │
+│  - Embeds via OpenAI text-embedding-3-small (1536 dims)         │
+│  - Stores in LanceDB at <vault>/.obsidian/lance/                │
+│  - Incremental updates on startup (mtime-based)                 │
+│  - REST endpoints: /index/search, /search-by-path, /pairwise    │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  CopilotIndexReader (src/embeddings/VectorStore.ts)             │
-│  - Parses JSON directly (no Orama dependency)                   │
-│  - Brute-force cosine similarity search O(n)                    │
-│  - Deduplicates chunks by path, keeps highest similarity        │
+│  AgentIndexClient (src/embeddings/AgentIndexClient.ts)          │
+│  - HTTP client using Obsidian's requestUrl (mobile-compatible)  │
+│  - Implements IIndexClient interface                            │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -128,9 +130,17 @@ Reuses obsidian-copilot's existing vector index instead of building our own.
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Key files:**
-- `src/embeddings/VectorStore.ts` - CopilotIndexReader class
-- `src/embeddings/search.ts` - Ranking with link weighting
+**Server-side key files:**
+- `server/embeddings/embed.js` - OpenAI embeddings API wrapper
+- `server/embeddings/chunker.js` - Heading-aware markdown chunking
+- `server/embeddings/lanceIndex.js` - LanceDB table operations
+- `server/embeddings/indexer.js` - Vault scanner + incremental indexer
+- `server/routes/index.js` - REST endpoints (search, pairwise, rebuild, status)
+
+**Client-side key files:**
+- `src/embeddings/IIndexClient.ts` - Interface for index clients
+- `src/embeddings/AgentIndexClient.ts` - HTTP client implementation
+- `src/embeddings/search.ts` - Link-graph reranking (client-side, uses metadataCache)
 - `src/ui/RelevantNotes/` - UI components
 
 **Modes:**

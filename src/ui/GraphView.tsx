@@ -56,18 +56,28 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
     setGraphSettings(plugin.settings.graphSettings);
   }, []);
 
-  // Initialize index client (connects to server)
+  // Initialize index client (waits for server to be ready)
   useEffect(() => {
-    if (!plugin.claudeClient) return;
-    const { proxyUrl, authToken } = plugin.claudeClient;
-    const init = async () => {
-      const client = new AgentIndexClient(proxyUrl, authToken);
-      const success = await client.initialize();
-      indexClientRef.current = client;
-      setGraphIndexAvailable(success);
+    let cancelled = false;
+    const tryInit = async () => {
+      // Wait for claudeClient to be set (server may still be starting)
+      for (let attempt = 0; attempt < 10 && !cancelled; attempt++) {
+        if (plugin.claudeClient) {
+          const { proxyUrl, authToken } = plugin.claudeClient;
+          const client = new AgentIndexClient(proxyUrl, authToken);
+          const success = await client.initialize();
+          if (success && !cancelled) {
+            indexClientRef.current = client;
+            setGraphIndexAvailable(true);
+            return;
+          }
+        }
+        await new Promise((r) => setTimeout(r, 2000));
+      }
     };
-    init();
-  }, [plugin.claudeClient]);
+    tryInit();
+    return () => { cancelled = true; };
+  }, [plugin]);
 
   // Track active file
   const getActiveFileContext = useCallback((): ActiveFileContext | undefined => {

@@ -82,7 +82,15 @@ function CompactBoundary({
   );
 }
 
-const FLASHCARD_PREFIX = "Explain this flashcard.";
+function truncateSelectionPreview(text: string, maxChars = 200, maxLines = 5): string {
+  const lines = text.split("\n").slice(0, maxLines);
+  let result = lines.join("\n");
+  if (text.split("\n").length > maxLines) result += "\n\u2026";
+  if (result.length > maxChars) result = result.slice(0, maxChars) + "\u2026";
+  return result;
+}
+
+const FLASHCARD_PREFIX = "Explain this flashcard";
 const FLASHCARD_RE = /\*\*Question:\*\*\n([\s\S]*?)\n\n\*\*Answer:\*\*\n([\s\S]*?)(?:\n\n\*\*Context:\*\*\n([\s\S]*))?$/;
 
 /**
@@ -222,10 +230,17 @@ function MessageBubble({ message, markerMetadata }: { message: ChatMessage; mark
           ))}
         </div>
       )}
-      {selLabel && (
-        <div className="claude-agent-selection-label">
-          <span ref={selIconRef} />
-          {selLabel}
+      {sel && (
+        <div className="claude-agent-selection-block">
+          <div className="claude-agent-selection-block-header">
+            <span ref={selIconRef} />
+            <span>{selLabel}</span>
+          </div>
+          {sel.text && (
+            <div className="claude-agent-selection-block-text">
+              {truncateSelectionPreview(sel.text)}
+            </div>
+          )}
         </div>
       )}
       {message.toolName && (

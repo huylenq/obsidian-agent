@@ -91,15 +91,6 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
       prompt += `\n\n## Current Context\nThe user is currently viewing: **${activeFile.path}**\nUse MCP tools to read this file if relevant to their question.`;
     }
 
-    if (selection && selection.text) {
-      const lineInfo = selection.startLine
-        ? selection.startLine === selection.endLine
-          ? ` (line ${selection.startLine})`
-          : ` (lines ${selection.startLine}-${selection.endLine})`
-        : "";
-      prompt += `\n\n## Selected Text\nThe user has selected the following text from **${selection.filePath}**${lineInfo}:\n\`\`\`\n${selection.text}\n\`\`\`\nThis selection is likely central to their question. Address it directly.`;
-    }
-
     if (mentionedFiles && mentionedFiles.length > 0) {
       const fileList = mentionedFiles.map(f => `- ${f.path}`).join("\n");
       prompt += `\n\n## Referenced Files\nThe user has explicitly mentioned the following files (using @[[path]] syntax). Use MCP tools to read these files as they are likely central to their question:\n${fileList}`;
@@ -123,6 +114,17 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
   // Create the async iterable controller for streaming input
   const inputController = createAsyncIterableController();
 
+  // Prepend selection context to user message so deictic references ("this line") resolve naturally
+  const buildMessageText = (text) => {
+    if (!selection || !selection.text) return text;
+    const lineAttr = selection.startLine
+      ? selection.startLine === selection.endLine
+        ? ` lines="${selection.startLine}"`
+        : ` lines="${selection.startLine}-${selection.endLine}"`
+      : "";
+    return `<selected-text file="${selection.filePath}"${lineAttr}>\n${selection.text}\n</selected-text>\n\n${text || ""}`;
+  };
+
   // Build content: multimodal array if images present, plain string otherwise
   const buildContent = (text, imgs) => {
     if (!imgs || imgs.length === 0) return text || "";
@@ -138,7 +140,7 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
   // Push the initial user message into the iterable
   inputController.push({
     type: "user",
-    message: { role: "user", content: buildContent(message, images) },
+    message: { role: "user", content: buildContent(buildMessageText(message), images) },
     parent_tool_use_id: null,
   });
 

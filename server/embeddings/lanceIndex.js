@@ -58,11 +58,12 @@ export async function upsertChunks(table, chunks, vectors, mtime) {
     chunkIndex: chunk.chunkIndex,
   }));
 
+  const data = lancedb.makeArrowTable(rows, { schema: SCHEMA });
   await table
     .mergeInsert("id")
     .whenMatchedUpdateAll()
     .whenNotMatchedInsertAll()
-    .execute(rows);
+    .execute(data);
 }
 
 /**
@@ -116,7 +117,7 @@ export async function searchByPath(table, path, opts = {}) {
   const rows = await table
     .query()
     .where(`path = '${path.replace(/'/g, "''")}'`)
-    .where("chunkIndex = 0")
+    .where("\"chunkIndex\" = 0")
     .limit(1)
     .toArray();
 
@@ -136,7 +137,7 @@ export async function getVectorsForPaths(table, paths) {
   const quoted = paths.map((p) => `'${p.replace(/'/g, "''")}'`).join(", ");
   const rows = await table
     .query()
-    .where(`path IN (${quoted}) AND chunkIndex = 0`)
+    .where(`path IN (${quoted}) AND "chunkIndex" = 0`)
     .toArray();
 
   const result = new Map();
@@ -153,7 +154,7 @@ export async function getVectorsForPaths(table, paths) {
 export async function getIndexedMtimes(table) {
   const rows = await table
     .query()
-    .where("chunkIndex = 0")
+    .where("\"chunkIndex\" = 0")
     .select(["path", "mtime"])
     .toArray();
 

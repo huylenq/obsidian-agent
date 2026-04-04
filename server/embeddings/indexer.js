@@ -93,46 +93,61 @@ export async function buildIndex(vaultPath, table) {
 
     // Process in batches
     let indexed = 0;
+    let failed = 0;
     for (let i = 0; i < toIndex.length; i += EMBED_BATCH) {
       const batch = toIndex.slice(i, i + EMBED_BATCH);
 
-      // Read and chunk all files in this batch
-      const allChunks = [];
-      const fileMtimes = [];
-      for (const file of batch) {
-        const content = await readFile(file.fullPath, "utf-8");
-        const chunks = chunkMarkdown(content, file.relPath);
-        for (const chunk of chunks) {
-          allChunks.push(chunk);
-          fileMtimes.push(file.mtime);
+      try {
+        // Read and chunk all files in this batch
+        const allChunks = [];
+        const fileMtimes = [];
+        for (const file of batch) {
+          const content = await readFile(file.fullPath, "utf-8");
+          const chunks = chunkMarkdown(content, file.relPath);
+          for (const chunk of chunks) {
+            // Skip empty chunks (empty files or frontmatter-only)
+            if (!chunk.content.trim()) continue;
+            allChunks.push(chunk);
+            fileMtimes.push(file.mtime);
+          }
         }
+
+        if (allChunks.length === 0) {
+          indexed += batch.length;
+          indexState.progress.indexed = indexed;
+          continue;
+        }
+
+        // Embed all chunks in this batch
+        const texts = allChunks.map((c) => c.content);
+        const vectors = await embedTexts(texts);
+        if (!vectors) {
+          log("[Indexer] No API key — aborting index build");
+          indexState.indexing = false;
+          return { indexed: 0, skipped: 0, deleted: deletedPaths.length };
+        }
+
+        // Upsert grouped by file (same mtime per file's chunks)
+        const byFile = new Map();
+        for (let j = 0; j < allChunks.length; j++) {
+          const path = allChunks[j].path;
+          if (!byFile.has(path)) byFile.set(path, { chunks: [], vectors: [], mtime: fileMtimes[j] });
+          byFile.get(path).chunks.push(allChunks[j]);
+          byFile.get(path).vectors.push(vectors[j]);
+        }
+
+        for (const [, group] of byFile) {
+          await upsertChunks(table, group.chunks, group.vectors, group.mtime);
+        }
+
+        indexed += batch.length;
+      } catch (err) {
+        failed += batch.length;
+        logError("[Indexer] Batch failed, skipping:", err.message);
       }
 
-      // Embed all chunks in this batch
-      const texts = allChunks.map((c) => c.content);
-      const vectors = await embedTexts(texts);
-      if (!vectors) {
-        log("[Indexer] No API key — aborting index build");
-        indexState.indexing = false;
-        return { indexed: 0, skipped: 0, deleted: deletedPaths.length };
-      }
-
-      // Upsert grouped by file (same mtime per file's chunks)
-      const byFile = new Map();
-      for (let j = 0; j < allChunks.length; j++) {
-        const path = allChunks[j].path;
-        if (!byFile.has(path)) byFile.set(path, { chunks: [], vectors: [], mtime: fileMtimes[j] });
-        byFile.get(path).chunks.push(allChunks[j]);
-        byFile.get(path).vectors.push(vectors[j]);
-      }
-
-      for (const [, group] of byFile) {
-        await upsertChunks(table, group.chunks, group.vectors, group.mtime);
-      }
-
-      indexed += batch.length;
-      indexState.progress.indexed = indexed;
-      log("[Indexer] Progress:", indexed, "/", toIndex.length);
+      indexState.progress.indexed = indexed + failed;
+      log("[Indexer] Progress:", indexed + failed, "/", toIndex.length, failed ? `(${failed} failed)` : "");
     }
 
     indexState.lastBuiltAt = Date.now();

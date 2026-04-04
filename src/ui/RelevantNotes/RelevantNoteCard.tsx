@@ -95,7 +95,7 @@ function stripMetadata(content: string): string {
   // Remove YAML frontmatter (--- ... ---)
   cleaned = cleaned.replace(/^---[\s\S]*?---\s*/m, "");
 
-  // Remove NOTE TITLE: [[...]] pattern (Copilot index artifact)
+  // Remove NOTE TITLE: [[...]] pattern (legacy index artifact)
   cleaned = cleaned.replace(/NOTE TITLE:\s*\[\[[^\]]*\]\]\s*/gi, "");
 
   // Remove NOTE BLOCK CONTENT: prefix

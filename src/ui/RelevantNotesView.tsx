@@ -37,21 +37,28 @@ function RelevantNotesContainer({ plugin, app }: RelevantNotesContainerProps) {
   const indexClientRef = useRef<AgentIndexClient | null>(null);
   const [activeFile, setActiveFile] = useState<ActiveFileContext | undefined>(undefined);
 
-  // Initialize index client (connects to server)
+  // Initialize index client (waits for server to be ready)
   useEffect(() => {
-    if (!plugin.claudeClient) return;
-    const { proxyUrl, authToken } = plugin.claudeClient;
-    const initIndex = async () => {
-      const client = new AgentIndexClient(proxyUrl, authToken);
-      const success = await client.initialize();
-      indexClientRef.current = client;
-      setIndexAvailable(success);
-      if (success) {
-        console.log("[RelevantNotesView] Index server connected");
+    let cancelled = false;
+    const tryInit = async () => {
+      for (let attempt = 0; attempt < 10 && !cancelled; attempt++) {
+        if (plugin.claudeClient) {
+          const { proxyUrl, authToken } = plugin.claudeClient;
+          const client = new AgentIndexClient(proxyUrl, authToken);
+          const success = await client.initialize();
+          if (success && !cancelled) {
+            indexClientRef.current = client;
+            setIndexAvailable(true);
+            console.log("[RelevantNotesView] Index server connected");
+            return;
+          }
+        }
+        await new Promise((r) => setTimeout(r, 2000));
       }
     };
-    initIndex();
-  }, [plugin.claudeClient]);
+    tryInit();
+    return () => { cancelled = true; };
+  }, [plugin]);
 
   // Get current active file
   const getActiveFileContext = useCallback((): ActiveFileContext | undefined => {

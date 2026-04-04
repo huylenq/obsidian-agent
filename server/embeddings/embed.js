@@ -3,6 +3,8 @@ import { log, logError } from "../log.js";
 const MODEL = "text-embedding-3-small";
 const DIMENSIONS = 1536;
 const MAX_BATCH = 100;
+// 8192 token limit. Worst case ~2 chars/token (code, URLs).
+const MAX_CHARS = 8000;
 
 /**
  * Embed an array of texts using OpenAI's embedding API.
@@ -12,10 +14,13 @@ export async function embedTexts(texts) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
-  const results = new Array(texts.length);
+  // Truncate any text exceeding the token limit
+  const safeTexts = texts.map((t) => (t.length > MAX_CHARS ? t.slice(0, MAX_CHARS) : t));
 
-  for (let i = 0; i < texts.length; i += MAX_BATCH) {
-    const batch = texts.slice(i, i + MAX_BATCH);
+  const results = new Array(safeTexts.length);
+
+  for (let i = 0; i < safeTexts.length; i += MAX_BATCH) {
+    const batch = safeTexts.slice(i, i + MAX_BATCH);
     const res = await fetch("https://api.openai.com/v1/embeddings", {
       method: "POST",
       headers: {

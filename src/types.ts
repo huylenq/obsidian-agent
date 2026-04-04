@@ -38,7 +38,7 @@ export interface ChatMessage {
   compactMetadata?: CompactMetadata;
   markerMetadata?: MarkerMetadata;
   images?: ImageAttachment[];
-  selectionContext?: Pick<SelectionContext, "fileName" | "startLine" | "endLine">;
+  selectionContext?: Pick<SelectionContext, "text" | "fileName" | "startLine" | "endLine">;
 }
 
 export interface ActiveFileContext {
@@ -98,6 +98,7 @@ export interface ClaudeAgentSettings {
   model: ClaudeModel;
   includeRelevantNotes: boolean;
   graphSettings: GraphViewSettings;
+  openaiApiKey: string;
   connectionMode: ConnectionMode;
   remoteServerUrl: string;
   remoteAuthToken: string;
@@ -113,6 +114,7 @@ Be concise and accurate.`,
   model: "haiku",
   includeRelevantNotes: true,
   graphSettings: DEFAULT_GRAPH_VIEW_SETTINGS,
+  openaiApiKey: "",
   connectionMode: "local",
   remoteServerUrl: "",
   remoteAuthToken: "",
@@ -120,7 +122,7 @@ Be concise and accurate.`,
 };
 
 // ============================================================================
-// Relevant Notes Types (uses Copilot's existing index)
+// Relevant Notes Types
 // ============================================================================
 
 export type SearchMode = "currentFile" | "chatContext";
