@@ -1,4 +1,4 @@
-import { Notice, Platform, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { Notice, Platform, Plugin, TFile, WorkspaceLeaf, requestUrl } from "obsidian";
 import { ClaudeAgentSettings, DEFAULT_SETTINGS, DEFAULT_GRAPH_VIEW_SETTINGS } from "./types";
 import { ClaudeAgentSettingTab } from "./settings";
 import { ClaudeAgentChatView, CHAT_VIEW_TYPE } from "./ui/ChatView";
@@ -7,6 +7,7 @@ import { SessionsView, SESSIONS_VIEW_TYPE } from "./ui/SessionsView";
 import { GraphView, GRAPH_VIEW_TYPE } from "./ui/GraphView";
 import { ClaudeAgentClient } from "./claude/client";
 import { AgentIndexClient, rankNotes } from "./embeddings";
+import type { IndexStatus } from "./embeddings/AgentIndexClient";
 import type { RankedNote } from "./types";
 import { setConnectionStatus, setConnectionError } from "./state/connectionState";
 
@@ -67,6 +68,9 @@ export default class ClaudeAgentPlugin extends Plugin {
   activeConnectionUrl: string | null = null;
   private serverProcess: import("child_process").ChildProcess | null = null;
   private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
+  private indexStatusBar: HTMLElement | null = null;
+  private indexPollTimer: ReturnType<typeof setTimeout> | null = null;
+  private indexIdleHideTimer: ReturnType<typeof setTimeout> | null = null;
   private isHandlingFlashcard = false;
   /** Content-based dedup: tracks flashcard prompts already sent in this plugin lifecycle */
   private sentFlashcardPrompts = new Set<string>();
@@ -188,6 +192,19 @@ export default class ClaudeAgentPlugin extends Plugin {
         });
       },
     });
+
+    this.addCommand({
+      id: "rebuild-semantic-index",
+      name: "Rebuild Semantic Index",
+      callback: () => this.rebuildSemanticIndex(),
+    });
+
+    this.indexStatusBar = this.addStatusBarItem();
+    this.indexStatusBar.addClass("claude-agent-index-status");
+    this.indexStatusBar.style.cursor = "pointer";
+    this.indexStatusBar.style.display = "none";
+    this.indexStatusBar.onclick = () => this.rebuildSemanticIndex();
+    this.pokeIndexStatus();
 
     // Listen for flashcard explain requests from Inline Flashcards plugin
     const handleExplainFlashcard = (event: CustomEvent<{ question: string; answer: string; context: string; cardId?: string; sourceFile?: string }>) => {
@@ -507,8 +524,86 @@ export default class ClaudeAgentPlugin extends Plugin {
       clearInterval(this.healthCheckInterval);
       this.healthCheckInterval = null;
     }
+    if (this.indexPollTimer) clearTimeout(this.indexPollTimer);
+    if (this.indexIdleHideTimer) clearTimeout(this.indexIdleHideTimer);
     this.claudeClient = null;
     this.stopServer();
+  }
+
+  async rebuildSemanticIndex(): Promise<void> {
+    if (!this.claudeClient) {
+      new Notice("Claude Agent not connected");
+      return;
+    }
+    try {
+      await requestUrl({
+        url: `${this.claudeClient.proxyUrl}/index/rebuild`,
+        method: "POST",
+        headers: this.claudeClient.authToken
+          ? { Authorization: `Bearer ${this.claudeClient.authToken}`, "Content-Type": "application/json" }
+          : { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      new Notice("Rebuilding semantic index…");
+      this.pokeIndexStatus();
+    } catch (err: any) {
+      new Notice(`Rebuild failed: ${err?.message || err}`);
+    }
+  }
+
+  /** One-shot status fetch + render. If indexing, schedules the next poll. */
+  private async pokeIndexStatus(): Promise<void> {
+    if (this.indexPollTimer) {
+      clearTimeout(this.indexPollTimer);
+      this.indexPollTimer = null;
+    }
+    if (!this.claudeClient || !this.indexStatusBar) return;
+    let status: IndexStatus | null = null;
+    try {
+      const res = await requestUrl({
+        url: `${this.claudeClient.proxyUrl}/index/status`,
+        headers: this.claudeClient.authToken
+          ? { Authorization: `Bearer ${this.claudeClient.authToken}` }
+          : {},
+      });
+      status = res.json as IndexStatus;
+    } catch {
+      this.indexStatusBar.style.display = "none";
+      return;
+    }
+    this.renderIndexStatus(status);
+    if (status.indexing) {
+      this.indexPollTimer = setTimeout(() => this.pokeIndexStatus(), 1500);
+    }
+  }
+
+  private renderIndexStatus(status: IndexStatus): void {
+    if (!this.indexStatusBar) return;
+    if (this.indexIdleHideTimer) {
+      clearTimeout(this.indexIdleHideTimer);
+      this.indexIdleHideTimer = null;
+    }
+    if (status.indexing) {
+      const p = status.progress;
+      const text = p && p.total > 0 ? `⟳ Indexing ${p.indexed} / ${p.total}` : "⟳ Indexing…";
+      this.indexStatusBar.setText(text);
+      this.indexStatusBar.title = "Click to rebuild semantic index";
+      this.indexStatusBar.style.display = "";
+      return;
+    }
+    // Idle: briefly flash done state if we were just polling, otherwise stay hidden
+    const wasVisible = this.indexStatusBar.style.display !== "none";
+    if (wasVisible) {
+      this.indexStatusBar.setText(`✓ Indexed ${status.docCount} chunks`);
+      this.indexIdleHideTimer = setTimeout(() => {
+        if (this.indexStatusBar) this.indexStatusBar.style.display = "none";
+      }, 3000);
+    } else {
+      this.indexStatusBar.style.display = "none";
+    }
+    this.indexStatusBar.title = status.lastBuiltAt
+      ? `Index up to date · last built ${new Date(status.lastBuiltAt).toLocaleString()} · click to rebuild`
+      : "Click to rebuild semantic index";
   }
 
   /**
@@ -708,6 +803,7 @@ export default class ClaudeAgentPlugin extends Plugin {
       await this.claudeClient.initialize();
       setConnectionStatus("connected");
       this.startHealthCheck();
+      this.pokeIndexStatus();
       console.log("[ClaudeAgent] Reconnected via connection file:", discovered.url);
       return { url: discovered.url };
     } catch (error) {
@@ -814,6 +910,7 @@ export default class ClaudeAgentPlugin extends Plugin {
 
       setConnectionStatus("connected");
       this.startHealthCheck();
+      this.pokeIndexStatus();
       console.log("Claude Agent client initialized successfully");
     } catch (error) {
       console.error("Failed to initialize Claude Agent:", error);

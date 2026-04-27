@@ -117,7 +117,7 @@ export async function searchByPath(table, path, opts = {}) {
   const rows = await table
     .query()
     .where(`path = '${path.replace(/'/g, "''")}'`)
-    .where("\"chunkIndex\" = 0")
+    .where("`chunkIndex` = 0")
     .limit(1)
     .toArray();
 
@@ -137,7 +137,8 @@ export async function getVectorsForPaths(table, paths) {
   const quoted = paths.map((p) => `'${p.replace(/'/g, "''")}'`).join(", ");
   const rows = await table
     .query()
-    .where(`path IN (${quoted}) AND "chunkIndex" = 0`)
+    .where(`path IN (${quoted}) AND \`chunkIndex\` = 0`)
+    .limit(paths.length)
     .toArray();
 
   const result = new Map();
@@ -152,10 +153,12 @@ export async function getVectorsForPaths(table, paths) {
  * Returns Map<path, mtime>.
  */
 export async function getIndexedMtimes(table) {
+  const total = await table.countRows();
   const rows = await table
     .query()
-    .where("\"chunkIndex\" = 0")
+    .where("`chunkIndex` = 0")
     .select(["path", "mtime"])
+    .limit(total || 1)
     .toArray();
 
   const result = new Map();

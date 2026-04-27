@@ -2,6 +2,15 @@ import { requestUrl } from "obsidian";
 import type { RelevantNote } from "../types";
 import type { IIndexClient, SearchOptions, PairwiseResult } from "./IIndexClient";
 
+export interface IndexStatus {
+  ready: boolean;
+  available: boolean;
+  docCount: number;
+  indexing: boolean;
+  progress: { indexed: number; total: number } | null;
+  lastBuiltAt: number | null;
+}
+
 export class AgentIndexClient implements IIndexClient {
   private ready = false;
 
@@ -32,6 +41,18 @@ export class AgentIndexClient implements IIndexClient {
 
   isInitialized(): boolean {
     return this.ready;
+  }
+
+  async getStatus(): Promise<IndexStatus | null> {
+    try {
+      const res = await requestUrl({
+        url: `${this.proxyUrl}/index/status`,
+        headers: this.headers(),
+      });
+      return res.json as IndexStatus;
+    } catch {
+      return null;
+    }
   }
 
   async searchSimilarToPath(
