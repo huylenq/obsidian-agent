@@ -14,7 +14,7 @@ export function ToolCallBlock({ block }: ToolCallBlockProps) {
     ? "running"
     : "done";
 
-  // Extract MCP server/tool for display: mcp__orama__search → "orama / search"
+  // Extract MCP server/tool for display: mcp__lance__search → "lance / search"
   const mcpMatch = block.toolName.match(/^mcp__([^_]+)__(.+)$/);
   const displayName = mcpMatch ? `${mcpMatch[1]} / ${mcpMatch[2]}` : block.toolName;
 

@@ -7,7 +7,7 @@ import { basename } from "path";
 
 /**
  * Human-readable label for a tool call (shown in header).
- * Examples: "Read notes.md", "Bash: list files", "search (orama)"
+ * Examples: "Read notes.md", "Bash: list files", "search (lance)"
  */
 export function computeToolDescription(toolName, input) {
   if (!input) return toolName;

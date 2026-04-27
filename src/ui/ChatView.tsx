@@ -473,7 +473,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         setStreaming(true);
         setLoading(true);
         const queueId = addToQueue(message);
-        const success = await plugin.claudeClient.injectMessage(message, undefined, undefined, undefined, images);
+        const success = await plugin.claudeClient.injectMessage(message, fileContext, mentionedFiles, selectionContext, images);
         updateQueueStatus(queueId, success ? "injected" : "failed");
         return;
       }

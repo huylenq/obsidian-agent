@@ -304,6 +304,7 @@ export class ClaudeAgentClient {
           headers: this.getHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({
             message,
+            ...(selection && { selection }),
             ...(images?.length && { images }),
           }),
         }

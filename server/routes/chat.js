@@ -1,5 +1,3 @@
-import { existsSync } from "fs";
-import { execSync } from "child_process";
 import crypto from "crypto";
 import { Router } from "express";
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -11,18 +9,27 @@ import { computeToolDescription, formatToolInput, extractToolResultContent } fro
 import { createAsyncIterableController } from "../asyncIterableController.js";
 import { registerQuery, getQuery, removeQuery, updateQuerySession } from "../queryRegistry.js";
 
-/**
- * Resolve the current node binary path.
- * process.execPath can go stale after `brew upgrade node` — the Cellar
- * versioned path gets deleted while the running process keeps its old value.
- */
-function resolveNodeBinary() {
-  if (existsSync(process.execPath)) return process.execPath;
-  try {
-    return execSync("which node", { encoding: "utf8" }).trim();
-  } catch {
-    return "node";
-  }
+// Prepend selection context to user message so deictic references ("this line") resolve naturally
+function wrapWithSelection(text, selection) {
+  if (!selection || !selection.text) return text;
+  const lineAttr = selection.startLine
+    ? selection.startLine === selection.endLine
+      ? ` lines="${selection.startLine}"`
+      : ` lines="${selection.startLine}-${selection.endLine}"`
+    : "";
+  return `<selected-text file="${selection.filePath}"${lineAttr}>\n${selection.text}\n</selected-text>\n\n${text || ""}`;
+}
+
+// Build content: multimodal array if images present, plain string otherwise
+function buildContent(text, images) {
+  if (!images || images.length === 0) return text || "";
+  return [
+    ...(text ? [{ type: "text", text }] : []),
+    ...images.map(img => ({
+      type: "image",
+      source: { type: "base64", media_type: img.mediaType, data: img.data },
+    })),
+  ];
 }
 
 const router = Router();
@@ -114,33 +121,10 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
   // Create the async iterable controller for streaming input
   const inputController = createAsyncIterableController();
 
-  // Prepend selection context to user message so deictic references ("this line") resolve naturally
-  const buildMessageText = (text) => {
-    if (!selection || !selection.text) return text;
-    const lineAttr = selection.startLine
-      ? selection.startLine === selection.endLine
-        ? ` lines="${selection.startLine}"`
-        : ` lines="${selection.startLine}-${selection.endLine}"`
-      : "";
-    return `<selected-text file="${selection.filePath}"${lineAttr}>\n${selection.text}\n</selected-text>\n\n${text || ""}`;
-  };
-
-  // Build content: multimodal array if images present, plain string otherwise
-  const buildContent = (text, imgs) => {
-    if (!imgs || imgs.length === 0) return text || "";
-    return [
-      ...(text ? [{ type: "text", text }] : []),
-      ...imgs.map(img => ({
-        type: "image",
-        source: { type: "base64", media_type: img.mediaType, data: img.data },
-      })),
-    ];
-  };
-
   // Push the initial user message into the iterable
   inputController.push({
     type: "user",
-    message: { role: "user", content: buildContent(buildMessageText(message), images) },
+    message: { role: "user", content: buildContent(wrapWithSelection(message, selection), images) },
     parent_tool_use_id: null,
   });
 
@@ -162,7 +146,7 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
       maxTurns: 100,
       settingSources: ["user", "project", "local"],
       cwd: vaultPath,
-      executable: resolveNodeBinary(),
+      executable: "node",
       ...(resumeSessionId && { resume: resumeSessionId }),
     };
   };
@@ -397,19 +381,10 @@ router.post("/chat/:queryId/inject", (req, res) => {
   const entry = getQuery(req.params.queryId);
   if (!entry) return res.status(404).json({ error: "Query not found or expired" });
 
-  const { message, images } = req.body;
+  const { message, selection, images } = req.body;
   if (!message && (!images || images.length === 0)) return res.status(400).json({ error: "Message or images required" });
 
-  // Reuse the same multimodal content builder from POST /chat
-  const content = (images && images.length > 0)
-    ? [
-        ...(message ? [{ type: "text", text: message }] : []),
-        ...images.map(img => ({
-          type: "image",
-          source: { type: "base64", media_type: img.mediaType, data: img.data },
-        })),
-      ]
-    : message;
+  const content = buildContent(wrapWithSelection(message, selection), images);
 
   entry.inputController.push({
     type: "user",

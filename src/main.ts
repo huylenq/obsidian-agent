@@ -468,7 +468,7 @@ export default class ClaudeAgentPlugin extends Plugin {
       preamble += `\n\nOther flashcards under the same heading (for context, don't explain these):\n${siblingCards.map(c => `- ${c}`).join("\n")}`;
     }
 
-    preamble += "\n\nYou have MCP tools available (Readwise highlights, Orama vault search, Karakeep bookmarks). Use them if the answer references concepts worth cross-referencing.";
+    preamble += "\n\nYou have MCP tools available (Readwise highlights, Lance vault search, Karakeep bookmarks). Use them if the answer references concepts worth cross-referencing.";
 
     let prompt = `${preamble}\n\n**Question:**\n${question}\n\n**Answer:**\n${answer}`;
     if (context) {

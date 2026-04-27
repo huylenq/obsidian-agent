@@ -5,6 +5,9 @@ import { DIMENSIONS } from "./embed.js";
 
 const TABLE_NAME = "notes";
 
+const sqlQuote = (s) => `'${s.replace(/'/g, "''")}'`;
+const sqlQuoteList = (xs) => xs.map(sqlQuote).join(", ");
+
 const SCHEMA = new arrow.Schema([
   new arrow.Field("id", new arrow.Utf8()),
   new arrow.Field("path", new arrow.Utf8()),
@@ -71,8 +74,7 @@ export async function upsertChunks(table, chunks, vectors, mtime) {
  */
 export async function deleteByPaths(table, paths) {
   if (paths.length === 0) return;
-  const quoted = paths.map((p) => `'${p.replace(/'/g, "''")}'`).join(", ");
-  await table.delete(`path IN (${quoted})`);
+  await table.delete(`path IN (${sqlQuoteList(paths)})`);
 }
 
 /**
@@ -89,7 +91,8 @@ export async function searchByVector(table, queryVector, opts = {}) {
   const byPath = new Map();
   for (const row of results) {
     if (excludePath && row.path === excludePath) continue;
-    const score = 1 - (row._distance || 0); // LanceDB returns distance, convert to similarity
+    // LanceDB default metric is L2² on unit vectors → cos_sim = 1 - L2²/2
+    const score = 1 - (row._distance || 0) / 2;
     if (score < minSimilarity) continue;
 
     const existing = byPath.get(row.path);
@@ -113,11 +116,11 @@ export async function searchByVector(table, queryVector, opts = {}) {
  * Falls back to null if the path isn't indexed.
  */
 export async function searchByPath(table, path, opts = {}) {
-  // Look up the stored vector for this path (first chunk)
+  // NOTE: chained .where() in @lancedb/lancedb replaces the previous filter,
+  // so combine into a single AND clause.
   const rows = await table
     .query()
-    .where(`path = '${path.replace(/'/g, "''")}'`)
-    .where("`chunkIndex` = 0")
+    .where(`path = ${sqlQuote(path)} AND \`chunkIndex\` = 0`)
     .limit(1)
     .toArray();
 
@@ -134,10 +137,9 @@ export async function searchByPath(table, path, opts = {}) {
 export async function getVectorsForPaths(table, paths) {
   if (paths.length === 0) return new Map();
 
-  const quoted = paths.map((p) => `'${p.replace(/'/g, "''")}'`).join(", ");
   const rows = await table
     .query()
-    .where(`path IN (${quoted}) AND \`chunkIndex\` = 0`)
+    .where(`path IN (${sqlQuoteList(paths)}) AND \`chunkIndex\` = 0`)
     .limit(paths.length)
     .toArray();
 
