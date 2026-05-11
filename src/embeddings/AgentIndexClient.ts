@@ -101,15 +101,19 @@ export class AgentIndexClient implements IIndexClient {
     }
   }
 
+  // Uses fetch instead of Obsidian's requestUrl: POST through requestUrl to
+  // localhost fails with net::ERR_FAILED — Electron's net.request does a
+  // Private Network Access preflight that Express's stock cors() doesn't
+  // answer. Renderer fetch is fine because the server has cors().
   async reload(): Promise<boolean> {
     try {
-      await requestUrl({
-        url: `${this.proxyUrl}/index/rebuild`,
+      const headers: Record<string, string> = {};
+      if (this.authToken) headers.Authorization = `Bearer ${this.authToken}`;
+      const res = await fetch(`${this.proxyUrl}/index/rebuild`, {
         method: "POST",
-        headers: this.headers(),
-        body: "{}",
+        headers,
       });
-      return true;
+      return res.ok;
     } catch {
       return false;
     }

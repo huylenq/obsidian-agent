@@ -531,24 +531,17 @@ export default class ClaudeAgentPlugin extends Plugin {
   }
 
   async rebuildSemanticIndex(): Promise<void> {
-    if (!this.claudeClient) {
+    if (!this.vectorStore) {
       new Notice("Claude Agent not connected");
       return;
     }
-    try {
-      await requestUrl({
-        url: `${this.claudeClient.proxyUrl}/index/rebuild`,
-        method: "POST",
-        headers: this.claudeClient.authToken
-          ? { Authorization: `Bearer ${this.claudeClient.authToken}`, "Content-Type": "application/json" }
-          : { "Content-Type": "application/json" },
-        body: "{}",
-      });
-      new Notice("Rebuilding semantic index…");
-      this.pokeIndexStatus();
-    } catch (err: any) {
-      new Notice(`Rebuild failed: ${err?.message || err}`);
+    const ok = await this.vectorStore.reload();
+    if (!ok) {
+      new Notice("Rebuild failed");
+      return;
     }
+    new Notice("Rebuilding semantic index…");
+    this.pokeIndexStatus();
   }
 
   /** One-shot status fetch + render. If indexing, schedules the next poll. */
