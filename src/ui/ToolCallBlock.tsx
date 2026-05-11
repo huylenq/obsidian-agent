@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { ToolBlock } from "@/types";
+import { displayToolName, getBlockStatus } from "./toolDisplay";
 
 interface ToolCallBlockProps {
   block: ToolBlock;
@@ -7,25 +8,16 @@ interface ToolCallBlockProps {
 
 export function ToolCallBlock({ block }: ToolCallBlockProps) {
   const [expanded, setExpanded] = useState(false);
-
-  const statusClass = block.isError
-    ? "error"
-    : block.isRunning
-    ? "running"
-    : "done";
-
-  // Extract MCP server/tool for display: mcp__lance__search → "lance / search"
-  const mcpMatch = block.toolName.match(/^mcp__([^_]+)__(.+)$/);
-  const displayName = mcpMatch ? `${mcpMatch[1]} / ${mcpMatch[2]}` : block.toolName;
+  const status = getBlockStatus(block);
 
   return (
-    <div className={`claude-agent-tool-block ${statusClass}`}>
+    <div className={`claude-agent-tool-block ${status}`}>
       <div
         className="claude-agent-tool-block-header"
         onClick={() => setExpanded(!expanded)}
       >
-        <span className={`claude-agent-tool-block-dot ${statusClass}`} />
-        <span className="claude-agent-tool-block-name">{displayName}</span>
+        <span className={`claude-agent-tool-block-dot ${status}`} />
+        <span className="claude-agent-tool-block-name">{displayToolName(block.toolName)}</span>
         <span className="claude-agent-tool-block-desc">{block.description}</span>
         <span className={`claude-agent-tool-block-chevron ${expanded ? "expanded" : ""}`}>
           &#9656;

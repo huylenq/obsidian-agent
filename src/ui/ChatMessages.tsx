@@ -9,7 +9,7 @@ import {
   chatStore,
 } from "@/state/chatState";
 import { MarkdownContent } from "./MarkdownContent";
-import { ToolCallBlock } from "./ToolCallBlock";
+import { ToolGroup } from "./ToolGroup";
 import { ChatMessage } from "@/types";
 
 interface MessageGroup {
@@ -33,6 +33,30 @@ function groupMessagesByBoundary(messages: ChatMessage[]): MessageGroup[] {
   // Final group (no boundary after it — the active segment)
   groups.push({ messages: current });
   return groups;
+}
+
+// Coalesce runs of consecutive tool_block messages into a single virtual
+// message whose toolBlocks aggregate the run. The chat stream emits one
+// tool_block per tool_use event; visual grouping happens at render time.
+function coalesceToolBlocks(messages: ChatMessage[]): ChatMessage[] {
+  const out: ChatMessage[] = [];
+  for (const msg of messages) {
+    const prev = out[out.length - 1];
+    if (
+      msg.role === "tool_block" &&
+      msg.toolBlocks &&
+      prev?.role === "tool_block" &&
+      prev.toolBlocks
+    ) {
+      out[out.length - 1] = {
+        ...prev,
+        toolBlocks: [...prev.toolBlocks, ...msg.toolBlocks],
+      };
+    } else {
+      out.push(msg);
+    }
+  }
+  return out;
 }
 
 function formatTokenCount(tokens: number): string {
@@ -167,9 +191,7 @@ function MessageBubble({ message, markerMetadata }: { message: ChatMessage; mark
   if (message.role === "tool_block" && message.toolBlocks) {
     return (
       <div className="claude-agent-message tool_block">
-        {message.toolBlocks.map((block) => (
-          <ToolCallBlock key={block.toolUseId} block={block} />
-        ))}
+        <ToolGroup blocks={message.toolBlocks} />
       </div>
     );
   }
@@ -352,7 +374,7 @@ export function ChatMessages({ pendingScrollFlashcardId, onScrollComplete }: Cha
         return (
           <React.Fragment key={groupIndex}>
             {!isCollapsed &&
-              group.messages.map((message) => (
+              coalesceToolBlocks(group.messages).map((message) => (
                 <MessageBubble
                   key={message.id}
                   message={message}
