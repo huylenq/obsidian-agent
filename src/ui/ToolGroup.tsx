@@ -31,8 +31,13 @@ function StackedIcon({ icon, isLatest }: { icon: BlockIcon; isLatest: boolean })
 
 export function ToolGroup({ blocks }: ToolGroupProps) {
   const [override, setOverride] = useState<boolean | null>(null);
+  const chevronRef = useRef<HTMLSpanElement>(null);
 
   const { status, runningBlock, errorBlock } = inspectGroup(blocks);
+
+  useEffect(() => {
+    if (chevronRef.current) setIcon(chevronRef.current, "chevron-right");
+  }, []);
 
   if (blocks.length === 1) {
     return <ToolCallBlock block={blocks[0]} />;
@@ -77,9 +82,10 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
             ? <strong key={i}>{p.text}</strong>
             : <React.Fragment key={i}>{p.text}</React.Fragment>)}
         </span>
-        <span className={`claude-agent-tool-block-chevron ${expanded ? "expanded" : ""}`}>
-          &#9656;
-        </span>
+        <span
+          ref={chevronRef}
+          className={`claude-agent-tool-block-chevron ${expanded ? "expanded" : ""}`}
+        />
       </div>
       {expanded && (
         <div className="claude-agent-tool-group-body">

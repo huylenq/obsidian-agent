@@ -326,7 +326,10 @@
 
 .claude-agent-message.tool_block {
   max-width: 100%;
-  padding: 0;
+  /* Left padding chosen so the tool icon's left edge aligns with the
+     prose-message text column (prose has padding-left: 16px, header has
+     padding-left: 6px, so 10px on the message places the icon at x=16). */
+  padding: 0 16px 0 10px;
   background: none;
   display: flex;
   flex-direction: column;
@@ -334,48 +337,27 @@
 }
 
 .claude-agent-tool-block {
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 6px;
-  overflow: hidden;
+  position: relative;
 }
 
-.claude-agent-tool-block.error {
-  border-color: var(--text-error);
-  border-left-width: 3px;
+.claude-agent-tool-block.error > .claude-agent-tool-block-header {
+  border-left: 2px solid var(--text-error);
+  padding-left: 4px;
 }
 
 .claude-agent-tool-block-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
+  padding: 3px 6px;
   cursor: pointer;
-  font-size: 0.82em;
+  font-size: 1em;
+  border-radius: 4px;
   transition: background 0.1s;
 }
 
 .claude-agent-tool-block-header:hover {
-  background: var(--background-secondary-alt);
-}
-
-.claude-agent-tool-block-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.claude-agent-tool-block-dot.done {
-  background: var(--text-success, #4caf50);
-}
-
-.claude-agent-tool-block-dot.running {
-  background: var(--text-warning, #ff9800);
-  animation: claude-agent-pulse 1.2s infinite;
-}
-
-.claude-agent-tool-block-dot.error {
-  background: var(--text-error);
+  background: var(--background-modifier-hover);
 }
 
 /* Shared base for both single-call and stacked-group tool icons. */
@@ -384,11 +366,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: var(--background-secondary);
-  color: var(--text-muted);
+  color: var(--text-accent);
   flex-shrink: 0;
   line-height: 0;
 }
@@ -400,20 +382,23 @@
 }
 
 .claude-agent-tool-icon .svg-icon {
-  width: 13px;
-  height: 13px;
+  width: 15px;
+  height: 15px;
   display: block;
+  stroke-width: 2.6;
 }
 
 .claude-agent-tool-icon.running {
   background: var(--interactive-accent);
   color: var(--text-on-accent);
+  box-shadow: none;
   animation: claude-agent-pulse 1.2s infinite;
 }
 
 .claude-agent-tool-icon.error {
   background: var(--text-error);
   color: var(--text-on-accent);
+  box-shadow: none;
 }
 
 @keyframes claude-agent-pulse {
@@ -442,15 +427,30 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
 }
 
 .claude-agent-tool-block-chevron {
-  font-size: 0.85em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-muted);
-  transition: transform 0.15s ease-out;
   flex-shrink: 0;
+  line-height: 0;
+  opacity: 0.7;
+  transition: transform 0.15s ease-out, opacity 0.1s;
+}
+
+.claude-agent-tool-block-chevron .svg-icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2;
+}
+
+.claude-agent-tool-block-header:hover .claude-agent-tool-block-chevron,
+.claude-agent-tool-group-header:hover .claude-agent-tool-block-chevron {
+  opacity: 1;
 }
 
 .claude-agent-tool-block-chevron.expanded {
@@ -458,9 +458,11 @@
 }
 
 .claude-agent-tool-block-body {
-  padding: 4px 8px 6px;
-  border-top: 1px solid var(--background-modifier-border);
-  font-size: 0.78em;
+  margin: 2px 6px 4px 32px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--background-secondary);
+  font-size: 0.9em;
   max-height: 300px;
   overflow-y: auto;
 }
@@ -485,9 +487,8 @@
   white-space: pre-wrap;
   word-break: break-all;
   margin: 0 0 4px;
-  padding: 4px 6px;
-  background: var(--background-primary);
-  border-radius: 4px;
+  padding: 0;
+  background: transparent;
   color: var(--text-muted);
 }
 
@@ -505,29 +506,28 @@
 /* Tool group (collapses consecutive tool calls under one header) */
 
 .claude-agent-tool-group {
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 6px;
-  overflow: hidden;
+  position: relative;
 }
 
-.claude-agent-tool-group.error {
-  border-color: var(--text-error);
-  border-left-width: 3px;
+.claude-agent-tool-group.error > .claude-agent-tool-group-header {
+  border-left: 2px solid var(--text-error);
+  padding-left: 4px;
 }
 
 .claude-agent-tool-group-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
+  padding: 3px 6px;
   cursor: pointer;
-  font-size: 0.82em;
+  font-size: 1em;
+  border-radius: 4px;
   transition: background 0.1s;
   user-select: none;
 }
 
 .claude-agent-tool-group-header:hover {
-  background: var(--background-secondary-alt);
+  background: var(--background-modifier-hover);
 }
 
 /* Stacked tool icons (one per unique tool kind, overlapping w/ rim) */
@@ -539,7 +539,7 @@
 }
 
 .claude-agent-tool-group-detail {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -581,44 +581,54 @@
 }
 
 .claude-agent-tool-group-body {
-  padding: 4px 8px 6px;
-  border-top: 1px solid var(--background-modifier-border);
+  padding: 4px 0 6px 10px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  position: relative;
+  gap: 4px;
 }
 
-/* Thread line down the left side of grouped tools */
-.claude-agent-tool-group-body::before {
-  content: "";
-  position: absolute;
-  left: 12px;
-  top: 6px;
-  bottom: 6px;
-  width: 1px;
-  background: var(--background-modifier-border);
-  pointer-events: none;
-}
-
-/* Compress individual tool rows when rendered inside a group */
-.claude-agent-tool-group-body .claude-agent-tool-block {
-  border: none;
-  border-radius: 4px;
-  margin-left: 18px;
-}
-
-.claude-agent-tool-group-body .claude-agent-tool-block.error {
-  border-left: 2px solid var(--text-error);
-}
-
+/* Children inside a group render as an activity-log stream: smaller
+   disc-less glyph colored by status, distinct from the parent header's
+   heavier accent-disc style. */
 .claude-agent-tool-group-body .claude-agent-tool-block-header {
-  padding: 3px 6px;
+  font-size: 0.92em;
+}
+
+.claude-agent-tool-group-body .claude-agent-tool-icon,
+.claude-agent-tool-group-body .claude-agent-tool-icon.running,
+.claude-agent-tool-group-body .claude-agent-tool-icon.error {
+  width: 16px;
+  height: 16px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  animation: none;
+}
+
+.claude-agent-tool-group-body .claude-agent-tool-icon.running {
+  color: var(--interactive-accent);
+  animation: claude-agent-pulse 1.2s infinite;
+}
+
+.claude-agent-tool-group-body .claude-agent-tool-icon.error {
+  color: var(--text-error);
+}
+
+.claude-agent-tool-group-body .claude-agent-tool-icon .svg-icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.4;
+}
+
+/* Group children no longer need the per-block error stripe — the
+   status-tinted icon already signals the failure. */
+.claude-agent-tool-group-body .claude-agent-tool-block.error > .claude-agent-tool-block-header {
+  border-left: none;
+  padding-left: 6px;
 }
 
 .claude-agent-tool-group-body .claude-agent-tool-block-body {
-  padding: 4px 6px 6px;
-  border-top: 1px dashed var(--background-modifier-border);
+  margin-left: 22px;
 }
 
 /* Loading indicator */

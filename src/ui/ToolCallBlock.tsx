@@ -11,10 +11,15 @@ export function ToolCallBlock({ block }: ToolCallBlockProps) {
   const [expanded, setExpanded] = useState(false);
   const status = getBlockStatus(block);
   const iconRef = useRef<HTMLSpanElement>(null);
+  const chevronRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     if (iconRef.current) setIcon(iconRef.current, getToolIcon(block.toolName));
   }, [block.toolName]);
+
+  useEffect(() => {
+    if (chevronRef.current) setIcon(chevronRef.current, "chevron-right");
+  }, []);
 
   return (
     <div className={`claude-agent-tool-block ${status}`}>
@@ -27,9 +32,10 @@ export function ToolCallBlock({ block }: ToolCallBlockProps) {
         </span>
         <span className="claude-agent-tool-block-name">{displayToolName(block.toolName)}</span>
         <span className="claude-agent-tool-block-desc">{block.description}</span>
-        <span className={`claude-agent-tool-block-chevron ${expanded ? "expanded" : ""}`}>
-          &#9656;
-        </span>
+        <span
+          ref={chevronRef}
+          className={`claude-agent-tool-block-chevron ${expanded ? "expanded" : ""}`}
+        />
       </div>
       {expanded && (
         <div className="claude-agent-tool-block-body">
