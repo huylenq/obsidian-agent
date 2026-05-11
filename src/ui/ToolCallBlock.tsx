@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { setIcon } from "obsidian";
 import { ToolBlock } from "@/types";
-import { displayToolName, getBlockStatus } from "./toolDisplay";
+import { displayToolName, getBlockStatus, getToolIcon } from "./toolDisplay";
 
 interface ToolCallBlockProps {
   block: ToolBlock;
@@ -9,6 +10,11 @@ interface ToolCallBlockProps {
 export function ToolCallBlock({ block }: ToolCallBlockProps) {
   const [expanded, setExpanded] = useState(false);
   const status = getBlockStatus(block);
+  const iconRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (iconRef.current) setIcon(iconRef.current, getToolIcon(block.toolName));
+  }, [block.toolName]);
 
   return (
     <div className={`claude-agent-tool-block ${status}`}>
@@ -16,7 +22,9 @@ export function ToolCallBlock({ block }: ToolCallBlockProps) {
         className="claude-agent-tool-block-header"
         onClick={() => setExpanded(!expanded)}
       >
-        <span className={`claude-agent-tool-block-dot ${status}`} />
+        <span className={`claude-agent-tool-icon ${status}`}>
+          <span ref={iconRef} />
+        </span>
         <span className="claude-agent-tool-block-name">{displayToolName(block.toolName)}</span>
         <span className="claude-agent-tool-block-desc">{block.description}</span>
         <span className={`claude-agent-tool-block-chevron ${expanded ? "expanded" : ""}`}>

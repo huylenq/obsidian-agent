@@ -1,66 +1,59 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { setIcon } from "obsidian";
 import { ToolBlock } from "@/types";
 import { ToolCallBlock } from "./ToolCallBlock";
-import { parseMcpToolName, getGroupStatus } from "./toolDisplay";
+import {
+  BlockIcon,
+  getBlockIcons,
+  inspectGroup,
+  summarizeBlocks,
+  SummaryPart,
+} from "./toolDisplay";
 
 interface ToolGroupProps {
   blocks: ToolBlock[];
 }
 
-const VERBS: Record<string, { verb: string; noun: string; nounPlural: string }> = {
-  Read: { verb: "Read", noun: "file", nounPlural: "files" },
-  Write: { verb: "Wrote", noun: "file", nounPlural: "files" },
-  Edit: { verb: "Edited", noun: "file", nounPlural: "files" },
-  MultiEdit: { verb: "Edited", noun: "file", nounPlural: "files" },
-  Bash: { verb: "Ran", noun: "command", nounPlural: "commands" },
-  Glob: { verb: "Globbed", noun: "pattern", nounPlural: "patterns" },
-  Grep: { verb: "Searched", noun: "pattern", nounPlural: "patterns" },
-  Task: { verb: "Delegated", noun: "task", nounPlural: "tasks" },
-  Agent: { verb: "Delegated", noun: "task", nounPlural: "tasks" },
-  WebFetch: { verb: "Fetched", noun: "URL", nounPlural: "URLs" },
-  WebSearch: { verb: "Searched the web", noun: "query", nounPlural: "queries" },
-  TodoWrite: { verb: "Updated", noun: "todo", nounPlural: "todos" },
-};
-
-function summarize(blocks: ToolBlock[]): string {
-  const counts = new Map<string, number>();
-  for (const b of blocks) {
-    counts.set(b.toolName, (counts.get(b.toolName) ?? 0) + 1);
-  }
-  const parts: string[] = [];
-  for (const [toolName, count] of counts) {
-    const mcp = parseMcpToolName(toolName);
-    if (mcp) {
-      parts.push(`Used ${mcp.server}/${mcp.tool} ×${count}`);
-      continue;
-    }
-    const v = VERBS[toolName];
-    parts.push(v
-      ? `${v.verb} ${count} ${count === 1 ? v.noun : v.nounPlural}`
-      : `${toolName} ×${count}`);
-  }
-  return parts.join(" · ");
+function StackedIcon({ icon, isLatest }: { icon: BlockIcon; isLatest: boolean }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (ref.current) setIcon(ref.current, icon.icon);
+  }, [icon.icon]);
+  return (
+    <span
+      className={`claude-agent-tool-icon claude-agent-tool-group-icon ${isLatest ? "latest" : ""}`}
+      title={icon.label}
+    >
+      <span ref={ref} />
+    </span>
+  );
 }
 
 export function ToolGroup({ blocks }: ToolGroupProps) {
-  // override = null means "follow auto behavior"; true/false = user pinned it
   const [override, setOverride] = useState<boolean | null>(null);
 
-  const status = getGroupStatus(blocks);
-  const runningBlock = blocks.find((b) => b.isRunning);
-  const summary = useMemo(() => summarize(blocks), [blocks]);
+  const { status, runningBlock, errorBlock } = inspectGroup(blocks);
 
   if (blocks.length === 1) {
     return <ToolCallBlock block={blocks[0]} />;
   }
 
+  const icons = getBlockIcons(blocks);
   const autoExpanded = status !== "done";
   const expanded = override ?? autoExpanded;
+  const runningKey = runningBlock?.toolUseId ?? null;
 
-  const liveSuffix = runningBlock
-    ? ` · ${runningBlock.toolName}${runningBlock.description ? ` ${runningBlock.description}` : ""}`
-    : "";
-  const headerText = status === "running" ? `Working… ${summary}${liveSuffix}` : summary;
+  // Header caption: live current tool while running, error excerpt on failure,
+  // verb summary when done. Done-state captions flag counts so they bold inline.
+  let caption: SummaryPart[];
+  if (status === "running" && runningBlock) {
+    caption = [{ text: runningBlock.description || runningBlock.toolName }];
+  } else if (status === "error") {
+    const firstLine = errorBlock?.output?.split("\n")[0]?.trim();
+    caption = [{ text: firstLine ? `Failed: ${firstLine}` : "Failed" }];
+  } else {
+    caption = summarizeBlocks(blocks);
+  }
 
   return (
     <div className={`claude-agent-tool-group ${status} ${expanded ? "expanded" : ""}`}>
@@ -70,9 +63,20 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
         role="button"
         aria-expanded={expanded}
       >
-        <span className={`claude-agent-tool-block-dot ${status}`} />
-        <span className="claude-agent-tool-group-summary">{headerText}</span>
-        <span className="claude-agent-tool-group-count">{blocks.length}</span>
+        <span className="claude-agent-tool-group-icons">
+          {icons.map((ic) => (
+            <StackedIcon
+              key={ic.key}
+              icon={ic}
+              isLatest={ic.key === runningKey}
+            />
+          ))}
+        </span>
+        <span className={`claude-agent-tool-group-detail ${status}`}>
+          {caption.map((p, i) => p.bold
+            ? <strong key={i}>{p.text}</strong>
+            : <React.Fragment key={i}>{p.text}</React.Fragment>)}
+        </span>
         <span className={`claude-agent-tool-block-chevron ${expanded ? "expanded" : ""}`}>
           &#9656;
         </span>

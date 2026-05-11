@@ -378,6 +378,44 @@
   background: var(--text-error);
 }
 
+/* Shared base for both single-call and stacked-group tool icons. */
+.claude-agent-tool-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+/* Inner span is where setIcon writes the SVG — collapse to its content
+   so the outer flex centers on the SVG's actual bounds. */
+.claude-agent-tool-icon > span {
+  display: inline-flex;
+}
+
+.claude-agent-tool-icon .svg-icon {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+
+.claude-agent-tool-icon.running {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  animation: claude-agent-pulse 1.2s infinite;
+}
+
+.claude-agent-tool-icon.error {
+  background: var(--text-error);
+  color: var(--text-on-accent);
+}
+
 @keyframes claude-agent-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
@@ -481,9 +519,9 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
+  padding: 4px 8px;
   cursor: pointer;
-  font-size: 0.85em;
+  font-size: 0.82em;
   transition: background 0.1s;
   user-select: none;
 }
@@ -492,32 +530,54 @@
   background: var(--background-secondary-alt);
 }
 
-.claude-agent-tool-group-summary {
+/* Stacked tool icons (one per unique tool kind, overlapping w/ rim) */
+.claude-agent-tool-group-icons {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.claude-agent-tool-group-detail {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 500;
   color: var(--text-normal);
 }
 
-.claude-agent-tool-group.running .claude-agent-tool-group-summary {
-  color: var(--text-muted);
+.claude-agent-tool-group-detail strong {
+  font-weight: 600;
 }
 
-.claude-agent-tool-group-count {
-  font-size: 0.75em;
-  color: var(--text-muted);
-  background: var(--background-modifier-border);
-  padding: 1px 6px;
-  border-radius: 8px;
-  flex-shrink: 0;
+.claude-agent-tool-group-detail.running {
+  font-style: italic;
 }
 
-.claude-agent-tool-group.error .claude-agent-tool-group-count {
-  background: var(--background-modifier-error);
+.claude-agent-tool-group-detail.error {
   color: var(--text-error);
+}
+
+/* Group icon: inherits .claude-agent-tool-icon, adds overlap + latest highlight. */
+.claude-agent-tool-group-icon {
+  margin-left: -8px;
+  transition: transform 0.1s, background 0.1s;
+}
+
+.claude-agent-tool-group-icon:first-child {
+  margin-left: 0;
+}
+
+.claude-agent-tool-group-icon.latest {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  animation: claude-agent-pulse 1.2s infinite;
+  z-index: 1;
+}
+
+.claude-agent-tool-group.error .claude-agent-tool-group-icon.latest {
+  background: var(--text-error);
 }
 
 .claude-agent-tool-group-body {
