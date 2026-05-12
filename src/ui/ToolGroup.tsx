@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { setIcon } from "obsidian";
 import { ToolBlock } from "@/types";
 import { ToolCallBlock, MergedFileBlock } from "./ToolCallBlock";
@@ -126,17 +126,14 @@ function StackedIcon({ icon, cutLeft, isLatest, stackIndex }: StackedIconProps) 
   );
 }
 
-// Monotonic counter scopes CSS anchor-names per ToolGroup instance so anchors
-// from different groups in the same chat view don't collide.
-let arcScopeCounter = 0;
-
 export function ToolGroup({ blocks }: ToolGroupProps) {
   const [override, setOverride] = useState<boolean | null>(null);
   const [showGraph, setShowGraph] = useState(false);
   const chevronRef = useRef<HTMLSpanElement>(null);
   const graphToggleRef = useRef<HTMLButtonElement>(null);
-  const arcScopeRef = useRef<string>();
-  if (!arcScopeRef.current) arcScopeRef.current = `g${++arcScopeCounter}`;
+  // CSS dashed-ident-safe scope id so anchor-name attrs from different groups
+  // don't collide. useId() returns `:rN:`-style strings; strip the colons.
+  const arcScope = useId().replace(/[^a-zA-Z0-9]/g, "");
 
   const { status, runningBlock, errorBlock } = inspectGroup(blocks);
 
@@ -183,13 +180,10 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
         ordered.push(fp);
       }
     }
-    // Stable dashed-ident per (group, pathIndex) — LinkArcs reads these to
-    // build anchor() references; pills publish them as anchor-name.
-    const scope = arcScopeRef.current!;
     const anchors = new Map<string, string>();
-    ordered.forEach((p, i) => anchors.set(p, `--ca-arc-${scope}-${i}`));
+    ordered.forEach((p, i) => anchors.set(p, `--ca-arc-${arcScope}-${i}`));
     return { vaultPaths: ordered, firstItemKeyByPath: firstKey, pathLinks: links, pathAnchors: anchors };
-  }, [groupedItems]);
+  }, [groupedItems, arcScope]);
 
   const runningPath =
     runningBlock?.filePath && isFileTool(runningBlock.toolName) ? runningBlock.filePath : null;

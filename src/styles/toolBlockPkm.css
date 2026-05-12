@@ -242,15 +242,11 @@
 /* =====================================================================
    Expanded group: pill-to-pill arc layer
    ---------------------------------------------------------------------
-   One SVG per inter-note link. The SVG is sized so its top edge sits at
-   the source pill's bottom and its bottom edge at the target pill's top;
-   horizontally it spans between the two pill x-centres. The unit curve
-   inside (preserveAspectRatio="none") stretches to fit.
-   Stacking: arc layer sits ABOVE body content (so it shows across the
-   Write card and other opaque elements) while pills paint in normal flow
-   below it. The path never enters either pill rectangle, so we don't need
-   the pill background to occlude anything — the gap between pills is
-   genuinely empty space, and the curve fills it.
+   Arc layer sits ABOVE body content (z:1) so the curve shows across the
+   Write card and other opaque elements. Pill backgrounds are translucent;
+   the line uses the same token, so the path's *visible* tip lands at the
+   pill edge (source) or the arrow base (target) — no overlap, no
+   double-blend. See LinkArcs.tsx for the inset math.
    ===================================================================== */
 
 .claude-agent-tool-group-arc-layout {
@@ -269,10 +265,8 @@
   position: absolute;
   pointer-events: none;
   overflow: visible;
-  /* Same token as the wikilink pill's `background` — the line reads as "the
-     pill material stretched between two pills." Translucent overlay, so the
-     stroke needs extra width to register at the same visual weight as the
-     pill (which gets its weight from area, not alpha). */
+  /* Same translucent token as the pill background — cross-cutting content
+     stays visible underneath the stroke. */
   color: var(--background-modifier-hover);
 }
 
@@ -280,6 +274,10 @@
   fill: none;
   stroke: currentColor;
   stroke-width: 4;
+  /* Round caps on both ends. The line's visible tip (cap apex) lands on the
+     pill edge at source and on the arrow base at target — LinkArcs.tsx
+     pre-shortens the path by HALF_STROKE on each end to account for the cap
+     extension. */
   stroke-linecap: round;
   /* Without this, preserveAspectRatio="none" stretches the stroke too. */
   vector-effect: non-scaling-stroke;
@@ -287,6 +285,29 @@
 
 .claude-agent-link-arc.bidi path {
   stroke-width: 5;
+}
+
+/* Endpoint markers — currently target-only. Source uses the line's own round
+   cap as its terminator. */
+.claude-agent-link-arc-marker {
+  position: absolute;
+  pointer-events: none;
+  background: var(--background-modifier-hover);
+}
+
+/* Target arrowhead — triangle whose APEX sits on the target pill's visible
+   edge, body extending upstream into the gap along the tangent. Wider than
+   tall so the chevron reads at a glance. clip-path cuts the triangle out of
+   a small box; CSS border-triangle would force a solid (non-token) colour.
+   `--rot` is supplied by LinkArcs (Bezier end-tangent); transform-origin at
+   the apex (50% 100%) so the tip stays anchored to (left, top) regardless
+   of rotation, and the base sweeps around. */
+.claude-agent-link-arc-marker.target {
+  width: 14px;
+  height: 6px;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  transform-origin: 50% 100%;
+  transform: translate(-50%, -100%) rotate(var(--rot, 0deg));
 }
 
 /* ---------- Merged-run count badge + expanded body ---------- */

@@ -19,6 +19,9 @@ interface ToolCallBlockProps {
    *  per-block decorations (the leading lucide icon disc) since the wikilink pill
    *  + verb word already convey what the row represents. */
   inGroup?: boolean;
+  /** CSS anchor-name to publish on this block's wikilink pill. Set by ToolGroup
+   *  on the row that owns each unique vault path so LinkArcs can attach endpoints. */
+  anchorName?: string;
 }
 
 const PKM_VERBS: Record<string, string> = {
@@ -33,13 +36,13 @@ function useLucideIcon(ref: React.RefObject<HTMLSpanElement | null>, icon: strin
   }, [ref, icon]);
 }
 
-export function ToolCallBlock({ block, inGroup }: ToolCallBlockProps) {
+export function ToolCallBlock({ block, inGroup, anchorName }: ToolCallBlockProps) {
   // Dispatch into specialized renderers when we have the structured fields,
   // otherwise fall through to the generic IDE-syscall rendering.
   if (block.filePath) {
-    if (block.toolName === "Read") return <ReadBlock block={block} inGroup={inGroup} />;
-    if (block.toolName === "Write") return <WriteBlock block={block} inGroup={inGroup} />;
-    if (block.toolName === "Edit") return <EditBlock block={block} inGroup={inGroup} />;
+    if (block.toolName === "Read") return <ReadBlock block={block} inGroup={inGroup} anchorName={anchorName} />;
+    if (block.toolName === "Write") return <WriteBlock block={block} inGroup={inGroup} anchorName={anchorName} />;
+    if (block.toolName === "Edit") return <EditBlock block={block} inGroup={inGroup} anchorName={anchorName} />;
   }
   return <GenericBlock block={block} />;
 }
@@ -121,9 +124,11 @@ interface PkmHeaderProps {
    *  already telegraph the operation type, and the icon becomes visual noise
    *  inside an expanded ToolGroup body where every row is a file op. */
   inGroup?: boolean;
+  /** Forwarded to the wikilink pill so it publishes itself as a CSS anchor. */
+  anchorName?: string;
 }
 
-function PkmHeader({ block, expanded, onToggle, status, trailing, subline, inGroup }: PkmHeaderProps) {
+function PkmHeader({ block, expanded, onToggle, status, trailing, subline, inGroup, anchorName }: PkmHeaderProps) {
   const iconRef = useRef<HTMLSpanElement>(null);
   const chevronRef = useRef<HTMLSpanElement>(null);
   useLucideIcon(iconRef, getToolIcon(block.toolName));
@@ -141,7 +146,7 @@ function PkmHeader({ block, expanded, onToggle, status, trailing, subline, inGro
       <div className="claude-agent-tool-block-pkm-main">
         <div className="claude-agent-tool-block-pkm-row">
           <span className="claude-agent-tool-block-pkm-verb">{verb}</span>
-          {block.filePath && <WikilinkPill path={block.filePath} />}
+          {block.filePath && <WikilinkPill path={block.filePath} anchorName={anchorName} />}
           {block.filePath && <NoteMetadataStrip path={block.filePath} />}
           {trailing}
         </div>
@@ -159,7 +164,7 @@ function PkmHeader({ block, expanded, onToggle, status, trailing, subline, inGro
 // Read renderer
 // =====================================================================
 
-function ReadBlock({ block, inGroup }: ToolCallBlockProps) {
+function ReadBlock({ block, inGroup, anchorName }: ToolCallBlockProps) {
   const [expanded, setExpanded] = useState(false);
   const status = getBlockStatus(block);
   return (
@@ -170,6 +175,7 @@ function ReadBlock({ block, inGroup }: ToolCallBlockProps) {
         onToggle={() => setExpanded(!expanded)}
         status={status}
         inGroup={inGroup}
+        anchorName={anchorName}
       />
       {expanded && <BlockBody block={block} />}
     </div>
@@ -229,7 +235,7 @@ function CountBadge({ count }: { count: number }) {
   );
 }
 
-function EditBlock({ block, inGroup }: ToolCallBlockProps) {
+function EditBlock({ block, inGroup, anchorName }: ToolCallBlockProps) {
   const [expanded, setExpanded] = useState(false);
   const status = getBlockStatus(block);
   const diff = computeSemanticEditDiff(block.editOld ?? "", block.editNew ?? "");
@@ -244,6 +250,7 @@ function EditBlock({ block, inGroup }: ToolCallBlockProps) {
         status={status}
         subline={subline}
         inGroup={inGroup}
+        anchorName={anchorName}
       />
       {expanded && <BlockBody block={block} />}
     </div>
@@ -254,7 +261,7 @@ function EditBlock({ block, inGroup }: ToolCallBlockProps) {
 // Write renderer
 // =====================================================================
 
-function WriteBlock({ block, inGroup }: ToolCallBlockProps) {
+function WriteBlock({ block, inGroup, anchorName }: ToolCallBlockProps) {
   const [expanded, setExpanded] = useState(false);
   const status = getBlockStatus(block);
   const content = block.writeContent ?? "";
@@ -276,6 +283,7 @@ function WriteBlock({ block, inGroup }: ToolCallBlockProps) {
         status={status}
         trailing={trailing}
         inGroup={inGroup}
+        anchorName={anchorName}
       />
       <WriteCard snippet={snippet} cited={cited} />
       {expanded && <BlockBody block={block} />}
@@ -323,18 +331,19 @@ interface MergedFileBlockProps {
    *  blocks[*].editOld/editNew feed the diff aggregation for Edit runs. */
   blocks: ToolBlock[];
   inGroup?: boolean;
+  anchorName?: string;
 }
 
-export function MergedFileBlock({ blocks, inGroup }: MergedFileBlockProps) {
+export function MergedFileBlock({ blocks, inGroup, anchorName }: MergedFileBlockProps) {
   if (blocks.length === 0) return null;
   const first = blocks[0];
-  if (first.toolName === "Edit") return <MergedEditBlock blocks={blocks} inGroup={inGroup} />;
-  if (first.toolName === "Write") return <MergedWriteBlock blocks={blocks} inGroup={inGroup} />;
+  if (first.toolName === "Edit") return <MergedEditBlock blocks={blocks} inGroup={inGroup} anchorName={anchorName} />;
+  if (first.toolName === "Write") return <MergedWriteBlock blocks={blocks} inGroup={inGroup} anchorName={anchorName} />;
   // Read / MultiEdit — same skeleton, no aggregation beyond the count.
-  return <MergedSimpleBlock blocks={blocks} inGroup={inGroup} />;
+  return <MergedSimpleBlock blocks={blocks} inGroup={inGroup} anchorName={anchorName} />;
 }
 
-function MergedSimpleBlock({ blocks, inGroup }: MergedFileBlockProps) {
+function MergedSimpleBlock({ blocks, inGroup, anchorName }: MergedFileBlockProps) {
   const [expanded, setExpanded] = useState(false);
   const first = blocks[0];
   const status = getBlockStatus(first);
@@ -347,13 +356,14 @@ function MergedSimpleBlock({ blocks, inGroup }: MergedFileBlockProps) {
         status={status}
         trailing={<CountBadge count={blocks.length} />}
         inGroup={inGroup}
+        anchorName={anchorName}
       />
       {expanded && <MergedBlockBody blocks={blocks} />}
     </div>
   );
 }
 
-function MergedEditBlock({ blocks, inGroup }: MergedFileBlockProps) {
+function MergedEditBlock({ blocks, inGroup, anchorName }: MergedFileBlockProps) {
   const [expanded, setExpanded] = useState(false);
   const first = blocks[0];
   const status = getBlockStatus(first);
@@ -372,13 +382,14 @@ function MergedEditBlock({ blocks, inGroup }: MergedFileBlockProps) {
         trailing={<CountBadge count={blocks.length} />}
         subline={subline}
         inGroup={inGroup}
+        anchorName={anchorName}
       />
       {expanded && <MergedBlockBody blocks={blocks} />}
     </div>
   );
 }
 
-function MergedWriteBlock({ blocks, inGroup }: MergedFileBlockProps) {
+function MergedWriteBlock({ blocks, inGroup, anchorName }: MergedFileBlockProps) {
   const [expanded, setExpanded] = useState(false);
   // Last-write-wins: card preview reflects the final state on disk.
   const last = blocks[blocks.length - 1];
@@ -404,6 +415,7 @@ function MergedWriteBlock({ blocks, inGroup }: MergedFileBlockProps) {
         status={status}
         trailing={trailing}
         inGroup={inGroup}
+        anchorName={anchorName}
       />
       <WriteCard snippet={snippet} cited={cited} />
       {expanded && <MergedBlockBody blocks={blocks} />}
