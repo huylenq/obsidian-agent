@@ -1,0 +1,379 @@
+/* PKM-native renderers for Read / Write / Edit tool blocks.
+   Visually layered on top of the generic .claude-agent-tool-block styles
+   in messages.css — here we only add the wikilink-aware extras. */
+
+/* ---------- Wikilink pill ---------- */
+
+.claude-agent-wikilink-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px 1px 4px;
+  border-radius: 4px;
+  background: var(--background-modifier-hover);
+  color: var(--text-accent);
+  font-weight: 600;
+  font-size: 0.92em;
+  cursor: pointer;
+  line-height: 1.4;
+  border: 1px solid transparent;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.claude-agent-wikilink-pill:hover {
+  background: var(--background-modifier-active-hover, var(--background-modifier-hover));
+  border-color: var(--background-modifier-border);
+}
+
+.claude-agent-wikilink-pill.unresolved {
+  color: var(--text-muted);
+  font-style: italic;
+  font-weight: 500;
+}
+
+.claude-agent-wikilink-pill.small {
+  font-size: 0.82em;
+  padding: 0 4px 0 3px;
+  gap: 3px;
+  font-weight: 500;
+}
+
+.claude-agent-wikilink-pill-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- Note metadata strip ---------- */
+
+.claude-agent-note-meta-strip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.claude-agent-note-meta-chip {
+  font-size: 0.72em;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.claude-agent-note-meta-chip.tag {
+  color: var(--text-accent);
+  background: var(--background-secondary-alt, var(--background-secondary));
+}
+
+.claude-agent-note-meta-chip.muted {
+  color: var(--text-faint);
+  background: transparent;
+}
+
+/* ---------- PKM header layout ---------- */
+
+.claude-agent-tool-block-header.claude-agent-tool-block-pkm {
+  align-items: flex-start;
+}
+
+.claude-agent-tool-block-pkm-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.claude-agent-tool-block-pkm-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.claude-agent-tool-block-pkm-verb {
+  font-weight: 600;
+  color: var(--text-normal);
+  font-size: 0.92em;
+}
+
+.claude-agent-tool-block-pkm-subline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+/* The PKM header has its own meta strip — stop the chevron from forcing
+   the icon disc to vertically center against a multi-line header. */
+.claude-agent-tool-block-header.claude-agent-tool-block-pkm > .claude-agent-tool-icon {
+  margin-top: 1px;
+}
+
+.claude-agent-tool-block-header.claude-agent-tool-block-pkm > .claude-agent-tool-block-chevron {
+  align-self: center;
+}
+
+/* ---------- Edit semantic diff ---------- */
+
+.claude-agent-edit-semantic-diff {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.claude-agent-edit-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.92em;
+  font-family: var(--font-monospace);
+  line-height: 1.4;
+}
+
+.claude-agent-edit-delta.added {
+  color: var(--color-green, #4caf50);
+}
+
+.claude-agent-edit-delta.removed {
+  color: var(--color-red, #f44336);
+}
+
+.claude-agent-edit-delta.tag {
+  font-family: inherit;
+}
+
+.claude-agent-edit-delta.muted {
+  color: var(--text-faint);
+  font-style: italic;
+  font-family: inherit;
+}
+
+.claude-agent-edit-rename {
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+
+.claude-agent-edit-rename em {
+  color: var(--text-normal);
+  font-style: italic;
+}
+
+/* ---------- Write card ---------- */
+
+.claude-agent-write-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.72em;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--background-modifier-hover);
+  color: var(--text-muted);
+  line-height: 1.5;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.claude-agent-write-tag.warn {
+  color: var(--text-warning, #d97706);
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.claude-agent-write-tag-icon {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+}
+
+.claude-agent-write-tag-icon .svg-icon {
+  width: 11px;
+  height: 11px;
+  stroke-width: 2.2;
+}
+
+.claude-agent-write-card {
+  margin: 4px 6px 6px 32px;
+  padding: 8px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-left: 3px solid var(--interactive-accent);
+  border-radius: 4px;
+  background: var(--background-primary-alt, var(--background-secondary));
+  font-size: 0.9em;
+}
+
+.claude-agent-write-card-snippet {
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.claude-agent-write-card-cites {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.claude-agent-write-card-cites-more {
+  font-size: 0.75em;
+  color: var(--text-faint);
+}
+
+/* Inside an expanded group, child rows lose their leading icon (PkmHeader
+   suppresses it via inGroup). Reclaim the indent so content sits flush. */
+.claude-agent-tool-group-body .claude-agent-write-card {
+  margin-left: 0;
+}
+
+/* =====================================================================
+   Expanded group: arcs gutter + row stack
+   ===================================================================== */
+
+.claude-agent-tool-group-arc-layout {
+  display: flex;
+  align-items: stretch;
+  position: relative;
+}
+
+.claude-agent-tool-group-arc-layout .claude-agent-tool-group-body {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.claude-agent-tool-group-row {
+  /* Row wrappers are pure positioning anchors — no styling of their own.
+     The inner .claude-agent-tool-block carries the existing look. */
+}
+
+.claude-agent-link-arcs {
+  flex: 0 0 28px;
+  align-self: stretch;
+  /* Arrowheads + strokes inherit currentColor; tinted to the link-edge accent. */
+  color: var(--text-accent);
+}
+
+.claude-agent-link-arcs.empty {
+  /* When there are zero arcs to draw we still reserve the gutter so row widths
+     stay consistent — important for streaming groups whose arc set may pop
+     into existence mid-conversation. */
+  flex: 0 0 28px;
+}
+
+/* ---------- Merged-run count badge + expanded body ---------- */
+
+.claude-agent-merged-count {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72em;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--background-modifier-hover);
+  color: var(--text-muted);
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+}
+
+.claude-agent-tool-block-body.merged {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.claude-agent-merged-step {
+  border-left: 2px solid var(--background-modifier-border);
+  padding-left: 8px;
+}
+
+.claude-agent-merged-step-header {
+  font-size: 0.7em;
+  font-weight: 600;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+/* =====================================================================
+   Graph toggle button (header) + collapsible graph panel below the stack
+   ===================================================================== */
+
+.claude-agent-tool-group-graph-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 0 2px 0 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.claude-agent-tool-group-graph-toggle:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.claude-agent-tool-group-graph-toggle.active {
+  background: var(--background-modifier-active-hover, var(--interactive-accent));
+  color: var(--text-on-accent, var(--text-normal));
+}
+
+.claude-agent-tool-group-graph-toggle .svg-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.claude-agent-tool-group-graph {
+  margin-top: 6px;
+  border-top: 1px solid var(--background-modifier-border);
+  padding: 10px 0 4px 0;
+  min-width: 0;
+}
+
+.claude-agent-touched-graph-panel {
+  position: relative;
+  width: 100%;
+  height: 280px;
+  border-radius: 6px;
+  background: var(--background-secondary);
+  overflow: hidden;
+}
+
+.claude-agent-touched-graph-panel.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 60px;
+}
+
+.claude-agent-touched-graph-empty {
+  font-size: 0.8em;
+  color: var(--text-faint);
+}
+
+.claude-agent-touched-graph-panel .claude-agent-graph-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+

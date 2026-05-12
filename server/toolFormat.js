@@ -152,6 +152,52 @@ function formatMcpInput(server, tool, input) {
 }
 
 /**
+ * Normalize a Read/Write/Edit `file_path` to a vault-relative path.
+ *
+ * Claude's SDK reports `file_path` as an absolute filesystem path. The Obsidian
+ * client expects vault-relative paths for `metadataCache` lookups + wikilinks.
+ * If `vaultPath` is provided and the file lives inside it, strip the prefix.
+ * Otherwise return as-is (e.g., the agent reading `/etc/hosts` — out of vault).
+ */
+function toVaultRelative(filePath, vaultPath) {
+  if (!filePath || !vaultPath) return filePath;
+  // Trim trailing slash on vault for clean comparison
+  const vp = vaultPath.endsWith("/") ? vaultPath.slice(0, -1) : vaultPath;
+  if (filePath === vp) return "";
+  if (filePath.startsWith(vp + "/")) return filePath.slice(vp.length + 1);
+  return filePath;
+}
+
+/**
+ * Vault-aware structured fields for Read/Write/Edit, so the client UI can
+ * render wikilinks/metadata/semantic-diffs without re-parsing `input`.
+ *
+ * Returns an object with optional fields: { filePath, editOld, editNew, writeContent }.
+ * Returns {} for tools that don't apply.
+ */
+export function computeToolStructured(toolName, input, vaultPath) {
+  if (!input) return {};
+  const fp = toVaultRelative(input.file_path, vaultPath);
+  switch (toolName) {
+    case "Read":
+      return fp ? { filePath: fp } : {};
+    case "Write":
+      return {
+        ...(fp ? { filePath: fp } : {}),
+        ...(input.content ? { writeContent: truncateContent(input.content, 4000) } : {}),
+      };
+    case "Edit":
+      return {
+        ...(fp ? { filePath: fp } : {}),
+        ...(input.old_string ? { editOld: truncateContent(input.old_string, 2000) } : {}),
+        ...(input.new_string ? { editNew: truncateContent(input.new_string, 2000) } : {}),
+      };
+    default:
+      return {};
+  }
+}
+
+/**
  * Truncate text with ellipsis suffix.
  */
 export function truncateContent(text, maxLen = 2000) {

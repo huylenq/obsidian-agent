@@ -9,6 +9,11 @@ export interface ChatResponse {
   description?: string;
   input?: string;
   isError?: boolean;
+  // Vault-aware structured fields for Read/Write/Edit (set by proxy server)
+  filePath?: string;
+  editOld?: string;
+  editNew?: string;
+  writeContent?: string;
   sessionId?: string;
   queryId?: string;
   resultMetadata?: {
@@ -228,6 +233,10 @@ export class ClaudeAgentClient {
           toolUseId: data.toolUseId as string,
           description: data.description as string,
           input: data.input as string,
+          filePath: data.filePath as string | undefined,
+          editOld: data.editOld as string | undefined,
+          editNew: data.editNew as string | undefined,
+          writeContent: data.writeContent as string | undefined,
         };
       case "tool_result":
         return {

@@ -13,6 +13,13 @@ export interface ToolBlock {
   output?: string;
   isError?: boolean;
   isRunning?: boolean;
+  // Vault-aware structured fields populated by the server for Read/Write/Edit
+  // so the UI can render wikilinks, metadata strips, and semantic diffs without
+  // re-parsing `description` / `input`.
+  filePath?: string;       // vault-relative path (Read/Write/Edit)
+  editOld?: string;        // Edit: old_string (truncated)
+  editNew?: string;        // Edit: new_string (truncated)
+  writeContent?: string;   // Write: full content (truncated for transport)
 }
 
 export interface MarkerMetadata {

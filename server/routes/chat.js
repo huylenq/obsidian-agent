@@ -5,7 +5,11 @@ import { log, logError } from "../log.js";
 import { getTranscriptPath, getSummariesPath, readLatestSegmentMessages, generateCompactSummary, appendSummary } from "../transcript.js";
 import { updateSessionEntry, collectFilePaths, extractTitleFromTranscript, countTranscriptMessages, countUserOnlyMessages } from "../sessions.js";
 import { getMarkersPath, appendMarker } from "../markers.js";
-import { computeToolDescription, formatToolInput, extractToolResultContent } from "../toolFormat.js";
+import { appendTouched } from "../touchedNotes.js";
+import { computeToolDescription, computeToolStructured, formatToolInput, extractToolResultContent } from "../toolFormat.js";
+
+// Map Read/Write/Edit tool names to the op label persisted in {sessionId}.touched.json
+const TOUCH_OP_BY_TOOL = { Read: "read", Write: "write", Edit: "edit" };
 import { createAsyncIterableController } from "../asyncIterableController.js";
 import { registerQuery, getQuery, removeQuery, updateQuerySession } from "../queryRegistry.js";
 
@@ -134,6 +138,10 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
   // Track the resolved session ID (set in runQuery, used in finally for registry update)
   let resolvedSessionId = sessionId || null;
 
+  // Per-request collector for vault file ops (Read/Write/Edit). Flushed once
+  // in the finally block to avoid disk thrash on every tool call.
+  const touchedCollector = [];
+
   const buildQueryOptions = (resumeSessionId) => {
     // Resolve alias to explicit model ID for 1M context support
     const modelAlias = model || "haiku";
@@ -195,12 +203,21 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
             } else if (block.type === "tool_use") {
               const description = computeToolDescription(block.name, block.input);
               const input = formatToolInput(block.name, block.input);
+              const structured = computeToolStructured(block.name, block.input, vaultPath);
               sendEvent("tool_use", {
                 toolName: block.name,
                 toolUseId: block.id,
                 description,
                 input,
+                ...structured,
               });
+
+              // Record vault file ops into the per-request collector. We only
+              // care about Read/Write/Edit on files with a known file_path.
+              const op = TOUCH_OP_BY_TOOL[block.name];
+              if (op && structured.filePath) {
+                touchedCollector.push({ path: structured.filePath, op, at: Date.now() });
+              }
             }
           }
           break;
@@ -369,6 +386,17 @@ Before including DOT code blocks in your reply, verify each one visually. Use \`
       }
     } catch (regError) {
       logError("[Proxy] Failed to update session registry:", regError);
+    }
+
+    // Flush the per-request touched-notes collector. Failures must not break
+    // the chat turn — appendTouched swallows + logs internally, but wrap
+    // defensively just in case.
+    try {
+      if (resolvedSessionId && touchedCollector.length > 0) {
+        appendTouched(resolvedSessionId, vaultPath, touchedCollector);
+      }
+    } catch (touchErr) {
+      logError("[Proxy] Failed to persist touched notes:", touchErr);
     }
     res.end();
   }

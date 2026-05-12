@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "fs";
 import { log, logError } from "../log.js";
 import { getTranscriptPath, getSummariesPath, extractTextFromEntry, extractImagesFromEntry, loadSummaries } from "../transcript.js";
 import { getMarkersPath, loadMarkers } from "../markers.js";
-import { computeToolDescription, formatToolInput, extractToolResultContent } from "../toolFormat.js";
+import { computeToolDescription, computeToolStructured, formatToolInput, extractToolResultContent } from "../toolFormat.js";
 
 const router = Router();
 
@@ -91,6 +91,7 @@ router.post("/history", (req, res) => {
                 description: computeToolDescription(b.name, b.input),
                 input: formatToolInput(b.name, b.input),
                 isRunning: false,
+                ...computeToolStructured(b.name, b.input, vaultPath),
               })),
             });
           }
