@@ -21,6 +21,7 @@ function openTranscriptFile(vaultPath: string, sessionId: string): void {
 }
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatMessages } from "./ChatMessages";
+import { AppProvider } from "./AppContext";
 import { ActiveFileChip } from "./ActiveFileChip";
 import { SelectionChip } from "./SelectionChip";
 import { FileSearchResult } from "@/utils/fileSearch";
@@ -565,6 +566,10 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
                   description: chunk.description || chunk.toolName!,
                   input: chunk.input,
                   isRunning: true,
+                  filePath: chunk.filePath,
+                  editOld: chunk.editOld,
+                  editNew: chunk.editNew,
+                  writeContent: chunk.writeContent,
                 }],
               });
               break;
@@ -831,6 +836,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   const isFlashcardSession = sessionType === "flashcard_study";
 
   return (
+    <AppProvider app={app} indexClient={plugin.vectorStore}>
     <div className="claude-agent-container">
       <div className={`claude-agent-session-header ${isFlashcardSession ? "flashcard-study" : ""}`} ref={dropdownRef}>
         {isFlashcardSession && <span className="claude-agent-session-header-icon">&#128218;</span>}
@@ -988,6 +994,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         </div>
       </div>
     </div>
+    </AppProvider>
   );
 }
 

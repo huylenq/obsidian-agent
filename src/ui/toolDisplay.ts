@@ -142,12 +142,28 @@ const VERBS: Record<string, { verb: string; noun: string; nounPlural: string }> 
   TodoWrite: { verb: "Updated", noun: "todo", nounPlural: "todos" },
 };
 
+// Tools whose count + icon should dedupe by `filePath` rather than per-call.
+// Five edits to one file = one icon and "Edited 1 file" — not "Edited 5 files".
+export const FILE_TOOLS_DEDUPE = new Set(["Read", "Write", "Edit", "MultiEdit"]);
+
 // Caption segments — counts are flagged so they can render bold inline.
 export type SummaryPart = { text: string; bold?: boolean };
 
 export function summarizeBlocks(blocks: ToolBlock[]): SummaryPart[] {
+  // For file-tools, count distinct paths (not block instances). Non-file tools
+  // count per call as before. Track unique (toolName, filePath) tuples in a set;
+  // for everything else just increment.
   const counts = new Map<string, number>();
-  for (const b of blocks) counts.set(b.toolName, (counts.get(b.toolName) ?? 0) + 1);
+  const seenFile = new Map<string, Set<string>>();
+  for (const b of blocks) {
+    if (b.filePath && FILE_TOOLS_DEDUPE.has(b.toolName)) {
+      let set = seenFile.get(b.toolName);
+      if (!set) { set = new Set(); seenFile.set(b.toolName, set); }
+      if (set.has(b.filePath)) continue;
+      set.add(b.filePath);
+    }
+    counts.set(b.toolName, (counts.get(b.toolName) ?? 0) + 1);
+  }
   const result: SummaryPart[] = [];
   let first = true;
   for (const [toolName, count] of counts) {
@@ -178,12 +194,22 @@ export function summarizeBlocks(blocks: ToolBlock[]): SummaryPart[] {
 }
 
 export function getBlockIcons(blocks: ToolBlock[]): BlockIcon[] {
-  return blocks.map((b) => {
+  // Same dedup rule as the caption: collapse repeat file-tool icons by
+  // (toolName, filePath) so 5 edits to one file render as one icon.
+  const seen = new Set<string>();
+  const out: BlockIcon[] = [];
+  for (const b of blocks) {
+    if (b.filePath && FILE_TOOLS_DEDUPE.has(b.toolName)) {
+      const key = `${b.toolName}::${b.filePath}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+    }
     const mcp = parseMcpToolName(b.toolName);
-    return {
+    out.push({
       key: b.toolUseId,
       label: mcp ? `${mcp.server}/${mcp.tool}` : b.toolName,
       icon: getToolIcon(b.toolName),
-    };
-  });
+    });
+  }
+  return out;
 }
