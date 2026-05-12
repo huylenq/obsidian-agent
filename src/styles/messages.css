@@ -559,24 +559,83 @@
   color: var(--text-error);
 }
 
-/* Group icon: inherits .claude-agent-tool-icon, adds overlap + latest highlight. */
+/* Stacked group icons. Layout: static -12px overlap. Hover spread: per-icon
+   transform driven by --stack-index (set inline from React). Disc lives on a
+   child element so the rim-cut mask can carve the disc background without
+   clipping the SVG glyph above it. */
 .claude-agent-tool-group-icon {
-  margin-left: -8px;
-  transition: transform 0.1s, background 0.1s;
+  margin-left: -12px;
+  background: transparent;
+  /* Transform (compositor) — animating margin here would relay out the
+     header every frame. */
+  transition: transform 0.18s ease-out;
 }
 
 .claude-agent-tool-group-icon:first-child {
   margin-left: 0;
 }
 
+.claude-agent-tool-group-header:hover .claude-agent-tool-group-icon {
+  transform: translateX(calc(var(--stack-index, 0) * 6px));
+  /* Promote only while spreading — keeps idle stacks off their own layers. */
+  will-change: transform;
+}
+
+.claude-agent-tool-group-header:hover .claude-agent-tool-group-detail,
+.claude-agent-tool-group-header:hover .claude-agent-tool-group-graph-toggle,
+.claude-agent-tool-group-header:hover > .claude-agent-tool-block-chevron {
+  transform: translateX(var(--icon-spread, 0));
+}
+
+.claude-agent-tool-group-detail,
+.claude-agent-tool-group-graph-toggle,
+.claude-agent-tool-group-header > .claude-agent-tool-block-chevron {
+  transition: transform 0.18s ease-out;
+}
+
+.claude-agent-tool-group-icon-disc {
+  position: absolute;
+  inset: 0;
+  /* Matches the assistant bubble bg so the chip is invisible at rest. Hover
+     state below switches to transparent — `--background-modifier-hover` is
+     a semi-transparent overlay and would double-stack if applied here. */
+  background: var(--background-secondary);
+  border-radius: 50%;
+  mask-mode: luminance;
+  -webkit-mask-mode: luminance;
+  mask-size: 100% 100%;
+  -webkit-mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+  pointer-events: none;
+}
+
+.claude-agent-tool-group-icon-glyph {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+}
+
+/* Transparent on hover so the row's hover overlay paints through without
+   double-stacking (the overlay is semi-transparent). */
+.claude-agent-tool-group-header:hover .claude-agent-tool-group-icon:not(.latest) .claude-agent-tool-group-icon-disc {
+  background: transparent;
+}
+
 .claude-agent-tool-group-icon.latest {
-  background: var(--interactive-accent);
   color: var(--text-on-accent);
-  animation: claude-agent-pulse 1.2s infinite;
   z-index: 1;
 }
 
-.claude-agent-tool-group.error .claude-agent-tool-group-icon.latest {
+.claude-agent-tool-group-icon.latest .claude-agent-tool-group-icon-disc {
+  background: var(--interactive-accent);
+  animation: claude-agent-pulse 1.2s infinite;
+}
+
+.claude-agent-tool-group.error .claude-agent-tool-group-icon.latest .claude-agent-tool-group-icon-disc {
   background: var(--text-error);
 }
 

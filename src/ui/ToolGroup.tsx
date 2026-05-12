@@ -63,30 +63,80 @@ interface ToolGroupProps {
   blocks: ToolBlock[];
 }
 
-function StackedIcon({ icon, isLatest }: { icon: BlockIcon; isLatest: boolean }) {
-  const ref = useRef<HTMLSpanElement>(null);
+// Lucide path data extracted from setIcon's output, cached per icon name.
+// Keyed by name → finite (Lucide set), no eviction needed.
+const iconInnerCache = new Map<string, string>();
+function getIconInnerSvg(name: string): string {
+  const hit = iconInnerCache.get(name);
+  if (hit !== undefined) return hit;
+  const tmp = document.createElement("span");
+  setIcon(tmp, name);
+  const svg = tmp.firstElementChild;
+  const inner = svg && svg.tagName.toLowerCase() === "svg" ? svg.innerHTML : "";
+  iconInnerCache.set(name, inner);
+  return inner;
+}
+
+// Disc mask: keep (right half) ∪ (own glyph silhouette + halo). When stacked
+// on top of a previous icon, the disc's left edge follows the glyph outline
+// instead of a circular arc — that's the visible "rim cut".
+const maskUrlCache = new Map<string, string>();
+function getLeftCutMaskUrl(iconName: string): string | null {
+  const cached = maskUrlCache.get(iconName);
+  if (cached !== undefined) return cached || null;
+  const inner = getIconInnerSvg(iconName);
+  if (!inner) {
+    maskUrlCache.set(iconName, "");
+    return null;
+  }
+  // stroke-width 10 (in 24-unit source space) dilates the silhouette so the
+  // kept region overshoots the glyph by a few px → soft halo against the
+  // disc behind.
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22"><rect width="22" height="22" fill="black"/><rect x="11" width="11" height="22" fill="white"/><g transform="translate(3.5 3.5) scale(0.625)" style="fill:white;stroke:white;stroke-width:10;stroke-linecap:round;stroke-linejoin:round">${inner}</g></svg>`;
+  const url = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  maskUrlCache.set(iconName, url);
+  return url;
+}
+
+interface StackedIconProps {
+  icon: BlockIcon;
+  cutLeft: boolean;
+  isLatest: boolean;
+  stackIndex: number;
+}
+
+function StackedIcon({ icon, cutLeft, isLatest, stackIndex }: StackedIconProps) {
+  const glyphRef = useRef<HTMLSpanElement>(null);
   useEffect(() => {
-    if (ref.current) setIcon(ref.current, icon.icon);
+    if (glyphRef.current) setIcon(glyphRef.current, icon.icon);
   }, [icon.icon]);
+  const maskUrl = cutLeft ? getLeftCutMaskUrl(icon.icon) : null;
+  const discStyle = maskUrl
+    ? ({ WebkitMaskImage: maskUrl, maskImage: maskUrl } as React.CSSProperties)
+    : undefined;
   return (
     <span
       className={`claude-agent-tool-icon claude-agent-tool-group-icon ${isLatest ? "latest" : ""}`}
       title={icon.label}
+      style={{ ["--stack-index" as string]: stackIndex }}
     >
-      <span ref={ref} />
+      <span className="claude-agent-tool-group-icon-disc" style={discStyle} />
+      <span ref={glyphRef} className="claude-agent-tool-group-icon-glyph" />
     </span>
   );
 }
+
+// Monotonic counter scopes CSS anchor-names per ToolGroup instance so anchors
+// from different groups in the same chat view don't collide.
+let arcScopeCounter = 0;
 
 export function ToolGroup({ blocks }: ToolGroupProps) {
   const [override, setOverride] = useState<boolean | null>(null);
   const [showGraph, setShowGraph] = useState(false);
   const chevronRef = useRef<HTMLSpanElement>(null);
   const graphToggleRef = useRef<HTMLButtonElement>(null);
-  // path -> wrapper element for the FIRST grouped item touching that path.
-  // LinkArcs reads this to compute Y centers for each arc endpoint.
-  const rowRefs = useRef<Map<string, HTMLElement | null>>(new Map());
-  const arcLayoutRef = useRef<HTMLDivElement>(null);
+  const arcScopeRef = useRef<string>();
+  if (!arcScopeRef.current) arcScopeRef.current = `g${++arcScopeCounter}`;
 
   const { status, runningBlock, errorBlock } = inspectGroup(blocks);
 
@@ -108,7 +158,7 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
 
   // Path metadata only depends on the grouped items — split out from runningPath
   // so a running-block toggle doesn't bust the LinkArcs memos.
-  const { vaultPaths, firstItemKeyByPath, pathLinks } = useMemo(() => {
+  const { vaultPaths, firstItemKeyByPath, pathLinks, pathAnchors } = useMemo(() => {
     const ordered: string[] = [];
     const firstKey = new Map<string, string>();
     // Newest writeLinks wins per path — bridges the metadataCache lag so
@@ -133,7 +183,12 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
         ordered.push(fp);
       }
     }
-    return { vaultPaths: ordered, firstItemKeyByPath: firstKey, pathLinks: links };
+    // Stable dashed-ident per (group, pathIndex) — LinkArcs reads these to
+    // build anchor() references; pills publish them as anchor-name.
+    const scope = arcScopeRef.current!;
+    const anchors = new Map<string, string>();
+    ordered.forEach((p, i) => anchors.set(p, `--ca-arc-${scope}-${i}`));
+    return { vaultPaths: ordered, firstItemKeyByPath: firstKey, pathLinks: links, pathAnchors: anchors };
   }, [groupedItems]);
 
   const runningPath =
@@ -153,35 +208,15 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
     caption = summarizeBlocks(blocks);
   }
 
-  // Per-path ref callbacks are cached so React sees a stable callback identity
-  // across renders for the same path — otherwise React would invoke
-  // setRowRef(null)/setRowRef(node) every render and we'd lose then restore the
-  // entry, defeating the rowRefs map.
-  const refCallbacksRef = useRef(new Map<string, (el: HTMLDivElement | null) => void>());
-  const setRowRef = (path: string): ((el: HTMLDivElement | null) => void) => {
-    let cb = refCallbacksRef.current.get(path);
-    if (!cb) {
-      cb = (el) => {
-        if (el) rowRefs.current.set(path, el);
-        else rowRefs.current.delete(path);
-      };
-      refCallbacksRef.current.set(path, cb);
-    }
-    return cb;
-  };
-
   const renderItem = (item: GroupedItem) => {
     const filePath = item.kind === "single" ? item.block.filePath : item.filePath;
     const isAnchor = filePath != null && firstItemKeyByPath.get(filePath) === item.key;
+    const anchorName = isAnchor && filePath ? pathAnchors.get(filePath) : undefined;
     return (
-      <div
-        key={item.key}
-        className="claude-agent-tool-group-row"
-        ref={isAnchor && filePath ? setRowRef(filePath) : undefined}
-      >
+      <div key={item.key} className="claude-agent-tool-group-row">
         {item.kind === "single"
-          ? <ToolCallBlock block={item.block} inGroup />
-          : <MergedFileBlock blocks={item.blocks} inGroup />}
+          ? <ToolCallBlock block={item.block} inGroup anchorName={anchorName} />
+          : <MergedFileBlock blocks={item.blocks} inGroup anchorName={anchorName} />}
       </div>
     );
   };
@@ -193,13 +228,16 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
         onClick={() => setOverride(!expanded)}
         role="button"
         aria-expanded={expanded}
+        style={{ ["--icon-spread" as string]: `${(icons.length - 1) * 6}px` }}
       >
         <span className="claude-agent-tool-group-icons">
-          {icons.map((ic) => (
+          {icons.map((ic, i) => (
             <StackedIcon
               key={ic.key}
               icon={ic}
+              cutLeft={i > 0}
               isLatest={ic.key === runningKey}
+              stackIndex={i}
             />
           ))}
         </span>
@@ -230,24 +268,16 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
       </div>
       {expanded && (
         <>
-          <div
-            ref={arcLayoutRef}
-            className={`claude-agent-tool-group-arc-layout ${showArcs ? "with-arcs" : ""}`}
-          >
-            {/* Rows are rendered BEFORE LinkArcs so React processes their ref
-                callbacks first. LinkArcs then measures Y-centers in its
-                useLayoutEffect with a fully-populated rowRefs map. CSS uses
-                `order: -1` to put the gutter visually on the left. */}
+          {/* Arc-layout is the CSS containing block for absolutely-positioned
+              arc SVGs. The SVGs are siblings of the body so they share its
+              coordinate space; pills inside the body publish anchor-names that
+              the SVGs reference via anchor() inset functions. */}
+          <div className={`claude-agent-tool-group-arc-layout ${showArcs ? "with-arcs" : ""}`}>
             <div className="claude-agent-tool-group-body">
               {groupedItems.map(renderItem)}
             </div>
             {showArcs && (
-              <LinkArcs
-                paths={vaultPaths}
-                rowRefs={rowRefs}
-                containerRef={arcLayoutRef}
-                pathLinks={pathLinks}
-              />
+              <LinkArcs paths={vaultPaths} pathAnchors={pathAnchors} pathLinks={pathLinks} />
             )}
           </div>
           {showGraph && showArcs && (

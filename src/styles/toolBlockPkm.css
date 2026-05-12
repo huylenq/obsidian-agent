@@ -240,41 +240,53 @@
 }
 
 /* =====================================================================
-   Expanded group: arcs gutter + row stack
+   Expanded group: pill-to-pill arc layer
+   ---------------------------------------------------------------------
+   One SVG per inter-note link. The SVG is sized so its top edge sits at
+   the source pill's bottom and its bottom edge at the target pill's top;
+   horizontally it spans between the two pill x-centres. The unit curve
+   inside (preserveAspectRatio="none") stretches to fit.
+   Stacking: arc layer sits ABOVE body content (so it shows across the
+   Write card and other opaque elements) while pills paint in normal flow
+   below it. The path never enters either pill rectangle, so we don't need
+   the pill background to occlude anything — the gap between pills is
+   genuinely empty space, and the curve fills it.
    ===================================================================== */
 
 .claude-agent-tool-group-arc-layout {
-  display: flex;
-  align-items: stretch;
   position: relative;
+  isolation: isolate; /* fresh stacking context; arcs stay scoped */
 }
 
-.claude-agent-tool-group-arc-layout .claude-agent-tool-group-body {
-  flex: 1 1 0;
-  min-width: 0;
+.claude-agent-link-arcs-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1; /* above body's normal-flow content */
 }
 
-.claude-agent-tool-group-row {
-  /* Row wrappers are pure positioning anchors — no styling of their own.
-     The inner .claude-agent-tool-block carries the existing look. */
+.claude-agent-link-arc {
+  position: absolute;
+  pointer-events: none;
+  overflow: visible;
+  /* Same token as the wikilink pill's `background` — the line reads as "the
+     pill material stretched between two pills." Translucent overlay, so the
+     stroke needs extra width to register at the same visual weight as the
+     pill (which gets its weight from area, not alpha). */
+  color: var(--background-modifier-hover);
 }
 
-.claude-agent-link-arcs {
-  flex: 0 0 28px;
-  align-self: stretch;
-  /* Rendered after the row stack in JSX (so React commits row refs first) but
-     visually sits to the left of the rows. */
-  order: -1;
-  /* Arrowheads + strokes inherit currentColor; tinted to the link-edge accent. */
-  color: var(--text-accent);
+.claude-agent-link-arc path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 4;
+  stroke-linecap: round;
+  /* Without this, preserveAspectRatio="none" stretches the stroke too. */
+  vector-effect: non-scaling-stroke;
 }
 
-.claude-agent-link-arcs.empty {
-  /* When there are zero arcs to draw we still reserve the gutter so row widths
-     stay consistent — important for streaming groups whose arc set may pop
-     into existence mid-conversation. */
-  flex: 0 0 28px;
-  order: -1;
+.claude-agent-link-arc.bidi path {
+  stroke-width: 5;
 }
 
 /* ---------- Merged-run count badge + expanded body ---------- */
@@ -329,7 +341,7 @@
   border-radius: 4px;
   color: var(--text-muted);
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: background 0.12s ease, color 0.12s ease, transform 0.18s ease-out;
 }
 
 .claude-agent-tool-group-graph-toggle:hover {
