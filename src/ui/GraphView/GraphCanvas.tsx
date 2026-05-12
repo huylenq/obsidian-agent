@@ -35,8 +35,11 @@ interface GraphCanvasProps {
 export function GraphCanvas({ data, settings, onNodeClick, onNodeHover, onNodeContextMenu, onNodePinToggle, onNodeDepthAdjust, onNodeSimilarityAdjust }: GraphCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<GraphRenderer | null>(null);
-  const prevSettingsRef = useRef<GraphViewSettings>(settings);
-  const prevDataRef = useRef<GraphData>(data);
+  // Init to null (not the current props) so the first run of the data/settings
+  // effect always fires `setData` — covers consumers that mount with real data
+  // already in hand instead of starting empty and updating.
+  const prevSettingsRef = useRef<GraphViewSettings | null>(null);
+  const prevDataRef = useRef<GraphData | null>(null);
 
   // Single ref object holding the latest callbacks — updated every render
   const cbRef = useRef({ onNodeClick, onNodeHover, onNodeContextMenu, onNodePinToggle, onNodeDepthAdjust, onNodeSimilarityAdjust });
@@ -72,8 +75,13 @@ export function GraphCanvas({ data, settings, onNodeClick, onNodeHover, onNodeCo
 
     const dataChanged = data !== prevDataRef.current;
     const settingsChanged = settings !== prevSettingsRef.current;
+    // First run has prev === null → treat as a non-physics-only settings change
+    // so the full setData branch fires.
+    const physicsOnly = prevSettingsRef.current
+      ? isPhysicsOnlyChange(prevSettingsRef.current, settings)
+      : false;
 
-    if (dataChanged || (settingsChanged && !isPhysicsOnlyChange(prevSettingsRef.current, settings))) {
+    if (dataChanged || (settingsChanged && !physicsOnly)) {
       // Full rebuild needed (data changed, or filter/edge settings changed)
       renderer.setData(data, settings);
     } else if (settingsChanged) {
