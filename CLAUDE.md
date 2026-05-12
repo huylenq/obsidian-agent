@@ -174,6 +174,7 @@ For the IWE vault, that resolves to:
 |---|---|---|
 | `{sessionId}.summaries.json` | Proxy server | Compact summaries sidecar. Array of `{ timestamp, preTokens, summary }`. One entry per `/compact` invocation. Written by the proxy after generating a synthetic summary via Haiku. |
 | `{sessionId}.markers.json` | Proxy server | Flashcard marker positions. Array of `{ markerId, flashcardId, sourceFile, question, userMessageIndex, createdAt }`. One entry per flashcard explain. Lazy-migrated from legacy `.threads.json` on read. |
+| `{sessionId}.touched.json` | Proxy server | Causal working set of vault files for a session. `{ version: 1, entries: [{ path, op, count, firstAt, lastAt }] }`. Recorded by the chat pipeline whenever the agent calls Read/Write/Edit on a `file_path`. Distinct from RelevantNotes (which is similarity-based) — this answers "which notes did the agent actually touch?", a stronger signal of what the session was really about. Deduped by `path`; the latest op wins (Edit-after-Read promotes the entry to `edit`). |
 | `session-registry.json` | Proxy server | Central session registry. Single JSON file tracking all sessions with metadata (title, status, timestamps, model, associated files). See schema below. |
 
 ### Session Registry schema (`session-registry.json`)
@@ -220,7 +221,10 @@ Sessions are tracked via a central registry file (see `~/.claude/` section above
 
 **Server endpoints:**
 - `GET /sessions?workingDirectory=...&status=...&file=...` — list sessions, sorted by `updatedAt` desc
+- `GET /sessions/:sessionId/markers` — list flashcard markers for a session
+- `GET /sessions/:sessionId/touched` — list touched vault files (causal working set) for a session. Returns `{ version, entries }` from `{sessionId}.touched.json`.
 - `PATCH /sessions/:sessionId` — update `status` and/or `title`
+- `DELETE /sessions/:sessionId` — remove session entry and nuke transcript + all sidecars
 - `POST /sessions/migrate` — one-time JSONL scan to populate registry
 
 **UI — standalone `SessionsView`** (`src/ui/SessionsView.tsx`): Separate `ItemView` (like `RelevantNotesView`), registered in `main.ts`. Owns its own data fetching, active-file tracking, and migration trigger. Two modes:
