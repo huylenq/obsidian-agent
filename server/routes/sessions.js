@@ -16,6 +16,7 @@ import {
   getTranscriptTimestamps,
 } from "../sessions.js";
 import { getMarkersPath, loadMarkers } from "../markers.js";
+import { loadTouched } from "../touchedNotes.js";
 
 const router = Router();
 
@@ -70,6 +71,24 @@ router.get("/sessions/:sessionId/markers", (req, res) => {
     res.json({ markers });
   } catch (error) {
     logError("[Proxy] Error loading markers:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * List touched notes for a session — the causal working set of vault files
+ * the agent actually opened/wrote/edited during this session (vs. the
+ * similarity-based RelevantNotes).
+ */
+router.get("/sessions/:sessionId/touched", (req, res) => {
+  const { sessionId } = req.params;
+  const vaultPath = req.vaultPath;
+
+  try {
+    const touched = loadTouched(sessionId, vaultPath);
+    res.json(touched);
+  } catch (error) {
+    logError("[Proxy] Error loading touched notes:", error);
     res.status(500).json({ error: error.message });
   }
 });

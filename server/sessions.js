@@ -75,6 +75,7 @@ export function deleteSession(workingDirectory, sessionId) {
     `${sessionId}.jsonl`,
     `${sessionId}.summaries.json`,
     `${sessionId}.markers.json`,
+    `${sessionId}.touched.json`,
   ];
   for (const f of files) {
     const p = join(projectDir, f);
