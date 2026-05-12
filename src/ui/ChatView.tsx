@@ -570,6 +570,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
                   editOld: chunk.editOld,
                   editNew: chunk.editNew,
                   writeContent: chunk.writeContent,
+                  writeLinks: chunk.writeLinks,
                 }],
               });
               break;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { setIcon } from "obsidian";
 import { ToolBlock } from "@/types";
-import { displayToolName, getBlockStatus, getToolIcon } from "./toolDisplay";
+import { displayToolName, getBlockStatus, getToolIcon, type ToolStatus } from "./toolDisplay";
 import { WikilinkPill } from "./wikilink/WikilinkPill";
 import { NoteMetadataStrip } from "./wikilink/NoteMetadataStrip";
 import {
@@ -112,7 +112,7 @@ interface PkmHeaderProps {
   block: ToolBlock;
   expanded: boolean;
   onToggle: () => void;
-  status: string;
+  status: ToolStatus;
   /** Extra inline content rendered after the wikilink, before the chevron. */
   trailing?: React.ReactNode;
   /** Extra row rendered below the wikilink, beside (or replacing) the meta strip. */
@@ -260,11 +260,12 @@ function WriteBlock({ block, inGroup }: ToolCallBlockProps) {
   const content = block.writeContent ?? "";
   const wc = wordCount(content);
   const overLong = wc > 800;
-  const cited = extractWikilinks(content);
+  // Prefer the server-extracted full wikilink set; fall back to parsing the
+  // (truncated) snippet for backward-compat with old transcripts.
+  const cited = block.writeLinks ?? extractWikilinks(content);
   const snippet = previewSnippet(content);
 
   const trailing = overLong ? <WordCountWarning words={wc} /> : null;
-  const hasCardContent = snippet || cited.length > 0;
 
   return (
     <div className={`claude-agent-tool-block ${status}`}>
@@ -276,22 +277,27 @@ function WriteBlock({ block, inGroup }: ToolCallBlockProps) {
         trailing={trailing}
         inGroup={inGroup}
       />
-      {hasCardContent && (
-        <div className="claude-agent-write-card" onClick={(e) => e.stopPropagation()}>
-          {snippet && <div className="claude-agent-write-card-snippet">{snippet}</div>}
-          {cited.length > 0 && (
-            <div className="claude-agent-write-card-cites">
-              {cited.slice(0, 8).map((c) => (
-                <WikilinkPill key={c} path={c} small />
-              ))}
-              {cited.length > 8 && (
-                <span className="claude-agent-write-card-cites-more">+{cited.length - 8}</span>
-              )}
-            </div>
+      <WriteCard snippet={snippet} cited={cited} />
+      {expanded && <BlockBody block={block} />}
+    </div>
+  );
+}
+
+function WriteCard({ snippet, cited }: { snippet: string; cited: readonly string[] }) {
+  if (!snippet && cited.length === 0) return null;
+  return (
+    <div className="claude-agent-write-card" onClick={(e) => e.stopPropagation()}>
+      {snippet && <div className="claude-agent-write-card-snippet">{snippet}</div>}
+      {cited.length > 0 && (
+        <div className="claude-agent-write-card-cites">
+          {cited.slice(0, 8).map((c) => (
+            <WikilinkPill key={c} path={c} small />
+          ))}
+          {cited.length > 8 && (
+            <span className="claude-agent-write-card-cites-more">+{cited.length - 8}</span>
           )}
         </div>
       )}
-      {expanded && <BlockBody block={block} />}
     </div>
   );
 }
@@ -381,9 +387,8 @@ function MergedWriteBlock({ blocks, inGroup }: MergedFileBlockProps) {
   const content = last.writeContent ?? "";
   const wc = wordCount(content);
   const overLong = wc > 800;
-  const cited = extractWikilinks(content);
+  const cited = last.writeLinks ?? extractWikilinks(content);
   const snippet = previewSnippet(content);
-  const hasCardContent = snippet || cited.length > 0;
   const trailing = (
     <>
       <CountBadge count={blocks.length} />
@@ -400,21 +405,7 @@ function MergedWriteBlock({ blocks, inGroup }: MergedFileBlockProps) {
         trailing={trailing}
         inGroup={inGroup}
       />
-      {hasCardContent && (
-        <div className="claude-agent-write-card" onClick={(e) => e.stopPropagation()}>
-          {snippet && <div className="claude-agent-write-card-snippet">{snippet}</div>}
-          {cited.length > 0 && (
-            <div className="claude-agent-write-card-cites">
-              {cited.slice(0, 8).map((c) => (
-                <WikilinkPill key={c} path={c} small />
-              ))}
-              {cited.length > 8 && (
-                <span className="claude-agent-write-card-cites-more">+{cited.length - 8}</span>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      <WriteCard snippet={snippet} cited={cited} />
       {expanded && <MergedBlockBody blocks={blocks} />}
     </div>
   );

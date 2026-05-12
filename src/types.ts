@@ -19,7 +19,8 @@ export interface ToolBlock {
   filePath?: string;       // vault-relative path (Read/Write/Edit)
   editOld?: string;        // Edit: old_string (truncated)
   editNew?: string;        // Edit: new_string (truncated)
-  writeContent?: string;   // Write: full content (truncated for transport)
+  writeContent?: string;          // Write: content (truncated for transport, snippet preview only)
+  writeLinks?: readonly string[]; // Write: full wikilink set extracted from untruncated content
 }
 
 export interface MarkerMetadata {

@@ -142,9 +142,18 @@ const VERBS: Record<string, { verb: string; noun: string; nounPlural: string }> 
   TodoWrite: { verb: "Updated", noun: "todo", nounPlural: "todos" },
 };
 
+/** Tool names that operate on a single vault file path. */
+export type FileToolName = "Read" | "Write" | "Edit" | "MultiEdit";
+
 // Tools whose count + icon should dedupe by `filePath` rather than per-call.
 // Five edits to one file = one icon and "Edited 1 file" — not "Edited 5 files".
-export const FILE_TOOLS_DEDUPE = new Set(["Read", "Write", "Edit", "MultiEdit"]);
+export const FILE_TOOLS_DEDUPE: ReadonlySet<FileToolName> = new Set([
+  "Read", "Write", "Edit", "MultiEdit",
+]);
+
+export function isFileTool(name: string): name is FileToolName {
+  return (FILE_TOOLS_DEDUPE as ReadonlySet<string>).has(name);
+}
 
 // Caption segments — counts are flagged so they can render bold inline.
 export type SummaryPart = { text: string; bold?: boolean };
@@ -156,7 +165,7 @@ export function summarizeBlocks(blocks: ToolBlock[]): SummaryPart[] {
   const counts = new Map<string, number>();
   const seenFile = new Map<string, Set<string>>();
   for (const b of blocks) {
-    if (b.filePath && FILE_TOOLS_DEDUPE.has(b.toolName)) {
+    if (b.filePath && isFileTool(b.toolName)) {
       let set = seenFile.get(b.toolName);
       if (!set) { set = new Set(); seenFile.set(b.toolName, set); }
       if (set.has(b.filePath)) continue;
@@ -199,7 +208,7 @@ export function getBlockIcons(blocks: ToolBlock[]): BlockIcon[] {
   const seen = new Set<string>();
   const out: BlockIcon[] = [];
   for (const b of blocks) {
-    if (b.filePath && FILE_TOOLS_DEDUPE.has(b.toolName)) {
+    if (b.filePath && isFileTool(b.toolName)) {
       const key = `${b.toolName}::${b.filePath}`;
       if (seen.has(key)) continue;
       seen.add(key);

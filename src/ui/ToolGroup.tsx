@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { setIcon } from "obsidian";
 import { ToolBlock } from "@/types";
 import { ToolCallBlock, MergedFileBlock } from "./ToolCallBlock";
@@ -6,20 +6,20 @@ import { LinkArcs } from "./LinkArcs";
 import { TouchedGraphPanel } from "./TouchedGraphPanel";
 import {
   BlockIcon,
-  FILE_TOOLS_DEDUPE as FILE_TOOLS,
   getBlockIcons,
   inspectGroup,
+  isFileTool,
   summarizeBlocks,
   SummaryPart,
 } from "./toolDisplay";
 
 type GroupedItem =
   | { kind: "single"; block: ToolBlock; key: string }
-  | { kind: "merged"; blocks: ToolBlock[]; tool: string; filePath: string; key: string };
+  | { kind: "merged"; blocks: ToolBlock[]; filePath: string; key: string };
 
-// Collapse runs of consecutive same-tool same-file ToolBlocks (Read/Write/Edit/
-// MultiEdit only). Singletons pass through unchanged. Non-file tools and
-// file-tool blocks without a filePath also pass through.
+// Collapse runs of consecutive same-tool same-file ToolBlocks into one item so
+// "5 Edits to X" renders as one row, not five. Non-file tools and file-tool
+// blocks without a filePath pass through as singletons.
 function groupConsecutiveFileOps(blocks: ToolBlock[]): GroupedItem[] {
   const items: GroupedItem[] = [];
   let run: ToolBlock[] = [];
@@ -33,7 +33,6 @@ function groupConsecutiveFileOps(blocks: ToolBlock[]): GroupedItem[] {
       items.push({
         kind: "merged",
         blocks: run.slice(),
-        tool: run[0].toolName,
         filePath: run[0].filePath!,
         key: run.map((b) => b.toolUseId).join("+"),
       });
@@ -43,7 +42,7 @@ function groupConsecutiveFileOps(blocks: ToolBlock[]): GroupedItem[] {
   };
 
   for (const b of blocks) {
-    const key = b.filePath && FILE_TOOLS.has(b.toolName) ? `${b.toolName}::${b.filePath}` : null;
+    const key = b.filePath && isFileTool(b.toolName) ? `${b.toolName}::${b.filePath}` : null;
     if (key && key === runKey) {
       run.push(b);
     } else {
@@ -84,8 +83,8 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
   const [showGraph, setShowGraph] = useState(false);
   const chevronRef = useRef<HTMLSpanElement>(null);
   const graphToggleRef = useRef<HTMLButtonElement>(null);
-  // Map of vault-path -> wrapper element of that path's FIRST block in the stack.
-  // LinkArcs reads this in a layout effect to compute Y centers for arc endpoints.
+  // path -> wrapper element for the FIRST grouped item touching that path.
+  // LinkArcs reads this to compute Y centers for each arc endpoint.
   const rowRefs = useRef<Map<string, HTMLElement | null>>(new Map());
   const arcLayoutRef = useRef<HTMLDivElement>(null);
 
@@ -105,53 +104,45 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
   const expanded = override ?? autoExpanded;
   const runningKey = runningBlock?.toolUseId ?? null;
 
-  // Group consecutive same-file-same-tool blocks into merged items. Anchors
-  // for LinkArcs are indexed by the FIRST grouped-item touching each path —
-  // when a run merges into one row, that row is the anchor.
   const groupedItems = useMemo(() => groupConsecutiveFileOps(blocks), [blocks]);
 
-  const { vaultPaths, firstItemKeyByPath, runningPath, pathContents } = useMemo(() => {
+  // Path metadata only depends on the grouped items — split out from runningPath
+  // so a running-block toggle doesn't bust the LinkArcs memos.
+  const { vaultPaths, firstItemKeyByPath, pathLinks } = useMemo(() => {
     const ordered: string[] = [];
     const firstKey = new Map<string, string>();
-    // Newest writeContent wins per path — bridges the metadataCache lag for
-    // freshly-Written files so LinkArcs can derive outgoing wikilinks
-    // immediately instead of waiting for the user to open the file.
-    const contents = new Map<string, string>();
-    const recordContent = (b: ToolBlock) => {
-      if (b.toolName === "Write" && b.filePath && b.writeContent) {
-        contents.set(b.filePath, b.writeContent);
+    // Newest writeLinks wins per path — bridges the metadataCache lag so
+    // LinkArcs can derive outgoing wikilinks immediately for freshly-Written
+    // files, using the full link set the server extracted from the
+    // untruncated content (truncating writeContent would have dropped any
+    // wikilink past the cutoff).
+    const links = new Map<string, readonly string[]>();
+    const recordLinks = (b: ToolBlock) => {
+      if (b.toolName === "Write" && b.filePath && b.writeLinks) {
+        links.set(b.filePath, b.writeLinks);
       }
     };
     for (const item of groupedItems) {
-      let fp: string | null = null;
-      if (item.kind === "single") {
-        if (item.block.filePath && FILE_TOOLS.has(item.block.toolName)) fp = item.block.filePath;
-        recordContent(item.block);
-      } else {
-        fp = item.filePath;
-        for (const b of item.blocks) recordContent(b);
-      }
+      const fp = item.kind === "single"
+        ? (item.block.filePath && isFileTool(item.block.toolName) ? item.block.filePath : null)
+        : item.filePath;
+      if (item.kind === "single") recordLinks(item.block);
+      else for (const b of item.blocks) recordLinks(b);
       if (fp && !firstKey.has(fp)) {
         firstKey.set(fp, item.key);
         ordered.push(fp);
       }
     }
-    const runP =
-      runningBlock && runningBlock.filePath && FILE_TOOLS.has(runningBlock.toolName)
-        ? runningBlock.filePath
-        : null;
-    return {
-      vaultPaths: ordered,
-      firstItemKeyByPath: firstKey,
-      runningPath: runP,
-      pathContents: contents,
-    };
-  }, [groupedItems, runningBlock]);
+    return { vaultPaths: ordered, firstItemKeyByPath: firstKey, pathLinks: links };
+  }, [groupedItems]);
+
+  const runningPath =
+    runningBlock?.filePath && isFileTool(runningBlock.toolName) ? runningBlock.filePath : null;
 
   const showArcs = vaultPaths.length >= 2;
 
   // Header caption: live current tool while running, error excerpt on failure,
-  // verb summary when done. Done-state captions flag counts so they bold inline.
+  // verb summary when done.
   let caption: SummaryPart[];
   if (status === "running" && runningBlock) {
     caption = [{ text: runningBlock.description || runningBlock.toolName }];
@@ -162,19 +153,31 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
     caption = summarizeBlocks(blocks);
   }
 
+  // Per-path ref callbacks are cached so React sees a stable callback identity
+  // across renders for the same path — otherwise React would invoke
+  // setRowRef(null)/setRowRef(node) every render and we'd lose then restore the
+  // entry, defeating the rowRefs map.
+  const refCallbacksRef = useRef(new Map<string, (el: HTMLDivElement | null) => void>());
+  const setRowRef = (path: string): ((el: HTMLDivElement | null) => void) => {
+    let cb = refCallbacksRef.current.get(path);
+    if (!cb) {
+      cb = (el) => {
+        if (el) rowRefs.current.set(path, el);
+        else rowRefs.current.delete(path);
+      };
+      refCallbacksRef.current.set(path, cb);
+    }
+    return cb;
+  };
+
   const renderItem = (item: GroupedItem) => {
     const filePath = item.kind === "single" ? item.block.filePath : item.filePath;
     const isAnchor = filePath != null && firstItemKeyByPath.get(filePath) === item.key;
-    const setRowRef = (el: HTMLDivElement | null) => {
-      if (!filePath) return;
-      if (el) rowRefs.current.set(filePath, el);
-      else rowRefs.current.delete(filePath);
-    };
     return (
       <div
         key={item.key}
         className="claude-agent-tool-group-row"
-        ref={isAnchor ? setRowRef : undefined}
+        ref={isAnchor && filePath ? setRowRef(filePath) : undefined}
       >
         {item.kind === "single"
           ? <ToolCallBlock block={item.block} inGroup />
@@ -212,7 +215,6 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
             className={`claude-agent-tool-group-graph-toggle ${showGraph ? "active" : ""}`}
             onClick={(e) => {
               e.stopPropagation();
-              // Auto-expand when revealing the graph so the user sees it immediately.
               if (!showGraph && !expanded) setOverride(true);
               setShowGraph((s) => !s);
             }}
@@ -228,27 +230,26 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
       </div>
       {expanded && (
         <>
-          {showArcs ? (
-            <div ref={arcLayoutRef} className="claude-agent-tool-group-arc-layout">
+          <div
+            ref={arcLayoutRef}
+            className={`claude-agent-tool-group-arc-layout ${showArcs ? "with-arcs" : ""}`}
+          >
+            {/* Rows are rendered BEFORE LinkArcs so React processes their ref
+                callbacks first. LinkArcs then measures Y-centers in its
+                useLayoutEffect with a fully-populated rowRefs map. CSS uses
+                `order: -1` to put the gutter visually on the left. */}
+            <div className="claude-agent-tool-group-body">
+              {groupedItems.map(renderItem)}
+            </div>
+            {showArcs && (
               <LinkArcs
                 paths={vaultPaths}
                 rowRefs={rowRefs}
                 containerRef={arcLayoutRef}
-                pathContents={pathContents}
+                pathLinks={pathLinks}
               />
-              <div className="claude-agent-tool-group-body">
-                {groupedItems.map(renderItem)}
-              </div>
-            </div>
-          ) : (
-            <div className="claude-agent-tool-group-body">
-              {groupedItems.map((item) =>
-                item.kind === "single"
-                  ? <ToolCallBlock key={item.key} block={item.block} inGroup />
-                  : <MergedFileBlock key={item.key} blocks={item.blocks} inGroup />
-              )}
-            </div>
-          )}
+            )}
+          </div>
           {showGraph && showArcs && (
             <div className="claude-agent-tool-group-graph">
               <TouchedGraphPanel paths={vaultPaths} runningPath={runningPath} />

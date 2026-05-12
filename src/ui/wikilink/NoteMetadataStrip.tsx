@@ -1,6 +1,7 @@
-import React from "react";
+import React, { memo, useEffect, useMemo, useState } from "react";
 import { TFile } from "obsidian";
 import { useApp } from "@/ui/AppContext";
+import { resolveVaultFile } from "@/utils/notePath";
 
 interface NoteMetadataStripProps {
   path: string;
@@ -31,56 +32,72 @@ function normalizeTag(raw: string): string {
 
 /**
  * Compact horizontal strip of note metadata: backlink count, tag chips, mtime.
- * Designed to sit directly under a WikilinkPill.
+ * Designed to sit directly next to a WikilinkPill.
  *
  * Renders nothing if the path doesn't resolve to a TFile or there's no metadata.
  */
-export function NoteMetadataStrip({ path }: NoteMetadataStripProps) {
+export const NoteMetadataStrip = memo(function NoteMetadataStrip({ path }: NoteMetadataStripProps) {
   const app = useApp();
-  const file =
-    (app.vault.getAbstractFileByPath(path) as TFile | null) ??
-    app.metadataCache.getFirstLinkpathDest(path, "");
-  if (!(file instanceof TFile)) return null;
+  // Bumped on metadata cache changes for this file so derived values refresh
+  // without re-running on every parent render.
+  const [cacheVersion, setCacheVersion] = useState(0);
 
-  const cache = app.metadataCache.getFileCache(file);
+  useEffect(() => {
+    const handler = (file: TFile) => {
+      if (file.path === path) setCacheVersion((v) => v + 1);
+    };
+    const ref = app.metadataCache.on("changed", handler);
+    return () => app.metadataCache.offref(ref);
+  }, [app, path]);
 
-  // Collect tags from inline tags + frontmatter tags. Dedup, normalize.
-  const tagSet = new Set<string>();
-  if (cache?.tags) {
-    for (const t of cache.tags) tagSet.add(normalizeTag(t.tag));
-  }
-  const fmTags = cache?.frontmatter?.tags;
-  if (Array.isArray(fmTags)) {
-    for (const t of fmTags) tagSet.add(normalizeTag(t));
-  } else if (typeof fmTags === "string") {
-    for (const t of fmTags.split(/[\s,]+/)) {
-      if (t) tagSet.add(normalizeTag(t));
+  const data = useMemo(() => {
+    const file = resolveVaultFile(app, path);
+    if (!file) return null;
+
+    const cache = app.metadataCache.getFileCache(file);
+
+    const tagSet = new Set<string>();
+    for (const t of cache?.tags ?? []) tagSet.add(normalizeTag(t.tag));
+    const fmTags = cache?.frontmatter?.tags;
+    if (Array.isArray(fmTags)) {
+      for (const t of fmTags) tagSet.add(normalizeTag(t));
+    } else if (typeof fmTags === "string") {
+      for (const t of fmTags.split(/[\s,]+/)) {
+        if (t) tagSet.add(normalizeTag(t));
+      }
     }
-  }
-  const tags = Array.from(tagSet);
+    const tags = Array.from(tagSet);
 
-  // Backlinks. `getBacklinksForFile` is undocumented; fall back to scanning
-  // resolvedLinks if the API isn't available.
-  let backlinkCount = 0;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mc = app.metadataCache as any;
-  if (typeof mc.getBacklinksForFile === "function") {
-    try {
-      const bl = mc.getBacklinksForFile(file);
-      backlinkCount = typeof bl?.count === "function" ? bl.count() : 0;
-    } catch {
-      backlinkCount = 0;
+    // `getBacklinksForFile` is undocumented but present on current Obsidian.
+    // When it's available, trust its result — including legitimate zero — to
+    // avoid an O(vault) `resolvedLinks` scan that hurts large vaults. Only fall
+    // back to the scan if the API is missing entirely or throws.
+    let backlinkCount = 0;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mc = app.metadataCache as any;
+    let usedFastPath = false;
+    if (typeof mc.getBacklinksForFile === "function") {
+      try {
+        const bl = mc.getBacklinksForFile(file);
+        backlinkCount = typeof bl?.count === "function" ? bl.count() : 0;
+        usedFastPath = true;
+      } catch {
+        /* fall through to scan */
+      }
     }
-  }
-  if (backlinkCount === 0) {
-    const resolved = app.metadataCache.resolvedLinks ?? {};
-    for (const src of Object.keys(resolved)) {
-      if (resolved[src]?.[file.path]) backlinkCount++;
+    if (!usedFastPath) {
+      const resolved = app.metadataCache.resolvedLinks ?? {};
+      for (const src of Object.keys(resolved)) {
+        if (resolved[src]?.[file.path]) backlinkCount++;
+      }
     }
-  }
 
-  const hasAnything = backlinkCount > 0 || tags.length > 0 || file.stat?.mtime;
-  if (!hasAnything) return null;
+    return { backlinkCount, tags, mtime: file.stat?.mtime };
+  }, [app, path, cacheVersion]);
+
+  if (!data) return null;
+  const { backlinkCount, tags, mtime } = data;
+  if (backlinkCount === 0 && tags.length === 0 && !mtime) return null;
 
   const visibleTags = tags.slice(0, MAX_TAGS);
   const extraTags = tags.length - visibleTags.length;
@@ -100,11 +117,11 @@ export function NoteMetadataStrip({ path }: NoteMetadataStripProps) {
       {extraTags > 0 && (
         <span className="claude-agent-note-meta-chip tag muted">+{extraTags}</span>
       )}
-      {file.stat?.mtime && (
-        <span className="claude-agent-note-meta-chip muted" title={new Date(file.stat.mtime).toLocaleString()}>
-          {relativeTime(file.stat.mtime)}
+      {mtime && (
+        <span className="claude-agent-note-meta-chip muted" title={new Date(mtime).toLocaleString()}>
+          {relativeTime(mtime)}
         </span>
       )}
     </div>
   );
-}
+});

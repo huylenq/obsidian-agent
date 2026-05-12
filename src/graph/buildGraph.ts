@@ -5,6 +5,7 @@
 import type { App } from "obsidian";
 import type { IIndexClient } from "@/embeddings";
 import type { GraphNode, GraphEdge, GraphData, GraphViewSettings, PinnedNodeConfig } from "@/types";
+import { basenameNoExt } from "@/utils/notePath";
 
 const MAX_NODES = 200;
 
@@ -22,15 +23,6 @@ function getOutgoingLinks(app: App, filePath: string): string[] {
     if (dest) paths.push(dest.path);
   }
   return paths;
-}
-
-/**
- * Get file title from path (filename without extension).
- */
-function titleFromPath(path: string): string {
-  const parts = path.split("/");
-  const filename = parts[parts.length - 1];
-  return filename.replace(/\.md$/, "");
 }
 
 /**
@@ -58,7 +50,7 @@ function bfsLinks(
   // Seed with center node
   nodes.set(centerPath, {
     id: centerPath,
-    title: titleFromPath(centerPath),
+    title: basenameNoExt(centerPath),
     depth: 0,
     isCenter: true,
     inVectorIndex: false,
@@ -80,7 +72,7 @@ function bfsLinks(
         visited.add(targetPath);
         nodes.set(targetPath, {
           id: targetPath,
-          title: titleFromPath(targetPath),
+          title: basenameNoExt(targetPath),
           depth: nextDepth,
           isCenter: false,
           inVectorIndex: false,
@@ -160,7 +152,7 @@ async function discoverCenterSimilarity(
     } else if (nodes.size < MAX_NODES) {
       nodes.set(note.path, {
         id: note.path,
-        title: note.title || titleFromPath(note.path),
+        title: note.title || basenameNoExt(note.path),
         depth: settings.linkDepth + 1,
         isCenter: false,
         inVectorIndex: true,
@@ -198,7 +190,7 @@ function bfsPinnedNodes(
       if (nodes.size >= MAX_NODES) continue;
       nodes.set(pin.path, {
         id: pin.path,
-        title: titleFromPath(pin.path),
+        title: basenameNoExt(pin.path),
         depth: 0,
         isCenter: false,
         isPinned: true,
@@ -228,7 +220,7 @@ function bfsPinnedNodes(
             if (nodes.size >= MAX_NODES) break;
             nodes.set(targetPath, {
               id: targetPath,
-              title: titleFromPath(targetPath),
+              title: basenameNoExt(targetPath),
               depth: nextDepth,
               isCenter: false,
               inVectorIndex: false,
@@ -272,7 +264,7 @@ async function discoverPinnedSimilarity(
       } else if (nodes.size < MAX_NODES) {
         nodes.set(note.path, {
           id: note.path,
-          title: note.title || titleFromPath(note.path),
+          title: note.title || basenameNoExt(note.path),
           depth: (pin.linkDepth ?? settings.linkDepth) + 1,
           isCenter: false,
           inVectorIndex: true,

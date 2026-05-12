@@ -262,6 +262,9 @@
 .claude-agent-link-arcs {
   flex: 0 0 28px;
   align-self: stretch;
+  /* Rendered after the row stack in JSX (so React commits row refs first) but
+     visually sits to the left of the rows. */
+  order: -1;
   /* Arrowheads + strokes inherit currentColor; tinted to the link-edge accent. */
   color: var(--text-accent);
 }
@@ -271,6 +274,7 @@
      stay consistent — important for streaming groups whose arc set may pop
      into existence mid-conversation. */
   flex: 0 0 28px;
+  order: -1;
 }
 
 /* ---------- Merged-run count badge + expanded body ---------- */

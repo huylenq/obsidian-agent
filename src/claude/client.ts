@@ -14,6 +14,7 @@ export interface ChatResponse {
   editOld?: string;
   editNew?: string;
   writeContent?: string;
+  writeLinks?: readonly string[];
   sessionId?: string;
   queryId?: string;
   resultMetadata?: {
@@ -237,6 +238,7 @@ export class ClaudeAgentClient {
           editOld: data.editOld as string | undefined,
           editNew: data.editNew as string | undefined,
           writeContent: data.writeContent as string | undefined,
+          writeLinks: data.writeLinks as readonly string[] | undefined,
         };
       case "tool_result":
         return {

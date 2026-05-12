@@ -11,6 +11,7 @@
 import React, { useState, useRef, useCallback } from "react";
 import { setIcon } from "obsidian";
 import type { GraphViewSettings, PinnedNodeConfig } from "@/types";
+import { basenameNoExt } from "@/utils/notePath";
 
 interface GraphControlsProps {
   settings: GraphViewSettings;
@@ -378,7 +379,7 @@ export function GraphControls({ settings, onSettingsChange, onRefresh, isLoading
           ) : (
             <>
               {(settings.pinnedNodes ?? []).map((pin) => {
-                const title = pin.path.split("/").pop()?.replace(/\.md$/, "") ?? pin.path;
+                const title = basenameNoExt(pin.path);
                 const overrides: string[] = [];
                 if (pin.linkDepth != null) overrides.push(`d:${pin.linkDepth}`);
                 if (pin.similarityThreshold != null) overrides.push(`s:${pin.similarityThreshold.toFixed(2)}`);

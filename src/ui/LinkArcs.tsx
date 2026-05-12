@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { TFile } from "obsidian";
 import { useApp } from "./AppContext";
-import { extractWikilinks } from "./wikilink/noteContent";
+import { basenameNoExt, resolveVaultFile } from "@/utils/notePath";
 
 interface LinkArcsProps {
   /** Vault-relative paths in display order. */
@@ -11,16 +11,16 @@ interface LinkArcsProps {
   /** The flex container hosting both the gutter and the row stack. Used as the
    *  Y origin for arc positions so the SVG can be coordinate-aligned with rows. */
   containerRef: React.RefObject<HTMLElement | null>;
-  /** Optional raw content per path (typically from Write blocks' writeContent).
-   *  Used to derive outgoing wikilinks immediately when Obsidian's metadataCache
-   *  hasn't yet indexed a freshly-created file. The cache wins when populated. */
-  pathContents?: ReadonlyMap<string, string>;
+  /** Optional outgoing wikilink list per path (from Write blocks' writeLinks).
+   *  Used to derive arcs when Obsidian's metadataCache hasn't indexed a file
+   *  yet, or when its cache state has drifted since the session was recorded. */
+  pathLinks?: ReadonlyMap<string, readonly string[]>;
 }
 
 interface ArcEdge {
-  from: string;          // source path
-  to: string;            // target path
-  bidi: boolean;         // both directions exist
+  from: string;
+  to: string;
+  bidi: boolean;
 }
 
 interface Layout {
@@ -42,9 +42,8 @@ const CORNER_R = 6;
  *   row B  ●─┘
  *
  * Anchors at xEnd on each row, runs leftward into the gutter at xLeft, then
- * down/up the gutter rail, then back rightward to the target row. Corners use
- * a quadratic curve for the round. Falls back to sharp corners if the span is
- * too small to round cleanly.
+ * down/up the gutter rail, then back rightward to the target row. Falls back
+ * to sharp corners if the span is too small to round cleanly.
  */
 function orthogonalPath(xEnd: number, y1: number, y2: number, depth: number): string {
   const xLeft = xEnd - depth;
@@ -63,20 +62,27 @@ function orthogonalPath(xEnd: number, y1: number, y2: number, depth: number): st
   ].join(" ");
 }
 
-export function LinkArcs({ paths, rowRefs, containerRef, pathContents }: LinkArcsProps) {
+/** Cheap equality check on the layout shape — avoids spurious downstream re-renders. */
+function layoutsEqual(a: Layout, b: Layout): boolean {
+  if (a.height !== b.height) return false;
+  if (a.centers.size !== b.centers.size) return false;
+  for (const [k, v] of a.centers) {
+    if (b.centers.get(k) !== v) return false;
+  }
+  return true;
+}
+
+export function LinkArcs({ paths, rowRefs, containerRef, pathLinks }: LinkArcsProps) {
   const app = useApp();
   const [layout, setLayout] = useState<Layout>({ centers: new Map(), height: 0 });
-  // Bumped whenever the metadataCache reindexes a touched file — forces the
-  // `edges` memo to recompute so arcs update once Obsidian catches up.
+  // Bumped whenever the metadataCache reindexes a touched file so the `edges`
+  // memo refreshes — catches manual edits, Edit-tool reindexes, and any other
+  // post-first-render cache shifts. (First-paint correctness comes from
+  // server-side writeLinks, not from this listener.)
   const [cacheVersion, setCacheVersion] = useState(0);
-  const svgRef = useRef<SVGSVGElement>(null);
 
-  // Re-extract arcs whenever Obsidian reindexes one of our touched files.
-  // Critical for fresh Writes: the file is on disk but metadataCache.links is
-  // empty until the cache indexes it (which can lag until the file is opened).
   useEffect(() => {
     const touched = new Set(paths);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handler = (file: TFile) => {
       if (touched.has(file.path)) setCacheVersion((v) => v + 1);
     };
@@ -84,41 +90,30 @@ export function LinkArcs({ paths, rowRefs, containerRef, pathContents }: LinkArc
     return () => app.metadataCache.offref(ref);
   }, [app, paths]);
 
-  // Build directed adjacency: for each touched path, the set of OTHER touched
-  // paths it links to. Prefer the metadata cache when it has data (most up to
-  // date); fall back to parsing wikilinks out of `pathContents` for files that
-  // haven't been indexed yet (typically a brand-new Write).
+  // Directed adjacency unions two sources so neither is load-bearing alone:
+  //   - metadataCache: authoritative when populated (any file Obsidian has indexed)
+  //   - pathLinks: the wikilink set extracted server-side from the full Write
+  //     content (covers freshly-Written files the cache hasn't indexed yet AND
+  //     history-loaded Writes whose cache state has drifted since the session)
   const edges = useMemo<ArcEdge[]>(() => {
     const touched = new Set(paths);
     const adj = new Map<string, Set<string>>();
+    const addLink = (out: Set<string>, sourcePath: string, linkText: string) => {
+      const dest = app.metadataCache.getFirstLinkpathDest(linkText, sourcePath);
+      if (dest && dest.path !== sourcePath && touched.has(dest.path)) {
+        out.add(dest.path);
+      }
+    };
     for (const p of paths) {
       const out = new Set<string>();
-      const file = app.vault.getAbstractFileByPath(p);
-      const cache = file instanceof TFile ? app.metadataCache.getFileCache(file) : null;
-      const cacheRefs = [...(cache?.links ?? []), ...(cache?.embeds ?? [])];
-
-      if (cacheRefs.length > 0) {
-        for (const lr of cacheRefs) {
-          const dest = app.metadataCache.getFirstLinkpathDest(lr.link, p);
-          if (dest && dest.path !== p && touched.has(dest.path)) {
-            out.add(dest.path);
-          }
-        }
-      } else {
-        // No cache data yet — bridge with the content we already have in hand.
-        const content = pathContents?.get(p);
-        if (content) {
-          for (const linkText of extractWikilinks(content)) {
-            const dest = app.metadataCache.getFirstLinkpathDest(linkText, p);
-            if (dest && dest.path !== p && touched.has(dest.path)) {
-              out.add(dest.path);
-            }
-          }
-        }
-      }
+      const file = resolveVaultFile(app, p);
+      const cache = file ? app.metadataCache.getFileCache(file) : null;
+      for (const lr of cache?.links ?? []) addLink(out, p, lr.link);
+      for (const lr of cache?.embeds ?? []) addLink(out, p, lr.link);
+      for (const linkText of pathLinks?.get(p) ?? []) addLink(out, p, linkText);
       adj.set(p, out);
     }
-    // Dedup unordered pairs; record bidi.
+    const indexOf = new Map(paths.map((p, i) => [p, i]));
     const out: ArcEdge[] = [];
     const seen = new Set<string>();
     for (const [from, tos] of adj) {
@@ -129,19 +124,18 @@ export function LinkArcs({ paths, rowRefs, containerRef, pathContents }: LinkArc
         if (seen.has(key)) continue;
         seen.add(key);
         const reverse = adj.get(to)?.has(from) === true;
-        // Always render the arc with "from" being the path that appears first
-        // in the display order so arrowheads make sense visually.
-        const fromIdx = paths.indexOf(from);
-        const toIdx = paths.indexOf(to);
-        if (fromIdx <= toIdx) out.push({ from, to, bidi: reverse });
-        else out.push({ from: to, to: from, bidi: reverse });
+        // Normalize "from" to the path appearing earlier in display order so
+        // arrowheads always point downward — matches reading direction.
+        if ((indexOf.get(from) ?? 0) <= (indexOf.get(to) ?? 0)) {
+          out.push({ from, to, bidi: reverse });
+        } else {
+          out.push({ from: to, to: from, bidi: reverse });
+        }
       }
     }
     return out;
-  }, [app, paths, pathContents, cacheVersion]);
+  }, [app, paths, pathLinks, cacheVersion]);
 
-  // Measure row Y-centers + container height. Re-runs on layout changes
-  // (paths swap, body resize) so streaming updates stay accurate.
   useLayoutEffect(() => {
     const remeasure = () => {
       const container = containerRef.current;
@@ -154,12 +148,15 @@ export function LinkArcs({ paths, rowRefs, containerRef, pathContents }: LinkArc
         const r = el.getBoundingClientRect();
         centers.set(path, r.top + r.height / 2 - cTop);
       }
-      setLayout({ centers, height: container.getBoundingClientRect().height });
+      const next: Layout = { centers, height: container.getBoundingClientRect().height };
+      // Short-circuit no-op updates so a settled layout doesn't busy-loop the
+      // ResizeObserver into re-renders.
+      setLayout((prev) => (layoutsEqual(prev, next) ? prev : next));
     };
     remeasure();
     const ro = new ResizeObserver(remeasure);
     if (containerRef.current) ro.observe(containerRef.current);
-    // Watch each row too — row heights change as metadata strips populate.
+    // Row heights shift when metadata strips populate, so watch each row too.
     for (const path of paths) {
       const el = rowRefs.current.get(path);
       if (el) ro.observe(el);
@@ -167,8 +164,6 @@ export function LinkArcs({ paths, rowRefs, containerRef, pathContents }: LinkArc
     return () => ro.disconnect();
   }, [paths, rowRefs, containerRef]);
 
-  // Nothing to draw: skip the SVG entirely so the gutter doesn't take up space
-  // visually when there's nothing to overlay.
   if (edges.length === 0 || layout.centers.size === 0) {
     return <div className="claude-agent-link-arcs empty" />;
   }
@@ -178,7 +173,6 @@ export function LinkArcs({ paths, rowRefs, containerRef, pathContents }: LinkArc
 
   return (
     <svg
-      ref={svgRef}
       className="claude-agent-link-arcs"
       width={W}
       height={H}
@@ -187,7 +181,6 @@ export function LinkArcs({ paths, rowRefs, containerRef, pathContents }: LinkArc
       aria-hidden
     >
       <defs>
-        {/* Arrowhead — points along path direction; refX positions tip at endpoint. */}
         <marker
           id="claude-agent-arc-arrow"
           viewBox="0 0 10 10"
@@ -224,17 +217,12 @@ export function LinkArcs({ paths, rowRefs, containerRef, pathContents }: LinkArc
           >
             <title>
               {e.bidi
-                ? `${basename(e.from)} ↔ ${basename(e.to)}`
-                : `${basename(e.from)} → ${basename(e.to)}`}
+                ? `${basenameNoExt(e.from)} ↔ ${basenameNoExt(e.to)}`
+                : `${basenameNoExt(e.from)} → ${basenameNoExt(e.to)}`}
             </title>
           </path>
         );
       })}
     </svg>
   );
-}
-
-function basename(p: string): string {
-  const last = p.split("/").pop() ?? p;
-  return last.replace(/\.md$/i, "");
 }

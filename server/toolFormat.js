@@ -168,12 +168,27 @@ function toVaultRelative(filePath, vaultPath) {
   return filePath;
 }
 
+// [[Link]] / [[Link|Display]] / [[Link#Heading]] — capture the canonical link
+// target only. Mirrors the client-side regex in src/ui/wikilink/noteContent.ts.
+const WIKILINK_RE = /\[\[([^\]\n|#]+)(?:#[^\]\n|]*)?(?:\|[^\]\n]*)?\]\]/g;
+
+function extractWikilinks(text) {
+  const out = new Set();
+  let m;
+  WIKILINK_RE.lastIndex = 0;
+  while ((m = WIKILINK_RE.exec(text)) !== null) {
+    out.add(m[1].trim());
+  }
+  return Array.from(out);
+}
+
 /**
  * Vault-aware structured fields for Read/Write/Edit, so the client UI can
  * render wikilinks/metadata/semantic-diffs without re-parsing `input`.
  *
- * Returns an object with optional fields: { filePath, editOld, editNew, writeContent }.
- * Returns {} for tools that don't apply.
+ * For Write: `writeContent` is truncated for snippet preview, but `writeLinks`
+ * carries the full wikilink set extracted from the untruncated content so the
+ * client can derive arc connections even for very long notes.
  */
 export function computeToolStructured(toolName, input, vaultPath) {
   if (!input) return {};
@@ -181,11 +196,14 @@ export function computeToolStructured(toolName, input, vaultPath) {
   switch (toolName) {
     case "Read":
       return fp ? { filePath: fp } : {};
-    case "Write":
-      return {
-        ...(fp ? { filePath: fp } : {}),
-        ...(input.content ? { writeContent: truncateContent(input.content, 4000) } : {}),
-      };
+    case "Write": {
+      const out = fp ? { filePath: fp } : {};
+      if (input.content) {
+        out.writeContent = truncateContent(input.content, 4000);
+        out.writeLinks = extractWikilinks(input.content);
+      }
+      return out;
+    }
     case "Edit":
       return {
         ...(fp ? { filePath: fp } : {}),

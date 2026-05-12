@@ -1,16 +1,11 @@
 import React, { useRef } from "react";
-import { TFile } from "obsidian";
 import { useApp } from "@/ui/AppContext";
+import { basenameNoExt, resolveVaultFile } from "@/utils/notePath";
 
 interface WikilinkPillProps {
   path: string;
   /** Smaller pill — used in inline diffs. */
   small?: boolean;
-}
-
-function basenameNoExt(path: string): string {
-  const base = path.split("/").pop() ?? path;
-  return base.replace(/\.md$/i, "");
 }
 
 /**
@@ -23,12 +18,7 @@ export function WikilinkPill({ path, small }: WikilinkPillProps) {
   const app = useApp();
   const elRef = useRef<HTMLSpanElement>(null);
 
-  // Resolve the file. metadataCache.getFirstLinkpathDest also handles linkpath
-  // shorthand if the path happens to be a basename rather than a full path.
-  const file =
-    (app.vault.getAbstractFileByPath(path) as TFile | null) ??
-    app.metadataCache.getFirstLinkpathDest(path, "");
-  const resolved = file instanceof TFile;
+  const resolved = resolveVaultFile(app, path) != null;
   const display = basenameNoExt(path);
 
   const handleClick = (e: React.MouseEvent) => {
