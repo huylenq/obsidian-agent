@@ -142,15 +142,6 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
     if (graphToggleRef.current) setIcon(graphToggleRef.current, "git-fork");
   }, []);
 
-  if (blocks.length === 1) {
-    return <ToolCallBlock block={blocks[0]} />;
-  }
-
-  const icons = getBlockIcons(blocks);
-  const autoExpanded = status !== "done";
-  const expanded = override ?? autoExpanded;
-  const runningKey = runningBlock?.toolUseId ?? null;
-
   const groupedItems = useMemo(() => groupConsecutiveFileOps(blocks), [blocks]);
 
   // Path metadata only depends on the grouped items — split out from runningPath
@@ -184,6 +175,15 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
     ordered.forEach((p, i) => anchors.set(p, `--ca-arc-${arcScope}-${i}`));
     return { vaultPaths: ordered, firstItemKeyByPath: firstKey, pathLinks: links, pathAnchors: anchors };
   }, [groupedItems, arcScope]);
+
+  if (blocks.length === 1) {
+    return <ToolCallBlock block={blocks[0]} />;
+  }
+
+  const icons = getBlockIcons(blocks);
+  const autoExpanded = status !== "done";
+  const expanded = override ?? autoExpanded;
+  const runningKey = runningBlock?.toolUseId ?? null;
 
   const runningPath =
     runningBlock?.filePath && isFileTool(runningBlock.toolName) ? runningBlock.filePath : null;
