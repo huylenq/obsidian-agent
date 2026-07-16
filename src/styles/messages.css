@@ -596,10 +596,9 @@
 .claude-agent-tool-group-icon-disc {
   position: absolute;
   inset: 0;
-  /* Matches the assistant bubble bg so the chip is invisible at rest. Hover
-     state below switches to transparent — `--background-modifier-hover` is
-     a semi-transparent overlay and would double-stack if applied here. */
-  background: var(--background-secondary);
+  /* Paint with the actual chat canvas surface: this disc is an overlap
+     cutout, not a visible chip. The shared token follows the Obsidian theme. */
+  background: var(--hermes-agent-chat-background);
   border-radius: 50%;
   mask-mode: luminance;
   -webkit-mask-mode: luminance;
@@ -619,24 +618,27 @@
   height: 22px;
 }
 
-/* Transparent on hover so the row's hover overlay paints through without
-   double-stacking (the overlay is semi-transparent). */
-.claude-agent-tool-group-header:hover .claude-agent-tool-group-icon:not(.latest) .claude-agent-tool-group-icon-disc {
+/* Once hover spreads the icons apart, no overlap needs cutting. Let the row's
+   semi-transparent hover surface paint through every disc, including latest. */
+.claude-agent-tool-group-header:hover .claude-agent-tool-group-icon .claude-agent-tool-group-icon-disc {
   background: transparent;
 }
 
 .claude-agent-tool-group-icon.latest {
-  color: var(--text-on-accent);
+  color: var(--interactive-accent);
   z-index: 1;
 }
 
 .claude-agent-tool-group-icon.latest .claude-agent-tool-group-icon-disc {
-  background: var(--interactive-accent);
+  background: var(--hermes-agent-chat-background);
+}
+
+.claude-agent-tool-group-icon.latest .claude-agent-tool-group-icon-glyph {
   animation: claude-agent-pulse 1.2s infinite;
 }
 
-.claude-agent-tool-group.error .claude-agent-tool-group-icon.latest .claude-agent-tool-group-icon-disc {
-  background: var(--text-error);
+.claude-agent-tool-group.error .claude-agent-tool-group-icon.latest {
+  color: var(--text-error);
 }
 
 .claude-agent-tool-group-body {

@@ -6,12 +6,17 @@
 }
 
 .claude-agent-container {
+  /* One theme-aware surface shared by the chat canvas and any paint used as
+     an overlap cutout. Keeping both on the same token makes masked tool-icon
+     discs disappear into the canvas across Obsidian themes. */
+  --hermes-agent-chat-background: var(--background-primary);
   display: flex;
   flex-direction: column;
   height: 100%;
   padding: 0;
   position: relative;
   overflow: hidden;
+  background: var(--hermes-agent-chat-background);
 }
 
 /* Header removed — styles kept for reference */
