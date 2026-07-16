@@ -1,11 +1,11 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
-import { ClaudeAgentSettings, ConnectionMode, DEFAULT_SETTINGS } from "./types";
-import type ClaudeAgentPlugin from "./main";
+import { HermesAgentSettings, ConnectionMode, DEFAULT_SETTINGS } from "./types";
+import type HermesAgentPlugin from "./main";
 
-export class ClaudeAgentSettingTab extends PluginSettingTab {
-  plugin: ClaudeAgentPlugin;
+export class HermesAgentSettingTab extends PluginSettingTab {
+  plugin: HermesAgentPlugin;
 
-  constructor(app: App, plugin: ClaudeAgentPlugin) {
+  constructor(app: App, plugin: HermesAgentPlugin) {
     super(app, plugin);
     this.plugin = plugin;
   }
@@ -14,14 +14,14 @@ export class ClaudeAgentSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "Claude Agent Settings" });
+    containerEl.createEl("h2", { text: "Hermes Agent Settings" });
 
     // Connection section
     containerEl.createEl("h3", { text: "Connection" });
 
     new Setting(containerEl)
       .setName("Connection Mode")
-      .setDesc("Local: auto-starts proxy server. Remote: connects to an external server (for mobile).")
+      .setDesc("Local: auto-starts the Hermes bridge. Remote: connects to an external bridge (for mobile).")
       .addDropdown((dropdown) =>
         dropdown
           .addOption("local", "Local")
@@ -38,8 +38,8 @@ export class ClaudeAgentSettingTab extends PluginSettingTab {
       .setName("Auth Token")
       .setDesc(
         this.plugin.settings.connectionMode === "local"
-          ? "Shared secret for the server. Set this on desktop, then use the same token on mobile to connect."
-          : "Bearer token to authenticate with the remote server."
+          ? "Shared secret for the bridge. Set this on desktop, then use the same token on mobile to connect."
+          : "Token used to authenticate with the remote bridge."
       )
       .addText((text) => {
         text
@@ -54,21 +54,21 @@ export class ClaudeAgentSettingTab extends PluginSettingTab {
 
     if (this.plugin.settings.connectionMode === "remote") {
       new Setting(containerEl)
-        .setName("Remote Server URL")
-        .setDesc("Full URL of the proxy server (e.g. https://abc123.ngrok.io). Leave blank to use auto-discovered URL from connection file.")
+        .setName("Remote Bridge URL")
+        .setDesc("Full URL of the Hermes bridge (e.g. https://abc123.ngrok.io). Leave blank to use auto-discovered URL from connection file.")
         .addText((text) =>
           text
             .setPlaceholder("https://your-server.ngrok.io")
-            .setValue(this.plugin.settings.remoteServerUrl)
+            .setValue(this.plugin.settings.remoteBridgeUrl)
             .onChange(async (value) => {
-              this.plugin.settings.remoteServerUrl = value;
+              this.plugin.settings.remoteBridgeUrl = value;
               await this.plugin.saveSettings();
             })
         );
 
       // Show auto-discovered URL if active and no manual URL is set
-      const activeUrl = this.plugin.activeConnectionUrl;
-      if (activeUrl && !this.plugin.settings.remoteServerUrl) {
+      const activeUrl = this.plugin.activeBridgeUrl;
+      if (activeUrl && !this.plugin.settings.remoteBridgeUrl) {
         new Setting(containerEl)
           .setName("Active URL (auto-discovered)")
           .setDesc(activeUrl);
@@ -77,7 +77,7 @@ export class ClaudeAgentSettingTab extends PluginSettingTab {
       // Reload connection file (useful when iCloud sync is slow)
       new Setting(containerEl)
         .setName("Reload Connection File")
-        .setDesc("Re-read claude-agent-connection.json from vault (iCloud may delay sync)")
+        .setDesc("Re-read hermes-agent-connection.json from vault (iCloud may delay sync)")
         .addButton((button) =>
           button.setButtonText("Reload").onClick(async () => {
             button.setButtonText("Loading...");
@@ -99,11 +99,11 @@ export class ClaudeAgentSettingTab extends PluginSettingTab {
 
       new Setting(containerEl)
         .setName("Test Connection")
-        .setDesc("Verify the remote server is reachable")
+        .setDesc("Verify the remote Hermes bridge is reachable")
         .addButton((button) =>
           button.setButtonText("Test").onClick(async () => {
             // Use active URL (may be auto-discovered), fall back to settings
-            const url = this.plugin.activeConnectionUrl || this.plugin.settings.remoteServerUrl;
+            const url = this.plugin.activeBridgeUrl || this.plugin.settings.remoteBridgeUrl;
             if (!url) {
               button.setButtonText("No URL set");
               setTimeout(() => button.setButtonText("Test"), 2000);
@@ -140,7 +140,7 @@ export class ClaudeAgentSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("OpenAI API Key")
-      .setDesc("Required for vault indexing (text-embedding-3-small). Used by the server to generate embeddings for Relevant Notes and Semantic Graph.")
+      .setDesc("Required for vault indexing (text-embedding-3-small). Used by the bridge to generate embeddings for Relevant Notes and Semantic Graph.")
       .addText((text) => {
         text
           .setPlaceholder("sk-...")
@@ -156,7 +156,7 @@ export class ClaudeAgentSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("System Prompt")
       .setDesc(
-        "Customize the system prompt that guides Claude's behavior when answering questions about your vault."
+        "Customize the instructions Hermes receives with each vault prompt."
       )
       .addTextArea((text) =>
         text
@@ -211,12 +211,12 @@ export class ClaudeAgentSettingTab extends PluginSettingTab {
     infoEl.innerHTML = `
       <p>This plugin requires:</p>
       <ul>
-        <li><strong>Claude Code CLI</strong> - Must be installed and authenticated</li>
-        <li><strong>Proxy Server</strong> - Run <code>cd server && npm start</code></li>
-        <li><strong>MCP Servers</strong> - Configure in <code>~/.claude/settings.json</code> or vault's <code>.claude/</code></li>
-        <li><strong>Mobile</strong> - Set Connection Mode to "Remote" and configure your server URL + auth token</li>
+        <li><strong>Hermes Agent CLI</strong> - <code>hermes</code> must be installed, configured, and available on PATH</li>
+        <li><strong>Hermes bridge</strong> - Run <code>cd server && pnpm start</code></li>
+        <li><strong>Hermes tools and MCP servers</strong> - Configure through Hermes</li>
+        <li><strong>Mobile</strong> - Set Connection Mode to "Remote" and configure your bridge URL + auth token</li>
       </ul>
-      <p>The agent will use MCP servers configured in your Claude settings to search and interact with your vault.</p>
+      <p>The bridge starts <code>hermes acp</code>; Hermes loads its tools, MCP servers, rules, and memory for the vault working directory.</p>
     `;
   }
 }

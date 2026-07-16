@@ -38,15 +38,15 @@ export function SelectionChip({ selection, onClear }: SelectionChipProps) {
       : null;
 
   return (
-    <div className="claude-agent-selection-chip" title={selection.text}>
-      <span ref={iconRef} className="claude-agent-selection-icon" />
-      <span className="claude-agent-selection-preview">"{displayText}"</span>
+    <div className="hermes-agent-selection-chip" title={selection.text}>
+      <span ref={iconRef} className="hermes-agent-selection-icon" />
+      <span className="hermes-agent-selection-preview">"{displayText}"</span>
       {lineInfo && (
-        <span className="claude-agent-selection-lines">{lineInfo}</span>
+        <span className="hermes-agent-selection-lines">{lineInfo}</span>
       )}
-      <span className="claude-agent-selection-label">Selected</span>
+      <span className="hermes-agent-selection-label">Selected</span>
       <button
-        className="claude-agent-selection-clear"
+        className="hermes-agent-selection-clear"
         onClick={onClear}
         aria-label="Clear selection context"
       >

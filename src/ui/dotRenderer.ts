@@ -36,7 +36,7 @@ export async function renderDotBlocks(container: HTMLElement): Promise<void> {
     if (!bracesBalanced(dotSource)) continue;
 
     const wrapper = document.createElement("div");
-    wrapper.className = "claude-agent-dot-diagram";
+    wrapper.className = "hermes-agent-dot-diagram";
 
     try {
       const svg = viz.renderSVGElement(dotSource);
@@ -48,7 +48,7 @@ export async function renderDotBlocks(container: HTMLElement): Promise<void> {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       wrapper.classList.add("dot-error");
-      wrapper.innerHTML = `<div class="claude-agent-dot-error-msg">${msg}</div><pre><code>${dotSource}</code></pre>`;
+      wrapper.innerHTML = `<div class="hermes-agent-dot-error-msg">${msg}</div><pre><code>${dotSource}</code></pre>`;
     }
 
     pre.replaceWith(wrapper);

@@ -46,7 +46,7 @@ export function MarkdownContent({ content, className }: MarkdownContentProps) {
     }
 
     // Convert single newlines to markdown line breaks (two spaces + newline)
-    // This preserves the line breaks that Claude sends
+    // Preserve line breaks emitted by the agent.
     const formattedContent = content.replace(/\n/g, "  \n");
 
     // Render markdown, then post-process DOT code blocks into SVG

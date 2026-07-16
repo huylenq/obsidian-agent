@@ -9,14 +9,14 @@
   --graph-node-pinned: #c67a3e;
 }
 
-.claude-agent-graph-view {
+.hermes-agent-graph-view {
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
 }
 
-.claude-agent-graph-container {
+.hermes-agent-graph-container {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -26,13 +26,13 @@
 
 /* Canvas area */
 
-.claude-agent-graph-canvas-wrapper {
+.hermes-agent-graph-canvas-wrapper {
   flex: 1;
   position: relative;
   overflow: hidden;
 }
 
-.claude-agent-graph-canvas {
+.hermes-agent-graph-canvas {
   display: block;
   width: 100%;
   height: 100%;
@@ -45,13 +45,13 @@
  * position, border, shadow, sections, sliders, toggles) comes for free.
  */
 
-.claude-agent-graph-canvas-wrapper > .graph-controls {
+.hermes-agent-graph-canvas-wrapper > .graph-controls {
   top: var(--size-4-3);
 }
 
 /* Tooltip */
 
-.claude-agent-graph-tooltip {
+.hermes-agent-graph-tooltip {
   position: fixed;
   z-index: var(--layer-popover);
   background-color: var(--background-primary);
@@ -65,43 +65,43 @@
   transition: opacity 150ms ease-out;
 }
 
-.claude-agent-graph-tooltip.visible {
+.hermes-agent-graph-tooltip.visible {
   opacity: 1;
 }
 
-.claude-agent-graph-tooltip-title {
+.hermes-agent-graph-tooltip-title {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-normal);
   margin-bottom: 2px;
 }
 
-.claude-agent-graph-tooltip-path {
+.hermes-agent-graph-tooltip-path {
   font-size: 11px;
   color: var(--text-muted);
   margin-bottom: 4px;
   word-break: break-all;
 }
 
-.claude-agent-graph-tooltip-meta {
+.hermes-agent-graph-tooltip-meta {
   display: flex;
   gap: 8px;
   font-size: 11px;
   color: var(--text-faint);
 }
 
-.claude-agent-graph-tooltip-indexed {
+.hermes-agent-graph-tooltip-indexed {
   color: var(--color-green);
 }
 
-.claude-agent-graph-tooltip-pinned {
+.hermes-agent-graph-tooltip-pinned {
   color: var(--graph-node-pinned, #e8a87c);
   font-weight: 600;
 }
 
 /* Floating filter sliders — bare, no chrome, transparent until hovered */
 
-.claude-agent-graph-filter-hud {
+.hermes-agent-graph-filter-hud {
   position: absolute;
   top: 0;
   left: var(--size-4-2);
@@ -113,58 +113,58 @@
   background: transparent;
 }
 
-.claude-agent-graph-filter-hud:hover {
+.hermes-agent-graph-filter-hud:hover {
   opacity: 1;
 }
 
-.claude-agent-graph-filter-hud .setting-item {
+.hermes-agent-graph-filter-hud .setting-item {
   padding: 2px 0;
   border: none;
   background: transparent;
 }
 
 /* Label shrinks to text width, slider fills the rest */
-.claude-agent-graph-filter-hud .setting-item-info {
+.hermes-agent-graph-filter-hud .setting-item-info {
   flex: 0 0 auto;
   width: auto;
   max-width: none;
 }
 
-.claude-agent-graph-filter-hud .setting-item-control {
+.hermes-agent-graph-filter-hud .setting-item-control {
   flex: 1 1 0;
 }
 
-.claude-agent-graph-filter-hud input[type="range"] {
+.hermes-agent-graph-filter-hud input[type="range"] {
   width: 100%;
 }
 
-.claude-agent-graph-filter-hud .setting-item-name {
+.hermes-agent-graph-filter-hud .setting-item-name {
   font-size: var(--font-ui-smaller);
   color: var(--text-faint);
 }
 
 /* Stepper control */
 
-.claude-agent-stepper-control {
+.hermes-agent-stepper-control {
   flex-wrap: nowrap !important;
 }
 
-.claude-agent-stepper {
+.hermes-agent-stepper {
   display: flex;
   align-items: center;
   gap: var(--size-2-2);
 }
 
-.claude-agent-stepper button {
+.hermes-agent-stepper button {
   padding: var(--size-2-1);
 }
 
-.claude-agent-stepper button:disabled {
+.hermes-agent-stepper button:disabled {
   opacity: 0.25;
   cursor: not-allowed;
 }
 
-.claude-agent-stepper-value {
+.hermes-agent-stepper-value {
   min-width: 1.5em;
   text-align: center;
   font-size: var(--font-ui-small);
@@ -174,19 +174,19 @@
 
 /* Empty / error / notice states */
 
-.claude-agent-graph-empty,
-.claude-agent-graph-error {
+.hermes-agent-graph-empty,
+.hermes-agent-graph-error {
   padding: 24px;
   text-align: center;
   color: var(--text-muted);
   font-size: 12px;
 }
 
-.claude-agent-graph-error {
+.hermes-agent-graph-error {
   color: var(--text-error);
 }
 
-.claude-agent-graph-notice {
+.hermes-agent-graph-notice {
   position: absolute;
   bottom: 8px;
   left: 50%;
@@ -202,29 +202,29 @@
 
 /* Pinned nodes section in controls */
 
-.claude-agent-pinned-hint {
+.hermes-agent-pinned-hint {
   color: var(--text-faint);
   font-style: italic;
 }
 
-.claude-agent-pinned-item {
+.hermes-agent-pinned-item {
   padding: 2px 0;
 }
 
-.claude-agent-pinned-name {
+.hermes-agent-pinned-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 150px;
 }
 
-.claude-agent-pinned-overrides {
+.hermes-agent-pinned-overrides {
   color: var(--graph-node-pinned, #e8a87c);
   font-size: var(--font-ui-smaller);
   font-variant-numeric: tabular-nums;
 }
 
-.claude-agent-pinned-clear {
+.hermes-agent-pinned-clear {
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
 }

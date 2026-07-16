@@ -5,7 +5,7 @@ export const doneCommand: SlashCommand = {
   description: "Mark current session as done and start a new chat",
 
   async execute(context) {
-    const client = context.plugin.claudeClient;
+    const client = context.plugin.hermesClient;
     const sessionId = client?.getSessionId();
 
     if (sessionId && client) {

@@ -71,7 +71,9 @@ export function inspectGroup(blocks: ToolBlock[]): GroupInspection {
     if (b.isError && !errorBlock) errorBlock = b;
     else if (b.isRunning && !runningBlock) runningBlock = b;
   }
-  const status: ToolStatus = errorBlock ? "error" : runningBlock ? "running" : "done";
+  // Active work owns the header state. Historical failures stay visible in
+  // their rows, but must not recolor and pulse a later retry/current tool red.
+  const status: ToolStatus = runningBlock ? "running" : errorBlock ? "error" : "done";
   return { status, runningBlock, errorBlock };
 }
 

@@ -1,10 +1,9 @@
 import { readFileSync, existsSync, writeFileSync, renameSync } from "fs";
 import { join } from "path";
-import { homedir } from "os";
-import { encodePath } from "./transcript.js";
+import { getProjectDir } from "./storage.js";
 
 export function getMarkersPath(workingDirectory, sessionId) {
-  return join(homedir(), ".claude", "projects", encodePath(workingDirectory), `${sessionId}.markers.json`);
+  return join(getProjectDir(workingDirectory), `${sessionId}.markers.json`);
 }
 
 export function loadMarkers(markersPath) {

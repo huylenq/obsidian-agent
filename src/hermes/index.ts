@@ -1,2 +1,2 @@
-export { ClaudeAgentClient } from "./client";
+export { HermesAgentClient } from "./client";
 export type { ChatResponse } from "./client";

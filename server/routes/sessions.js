@@ -1,9 +1,8 @@
 import { Router } from "express";
 import { existsSync, readdirSync, statSync } from "fs";
-import { homedir } from "os";
 import { join } from "path";
 import { log, logError } from "../log.js";
-import { encodePath } from "../transcript.js";
+import { getProjectDir } from "../storage.js";
 import {
   loadRegistry,
   saveRegistry,
@@ -53,7 +52,7 @@ router.get("/sessions", (req, res) => {
 
     res.json({ sessions });
   } catch (error) {
-    logError("[Proxy] Error listing sessions:", error);
+    logError("[Hermes Bridge] Error listing sessions:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -70,7 +69,7 @@ router.get("/sessions/:sessionId/markers", (req, res) => {
     const markers = loadMarkers(markersPath);
     res.json({ markers });
   } catch (error) {
-    logError("[Proxy] Error loading markers:", error);
+    logError("[Hermes Bridge] Error loading markers:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -88,7 +87,7 @@ router.get("/sessions/:sessionId/touched", (req, res) => {
     const touched = loadTouched(sessionId, vaultPath);
     res.json(touched);
   } catch (error) {
-    logError("[Proxy] Error loading touched notes:", error);
+    logError("[Hermes Bridge] Error loading touched notes:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -109,7 +108,7 @@ router.patch("/sessions/:sessionId", (req, res) => {
     const entry = updateSessionEntry(vaultPath, sessionId, updates);
     res.json({ session: entry });
   } catch (error) {
-    logError("[Proxy] Error updating session:", error);
+    logError("[Hermes Bridge] Error updating session:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -123,10 +122,10 @@ router.delete("/sessions/:sessionId", (req, res) => {
 
   try {
     deleteSession(vaultPath, sessionId);
-    log(`[Proxy] Deleted session ${sessionId}`);
+    log(`[Hermes Bridge] Deleted session ${sessionId}`);
     res.json({ deleted: true });
   } catch (error) {
-    logError("[Proxy] Error deleting session:", error);
+    logError("[Hermes Bridge] Error deleting session:", error);
     res.status(error.message?.includes("not found") ? 404 : 500).json({ error: error.message });
   }
 });
@@ -138,7 +137,7 @@ router.post("/sessions/migrate", (req, res) => {
   const vaultPath = req.vaultPath;
 
   try {
-    const projectDir = join(homedir(), ".claude", "projects", encodePath(vaultPath));
+    const projectDir = getProjectDir(vaultPath);
     if (!existsSync(projectDir)) {
       return res.json({ migrated: 0 });
     }
@@ -180,7 +179,7 @@ router.post("/sessions/migrate", (req, res) => {
         status: "done", // Assume migrated sessions are done
         createdAt: first,
         updatedAt: last,
-        model: "haiku", // Default; we can't reliably determine from transcript
+        model: "hermes", // Hermes owns the concrete provider/model selection
         messageCount,
         files: filePaths,
       });
@@ -188,10 +187,10 @@ router.post("/sessions/migrate", (req, res) => {
     }
 
     saveRegistry(vaultPath, registry);
-    log(`[Proxy] Migration complete: ${migrated} sessions migrated`);
+    log(`[Hermes Bridge] Migration complete: ${migrated} sessions migrated`);
     res.json({ migrated });
   } catch (error) {
-    logError("[Proxy] Migration error:", error);
+    logError("[Hermes Bridge] Migration error:", error);
     res.status(500).json({ error: error.message });
   }
 });

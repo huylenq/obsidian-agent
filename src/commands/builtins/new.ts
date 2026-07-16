@@ -6,7 +6,7 @@ export const newCommand: SlashCommand = {
   description: "Start a new chat session",
 
   async execute(context) {
-    context.plugin.claudeClient?.clearSession();
+    context.plugin.hermesClient?.clearSession();
     context.clearMessages();
 
     return {

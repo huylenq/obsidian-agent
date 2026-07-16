@@ -1,12 +1,15 @@
-import { readdir, stat, readFile } from "fs/promises";
+import { readdir, stat, readFile, writeFile, rename } from "fs/promises";
 import { join } from "path";
 import { log, logError } from "../log.js";
 import { chunkMarkdown } from "./chunker.js";
 import { embedTexts } from "./embed.js";
 import { upsertChunks, deleteByPaths, getIndexedMtimes } from "./lanceIndex.js";
 
-const SKIP_DIRS = new Set([".obsidian", ".obsidian-mobile", ".claude", ".trash", "node_modules", ".git"]);
+// Keep the former provider directory excluded so existing vault metadata is
+// never indexed after an upgrade.
+const SKIP_DIRS = new Set([".obsidian", ".obsidian-mobile", ".hermes", ".claude", ".trash", "node_modules", ".git"]);
 const EMBED_BATCH = 50;
+const EMPTY_FILES_STATE = "empty-files.json";
 
 /** Shared indexing state for status reporting. */
 export const indexState = {
@@ -37,6 +40,41 @@ async function walkVault(dir, base = dir) {
   return files;
 }
 
+function getEmptyFilesStatePath(vaultPath) {
+  return join(vaultPath, ".obsidian", "lance", EMPTY_FILES_STATE);
+}
+
+/** Load mtimes for notes that intentionally have no vector rows. */
+async function loadEmptyFileMtimes(vaultPath) {
+  try {
+    const raw = await readFile(getEmptyFilesStatePath(vaultPath), "utf-8");
+    const state = JSON.parse(raw);
+    if (state.version !== 1 || !Array.isArray(state.entries)) return new Map();
+    return new Map(
+      state.entries
+        .filter((entry) => typeof entry?.path === "string" && Number.isFinite(entry?.mtime))
+        .map((entry) => [entry.path, entry.mtime])
+    );
+  } catch (err) {
+    if (err.code !== "ENOENT") {
+      logError("[Indexer] Failed to read empty-file state:", err.message);
+    }
+    return new Map();
+  }
+}
+
+/** Persist empty-note mtimes atomically so they stay skipped across restarts. */
+async function saveEmptyFileMtimes(vaultPath, mtimes) {
+  const statePath = getEmptyFilesStatePath(vaultPath);
+  const tempPath = `${statePath}.${process.pid}.tmp`;
+  const state = {
+    version: 1,
+    entries: Array.from(mtimes, ([path, mtime]) => ({ path, mtime })),
+  };
+  await writeFile(tempPath, `${JSON.stringify(state, null, 2)}\n`, "utf-8");
+  await rename(tempPath, statePath);
+}
+
 /**
  * Build or incrementally update the LanceDB index for a vault.
  */
@@ -48,6 +86,8 @@ export async function buildIndex(vaultPath, table) {
 
   indexState.indexing = true;
   indexState.progress = { indexed: 0, total: 0 };
+  let emptyFileMtimes = null;
+  let emptyFileStateDirty = false;
 
   try {
     log("[Indexer] Scanning vault:", vaultPath);
@@ -56,6 +96,7 @@ export async function buildIndex(vaultPath, table) {
 
     // Get existing index state
     const indexedMtimes = await getIndexedMtimes(table);
+    emptyFileMtimes = await loadEmptyFileMtimes(vaultPath);
 
     // Determine which files need (re-)indexing
     const toIndex = [];
@@ -63,7 +104,9 @@ export async function buildIndex(vaultPath, table) {
 
     for (const file of vaultFiles) {
       currentPaths.add(file.relPath);
-      const existingMtime = indexedMtimes.get(file.relPath);
+      const vectorMtime = indexedMtimes.get(file.relPath);
+      const emptyMtime = emptyFileMtimes.get(file.relPath);
+      const existingMtime = Math.max(vectorMtime || 0, emptyMtime || 0);
       if (!existingMtime || file.mtime > existingMtime) {
         toIndex.push(file);
       }
@@ -74,6 +117,12 @@ export async function buildIndex(vaultPath, table) {
     for (const path of indexedMtimes.keys()) {
       if (!currentPaths.has(path)) {
         deletedPaths.push(path);
+      }
+    }
+    for (const path of emptyFileMtimes.keys()) {
+      if (!currentPaths.has(path)) {
+        emptyFileMtimes.delete(path);
+        emptyFileStateDirty = true;
       }
     }
 
@@ -93,28 +142,41 @@ export async function buildIndex(vaultPath, table) {
 
     // Process in batches
     let indexed = 0;
+    let emptySkipped = 0;
     let failed = 0;
     for (let i = 0; i < toIndex.length; i += EMBED_BATCH) {
       const batch = toIndex.slice(i, i + EMBED_BATCH);
+      let batchEmptyCount = 0;
 
       try {
         // Read and chunk all files in this batch
         const allChunks = [];
         const fileMtimes = [];
+        const emptyFiles = [];
         for (const file of batch) {
           const content = await readFile(file.fullPath, "utf-8");
           const chunks = chunkMarkdown(content, file.relPath);
+          if (chunks.length === 0) {
+            emptyFiles.push(file);
+            continue;
+          }
           for (const chunk of chunks) {
-            // Skip empty chunks (empty files or frontmatter-only)
-            if (!chunk.content.trim()) continue;
             allChunks.push(chunk);
             fileMtimes.push(file.mtime);
           }
         }
+        batchEmptyCount = emptyFiles.length;
+
+        // If a formerly indexed note became empty, remove its old vectors.
+        await deleteByPaths(table, emptyFiles.map((file) => file.relPath));
+        for (const file of emptyFiles) {
+          emptyFileMtimes.set(file.relPath, file.mtime);
+          emptyFileStateDirty = true;
+        }
 
         if (allChunks.length === 0) {
-          indexed += batch.length;
-          indexState.progress.indexed = indexed;
+          emptySkipped += batchEmptyCount;
+          indexState.progress.indexed = indexed + emptySkipped + failed;
           continue;
         }
 
@@ -136,27 +198,41 @@ export async function buildIndex(vaultPath, table) {
           byFile.get(path).vectors.push(vectors[j]);
         }
 
-        for (const [, group] of byFile) {
+        for (const [path, group] of byFile) {
           await upsertChunks(table, group.chunks, group.vectors, group.mtime);
+          if (emptyFileMtimes.delete(path)) emptyFileStateDirty = true;
         }
 
-        indexed += batch.length;
+        indexed += byFile.size;
+        emptySkipped += batchEmptyCount;
       } catch (err) {
-        failed += batch.length;
+        emptySkipped += batchEmptyCount;
+        failed += batch.length - batchEmptyCount;
         logError("[Indexer] Batch failed, skipping:", err.message);
       }
 
-      indexState.progress.indexed = indexed + failed;
-      log("[Indexer] Progress:", indexed + failed, "/", toIndex.length, failed ? `(${failed} failed)` : "");
+      indexState.progress.indexed = indexed + emptySkipped + failed;
+      log("[Indexer] Progress:", indexState.progress.indexed, "/", toIndex.length, failed ? `(${failed} failed)` : "");
     }
 
     indexState.lastBuiltAt = Date.now();
-    log("[Indexer] Done.", indexed, "files indexed,", deletedPaths.length, "deleted");
-    return { indexed, skipped: vaultFiles.length - toIndex.length, deleted: deletedPaths.length };
+    log("[Indexer] Done.", indexed, "files indexed,", emptySkipped, "empty files skipped,", deletedPaths.length, "deleted");
+    return {
+      indexed,
+      skipped: vaultFiles.length - toIndex.length + emptySkipped,
+      deleted: deletedPaths.length,
+    };
   } catch (err) {
     logError("[Indexer] Build failed:", err);
     throw err;
   } finally {
+    if (emptyFileStateDirty && emptyFileMtimes) {
+      try {
+        await saveEmptyFileMtimes(vaultPath, emptyFileMtimes);
+      } catch (err) {
+        logError("[Indexer] Failed to save empty-file state:", err.message);
+      }
+    }
     indexState.indexing = false;
   }
 }

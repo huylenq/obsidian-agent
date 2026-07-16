@@ -264,11 +264,11 @@ export function LinkArcs({ paths, pathAnchors, pathLinks }: LinkArcsProps) {
   }, [edges, paths, pathAnchors]);
 
   return (
-    <div ref={layerRef} className={`claude-agent-link-arcs-layer${geoms.length === 0 ? " empty" : ""}`}>
+    <div ref={layerRef} className={`hermes-agent-link-arcs-layer${geoms.length === 0 ? " empty" : ""}`}>
       {geoms.map((g) => (
         <React.Fragment key={g.key}>
           <svg
-            className={`claude-agent-link-arc${g.bidi ? " bidi" : ""}`}
+            className={`hermes-agent-link-arc${g.bidi ? " bidi" : ""}`}
             style={{
               left: `${g.left}px`,
               top: `${g.top}px`,
@@ -284,7 +284,7 @@ export function LinkArcs({ paths, pathAnchors, pathLinks }: LinkArcsProps) {
             </path>
           </svg>
           <span
-            className="claude-agent-link-arc-marker target"
+            className="hermes-agent-link-arc-marker target"
             style={{
               left: `${g.tgtX}px`,
               top: `${g.tgtY}px`,

@@ -35,7 +35,7 @@ export function WikilinkPill({ path, small, anchorName }: WikilinkPillProps) {
     if (!elRef.current) return;
     app.workspace.trigger("hover-link", {
       event: e.nativeEvent,
-      source: "claude-agent-tool",
+      source: "hermes-agent-tool",
       hoverParent: elRef.current,
       targetEl: elRef.current,
       linktext: path,
@@ -55,13 +55,13 @@ export function WikilinkPill({ path, small, anchorName }: WikilinkPillProps) {
       ref={elRef}
       style={style}
       data-arc-anchor={anchorName}
-      className={`claude-agent-wikilink-pill${small ? " small" : ""}${resolved ? "" : " unresolved"}`}
+      className={`hermes-agent-wikilink-pill${small ? " small" : ""}${resolved ? "" : " unresolved"}`}
       onClick={handleClick}
       onMouseOver={handleMouseOver}
       role="link"
       title={path}
     >
-      <span className="claude-agent-wikilink-pill-name">{display}</span>
+      <span className="hermes-agent-wikilink-pill-name">{display}</span>
     </span>
   );
 }

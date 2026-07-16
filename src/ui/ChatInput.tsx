@@ -6,6 +6,8 @@ import { searchVaultItems, FileSearchResult } from "@/utils/fileSearch";
 import { parseInput, commandRegistry, SlashCommand } from "@/commands";
 import { ImageAttachment } from "@/types";
 import { blobToImageAttachment } from "@/utils/imageUtils";
+import { AGENT_EVENTS } from "@/events";
+import { getChatInputKeyAction } from "./inputKeyHandling";
 
 export interface ChatInputHandle {
   insertMention: (path: string) => void;
@@ -108,6 +110,7 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
   const [commandSelectedIndex, setCommandSelectedIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isComposingRef = useRef(false);
 
   const sendIconCallback = useCallback((el: HTMLSpanElement | null) => {
     if (el) setIcon(el, "corner-down-left");
@@ -155,8 +158,8 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
   // Listen for focus requests (e.g., after model selection)
   useEffect(() => {
     const handleFocus = () => textareaRef.current?.focus();
-    window.addEventListener("claude-agent:focus-input", handleFocus);
-    return () => window.removeEventListener("claude-agent:focus-input", handleFocus);
+    window.addEventListener(AGENT_EVENTS.focusInput, handleFocus);
+    return () => window.removeEventListener(AGENT_EVENTS.focusInput, handleFocus);
   }, []);
 
   // Expose insertMention function via onRef callback
@@ -269,6 +272,15 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      const keyAction = getChatInputKeyAction({
+        key: e.key,
+        shiftKey: e.shiftKey,
+        isMobile: Platform.isMobile,
+        isComposing: isComposingRef.current || e.nativeEvent.isComposing,
+        keyCode: e.keyCode,
+      });
+      if (keyAction === "ignore") return;
+
       // Handle command autocomplete
       if (commandState.isActive && filteredCommands.length > 0) {
         switch (e.key) {
@@ -326,7 +338,7 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
         }
       }
 
-      if (e.key === "Enter" && !e.shiftKey && !Platform.isMobile) {
+      if (keyAction === "submit") {
         e.preventDefault();
         handleSubmit();
       }
@@ -425,7 +437,7 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
   }, []);
 
   return (
-    <div className="claude-agent-input-wrapper" onDrop={handleDrop} onDragOver={handleDragOver}>
+    <div className="hermes-agent-input-wrapper" onDrop={handleDrop} onDragOver={handleDragOver}>
       {commandState.isActive && filteredCommands.length > 0 && (
         <CommandAutocomplete
           commands={filteredCommands}
@@ -441,12 +453,12 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
         />
       )}
       {images.length > 0 && (
-        <div className="claude-agent-image-previews">
+        <div className="hermes-agent-image-previews">
           {images.map((img, i) => (
-            <div key={i} className="claude-agent-image-preview">
+            <div key={i} className="hermes-agent-image-preview">
               <img src={`data:${img.mediaType};base64,${img.data}`} alt={img.name || "attachment"} />
               <button
-                className="claude-agent-image-preview-remove"
+                className="hermes-agent-image-preview-remove"
                 onClick={() => removeImage(i)}
                 aria-label="Remove image"
               >&times;</button>
@@ -454,7 +466,7 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
           ))}
         </div>
       )}
-      <div className="claude-agent-input-container">
+      <div className="hermes-agent-input-container">
         <input
           ref={fileInputRef}
           type="file"
@@ -465,18 +477,24 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
         />
         <textarea
           ref={textareaRef}
-          className="claude-agent-input"
+          className="hermes-agent-input"
           placeholder="Ask away..."
           value={input}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
+          onCompositionStart={() => {
+            isComposingRef.current = true;
+          }}
+          onCompositionEnd={() => {
+            isComposingRef.current = false;
+          }}
           onPaste={handlePaste}
           disabled={false}
           rows={1}
         />
         {isStreaming && !input.trim() && images.length === 0 ? (
           <button
-            className="claude-agent-interrupt-button clickable-icon"
+            className="hermes-agent-interrupt-button clickable-icon"
             onClick={onInterrupt}
             aria-label="Stop"
           >
@@ -484,7 +502,7 @@ export function ChatInput({ onSend, onCommand, disabled, isStreaming, onInterrup
           </button>
         ) : (
           <button
-            className="claude-agent-send-button clickable-icon"
+            className="hermes-agent-send-button clickable-icon"
             onClick={handleSubmit}
             disabled={!input.trim() && images.length === 0}
             aria-label="Send"

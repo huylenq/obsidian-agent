@@ -88,7 +88,7 @@ function Stepper({
   onChange: (v: number) => void;
 }) {
   return (
-    <div className="claude-agent-stepper">
+    <div className="hermes-agent-stepper">
       <button
         className="clickable-icon"
         disabled={value <= min}
@@ -97,7 +97,7 @@ function Stepper({
       >
         <ObsidianIcon name="minus" />
       </button>
-      <span className="claude-agent-stepper-value">{value}</span>
+      <span className="hermes-agent-stepper-value">{value}</span>
       <button
         className="clickable-icon"
         disabled={value >= max}
@@ -189,7 +189,7 @@ function FilterSliders({
         <div className="setting-item-info">
           <div className="setting-item-name">Depth</div>
         </div>
-        <div className="setting-item-control claude-agent-stepper-control">
+        <div className="setting-item-control hermes-agent-stepper-control">
           <Stepper
             min={1}
             max={3}
@@ -228,7 +228,7 @@ export function FilterHud({
   onSettingsChange: (partial: Partial<GraphViewSettings>) => void;
 }) {
   return (
-    <div className="claude-agent-graph-filter-hud">
+    <div className="hermes-agent-graph-filter-hud">
       <FilterSliders settings={settings} onSettingsChange={onSettingsChange} />
     </div>
   );
@@ -371,7 +371,7 @@ export function GraphControls({ settings, onSettingsChange, onRefresh, isLoading
           {(settings.pinnedNodes ?? []).length === 0 ? (
             <div className="setting-item">
               <div className="setting-item-info">
-                <div className="setting-item-name claude-agent-pinned-hint">
+                <div className="setting-item-name hermes-agent-pinned-hint">
                   Right-click a node to pin it
                 </div>
               </div>
@@ -384,12 +384,12 @@ export function GraphControls({ settings, onSettingsChange, onRefresh, isLoading
                 if (pin.linkDepth != null) overrides.push(`d:${pin.linkDepth}`);
                 if (pin.similarityThreshold != null) overrides.push(`s:${pin.similarityThreshold.toFixed(2)}`);
                 return (
-                  <div key={pin.path} className="setting-item claude-agent-pinned-item">
+                  <div key={pin.path} className="setting-item hermes-agent-pinned-item">
                     <div className="setting-item-info">
-                      <div className="setting-item-name claude-agent-pinned-name" title={pin.path}>
+                      <div className="setting-item-name hermes-agent-pinned-name" title={pin.path}>
                         {title}
                         {overrides.length > 0 && (
-                          <span className="claude-agent-pinned-overrides"> {overrides.join(" ")}</span>
+                          <span className="hermes-agent-pinned-overrides"> {overrides.join(" ")}</span>
                         )}
                       </div>
                     </div>
@@ -412,7 +412,7 @@ export function GraphControls({ settings, onSettingsChange, onRefresh, isLoading
                 <div className="setting-item-info" />
                 <div className="setting-item-control">
                   <button
-                    className="clickable-icon claude-agent-pinned-clear"
+                    className="clickable-icon hermes-agent-pinned-clear"
                     aria-label="Clear all pins"
                     onClick={() => onSettingsChange({ pinnedNodes: [] })}
                   >

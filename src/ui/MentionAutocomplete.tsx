@@ -27,7 +27,7 @@ export function MentionAutocomplete({
 
   return (
     <div
-      className="claude-agent-mention-autocomplete"
+      className="hermes-agent-mention-autocomplete"
       ref={listRef}
     >
       {results.map((file, index) => (
@@ -61,15 +61,15 @@ function MentionItem({ file, isSelected, onClick }: MentionItemProps) {
 
   return (
     <div
-      className={`claude-agent-mention-item ${isSelected ? "selected" : ""}`}
+      className={`hermes-agent-mention-item ${isSelected ? "selected" : ""}`}
       onClick={onClick}
       onMouseDown={(e) => e.preventDefault()} // Prevent blur on click
     >
-      <span ref={iconRef} className="claude-agent-mention-icon" />
-      <div className="claude-agent-mention-text">
-        <span className="claude-agent-mention-name">{file.name}</span>
+      <span ref={iconRef} className="hermes-agent-mention-icon" />
+      <div className="hermes-agent-mention-text">
+        <span className="hermes-agent-mention-name">{file.name}</span>
         {parentPath && (
-          <span className="claude-agent-mention-path">{parentPath}</span>
+          <span className="hermes-agent-mention-path">{parentPath}</span>
         )}
       </div>
     </div>

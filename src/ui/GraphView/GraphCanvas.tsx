@@ -108,7 +108,7 @@ export function GraphCanvas({ data, settings, onNodeClick, onNodeHover, onNodeCo
   return (
     <canvas
       ref={canvasRef}
-      className="claude-agent-graph-canvas"
+      className="hermes-agent-graph-canvas"
     />
   );
 }

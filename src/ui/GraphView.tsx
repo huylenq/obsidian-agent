@@ -29,12 +29,13 @@ import { buildGraph } from "@/graph/buildGraph";
 import { GraphCanvas } from "./GraphView/GraphCanvas";
 import { GraphControls } from "./GraphView/GraphControls";
 import { GraphTooltip } from "./GraphView/GraphTooltip";
-import type ClaudeAgentPlugin from "@/main";
+import type HermesAgentPlugin from "@/main";
+import { AGENT_EVENTS } from "@/events";
 
-export const GRAPH_VIEW_TYPE = "claude-agent-semantic-graph";
+export const GRAPH_VIEW_TYPE = "hermes-agent-semantic-graph";
 
 interface GraphContainerProps {
-  plugin: ClaudeAgentPlugin;
+  plugin: HermesAgentPlugin;
   app: App;
 }
 
@@ -56,15 +57,15 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
     setGraphSettings(plugin.settings.graphSettings);
   }, []);
 
-  // Initialize index client (waits for server to be ready)
+  // Initialize index client (waits for the bridge to be ready)
   useEffect(() => {
     let cancelled = false;
     const tryInit = async () => {
-      // Wait for claudeClient to be set (server may still be starting)
+      // Wait for hermesClient to be set (the bridge may still be starting)
       for (let attempt = 0; attempt < 10 && !cancelled; attempt++) {
-        if (plugin.claudeClient) {
-          const { proxyUrl, authToken } = plugin.claudeClient;
-          const client = new AgentIndexClient(proxyUrl, authToken);
+        if (plugin.hermesClient) {
+          const { bridgeUrl, authToken } = plugin.hermesClient;
+          const client = new AgentIndexClient(bridgeUrl, authToken);
           const success = await client.initialize();
           if (success && !cancelled) {
             indexClientRef.current = client;
@@ -153,7 +154,7 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
   // Handle node right-click — add note to chat input
   const handleNodeContextMenu = useCallback((node: GraphNode) => {
     window.dispatchEvent(
-      new CustomEvent("claude-agent:add-note-to-chat", { detail: { notePath: node.id } })
+      new CustomEvent(AGENT_EVENTS.addNoteToChat, { detail: { notePath: node.id } })
     );
   }, []);
 
@@ -220,8 +221,8 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
 
   if (!activeFile) {
     return (
-      <div className="claude-agent-graph-container">
-        <div className="claude-agent-graph-empty">
+      <div className="hermes-agent-graph-container">
+        <div className="hermes-agent-graph-empty">
           Open a note to see its semantic graph
         </div>
       </div>
@@ -229,9 +230,9 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
   }
 
   return (
-    <div className="claude-agent-graph-container">
-      <div className="claude-agent-graph-canvas-wrapper">
-        {error && <div className="claude-agent-graph-error">{error}</div>}
+    <div className="hermes-agent-graph-container">
+      <div className="hermes-agent-graph-canvas-wrapper">
+        {error && <div className="hermes-agent-graph-error">{error}</div>}
 
         {graphData && (
           <GraphCanvas
@@ -254,7 +255,7 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
         />
 
         {!indexAvailable && (
-          <div className="claude-agent-graph-notice">
+          <div className="hermes-agent-graph-notice">
             Index unavailable — showing link-only graph
           </div>
         )}
@@ -272,15 +273,17 @@ function GraphContainer({ plugin, app }: GraphContainerProps) {
 
 export class GraphView extends ItemView {
   private root: Root | null = null;
-  private plugin: ClaudeAgentPlugin;
+  private plugin: HermesAgentPlugin;
+  private readonly viewType: string;
 
-  constructor(leaf: WorkspaceLeaf, plugin: ClaudeAgentPlugin) {
+  constructor(leaf: WorkspaceLeaf, plugin: HermesAgentPlugin, viewType = GRAPH_VIEW_TYPE) {
     super(leaf);
     this.plugin = plugin;
+    this.viewType = viewType;
   }
 
   getViewType(): string {
-    return GRAPH_VIEW_TYPE;
+    return this.viewType;
   }
 
   getDisplayText(): string {
@@ -294,7 +297,7 @@ export class GraphView extends ItemView {
   async onOpen(): Promise<void> {
     const container = this.containerEl.children[1];
     container.empty();
-    container.addClass("claude-agent-graph-view");
+    container.addClass("hermes-agent-graph-view");
 
     this.root = createRoot(container);
     this.root.render(

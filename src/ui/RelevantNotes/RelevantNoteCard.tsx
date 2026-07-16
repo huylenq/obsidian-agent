@@ -33,20 +33,20 @@ export function RelevantNoteCard({
   const cleanedPreview = stripMetadata(note.content);
 
   return (
-    <div className={`claude-agent-relevant-note-card ${note.category}`}>
-      <div className="claude-agent-relevant-note-header">
+    <div className={`hermes-agent-relevant-note-card ${note.category}`}>
+      <div className="hermes-agent-relevant-note-header">
         <span
-          className="claude-agent-relevant-note-title"
+          className="hermes-agent-relevant-note-title"
           onClick={onOpen}
           title={note.path}
         >
           {note.title}
         </span>
-        <div className="claude-agent-relevant-note-actions">
+        <div className="hermes-agent-relevant-note-actions">
           {(note.hasOutgoingLink || note.hasBacklink) && (
             <span
               ref={linkIconRef}
-              className="claude-agent-relevant-note-link-badge"
+              className="hermes-agent-relevant-note-link-badge"
               title={
                 note.hasOutgoingLink && note.hasBacklink
                   ? "Linked both ways"
@@ -56,11 +56,11 @@ export function RelevantNoteCard({
               }
             />
           )}
-          <span className={`claude-agent-similarity-badge ${note.category}`}>
+          <span className={`hermes-agent-similarity-badge ${note.category}`}>
             {similarityPercent}%
           </span>
           <button
-            className="claude-agent-add-to-chat-icon"
+            className="hermes-agent-add-to-chat-icon"
             onClick={(e) => {
               e.stopPropagation();
               onAddToChat();
@@ -72,7 +72,7 @@ export function RelevantNoteCard({
         </div>
       </div>
       {cleanedPreview && (
-        <div className="claude-agent-relevant-note-preview">
+        <div className="hermes-agent-relevant-note-preview">
           {truncate(cleanedPreview, 100)}
         </div>
       )}

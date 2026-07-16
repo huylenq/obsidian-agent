@@ -2,7 +2,7 @@ import React, { useCallback, useState, useEffect, useRef } from "react";
 import { useAtomValue } from "jotai";
 import { App, ItemView, WorkspaceLeaf, MarkdownView, setIcon } from "obsidian";
 import { createRoot, Root } from "react-dom/client";
-import { ActiveFileContext, ChatViewLocation, ClaudeModel, SelectionContext, MarkerMetadata, RankedNote, ImageAttachment } from "@/types";
+import { ActiveFileContext, ChatViewLocation, HermesModel, HermesModelInfo, SelectionContext, MarkerMetadata, RankedNote, ImageAttachment } from "@/types";
 
 /** Build the transcript file path for a session and open it with the OS default app. */
 function openTranscriptFile(vaultPath: string, sessionId: string): void {
@@ -10,7 +10,7 @@ function openTranscriptFile(vaultPath: string, sessionId: string): void {
     const home = require("os").homedir();
     const { join } = require("path");
     const encoded = vaultPath.replace(/[\/\s~]/g, "-");
-    const filePath = join(home, ".claude", "projects", encoded, `${sessionId}.jsonl`);
+    const filePath = join(home, ".hermes", "obsidian-agent", "projects", encoded, `${sessionId}.jsonl`);
     // Electron's shell module is available in renderer process
     const { shell } = require("electron");
     shell.openPath(filePath);
@@ -49,10 +49,11 @@ import {
 } from "@/state/relevantNotesState";
 import { connectionStatusAtom, connectionErrorAtom } from "@/state/connectionState";
 import { ChatMessage, CompactMetadata, ToolBlock, SessionType, SessionEntry } from "@/types";
-import type ClaudeAgentPlugin from "@/main";
+import type HermesAgentPlugin from "@/main";
 import { initializeCommands, commandRegistry, CommandContext } from "@/commands";
+import { AGENT_EVENTS } from "@/events";
 
-export const CHAT_VIEW_TYPE = "claude-agent-chat";
+export const CHAT_VIEW_TYPE = "hermes-agent-chat";
 
 /** Map raw history messages to ChatMessage[]. */
 function mapHistoryMessages(raw: Array<Record<string, unknown>>): ChatMessage[] {
@@ -69,7 +70,7 @@ function mapHistoryMessages(raw: Array<Record<string, unknown>>): ChatMessage[] 
 }
 
 interface ChatContainerProps {
-  plugin: ClaudeAgentPlugin;
+  plugin: HermesAgentPlugin;
   app: App;
 }
 
@@ -124,6 +125,11 @@ function fuzzyMatch(text: string, query: string): boolean {
   return j === query.length;
 }
 
+function providerFromModelId(modelId: string): string {
+  const separator = modelId.indexOf(":");
+  return separator > 0 ? modelId.slice(0, separator) : "Hermes";
+}
+
 function ChatContainer({ plugin, app }: ChatContainerProps) {
   const isLoading = useAtomValue(isLoadingAtom, { store: chatStore });
   const isStreaming = useAtomValue(isStreamingAtom, { store: chatStore });
@@ -133,9 +139,11 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   const [isContextCleared, setIsContextCleared] = useState(false);
   const [selection, setSelection] = useState<SelectionContext | undefined>(undefined);
   const [sessionId, setSessionId] = useState<string | null>(
-    plugin.claudeClient?.getSessionId() ?? null
+    plugin.hermesClient?.getSessionId() ?? null
   );
   const model = useAtomValue(modelAtom, { store: chatStore });
+  const [modelOptions, setModelOptions] = useState<HermesModelInfo[]>([]);
+  const [isModelLoading, setIsModelLoading] = useState(true);
   const relevantNotes = useAtomValue(relevantNotesAtom, { store: chatStore });
   const includeRelevantNotes = useAtomValue(includeRelevantNotesAtom, { store: chatStore });
   const connectionStatus = useAtomValue(connectionStatusAtom, { store: chatStore });
@@ -166,8 +174,8 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       modelSelectRef.current?.focus();
       modelSelectRef.current?.showPicker?.();
     };
-    window.addEventListener("claude-agent:open-model-selector", handleOpenSelector);
-    return () => window.removeEventListener("claude-agent:open-model-selector", handleOpenSelector);
+    window.addEventListener(AGENT_EVENTS.openModelSelector, handleOpenSelector);
+    return () => window.removeEventListener(AGENT_EVENTS.openModelSelector, handleOpenSelector);
   }, []);
 
 
@@ -196,13 +204,40 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
 
   // Subscribe to session ID changes (also saves settings for persistence)
   useEffect(() => {
-    if (plugin.claudeClient) {
-      plugin.claudeClient.setOnSessionChange((newSessionId) => {
+    if (plugin.hermesClient) {
+      plugin.hermesClient.setOnSessionChange((newSessionId) => {
         setSessionId(newSessionId);
         plugin.saveSettings();
       });
     }
-  }, [plugin.claudeClient]);
+  }, [plugin.hermesClient]);
+
+  // ACP owns the effective provider/model per session. Resolve the live state
+  // instead of showing the old inert "Hermes default" placeholder.
+  useEffect(() => {
+    let cancelled = false;
+    const refreshModelState = async () => {
+      if (plugin.initializationPromise) await plugin.initializationPromise;
+      if (!plugin.hermesClient || cancelled) return;
+      setIsModelLoading(true);
+      try {
+        const result = await plugin.hermesClient.getModelState();
+        if (cancelled || !result.models) return;
+        chatStore.set(modelAtom, result.models.currentModelId);
+        setModelOptions(result.models.availableModels);
+        plugin.settings.model = result.models.currentModelId;
+        await plugin.saveSettings();
+      } catch (error) {
+        if (!cancelled) {
+          setError(error instanceof Error ? error.message : "Could not load Hermes models");
+        }
+      } finally {
+        if (!cancelled) setIsModelLoading(false);
+      }
+    };
+    void refreshModelState();
+    return () => { cancelled = true; };
+  }, [plugin.hermesClient, sessionId]);
 
   // Load history from transcript when view mounts with existing session
   useEffect(() => {
@@ -211,9 +246,9 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         await plugin.initializationPromise;
       }
 
-      if (!plugin.claudeClient) return;
+      if (!plugin.hermesClient) return;
 
-      const currentSessionId = plugin.claudeClient.getSessionId();
+      const currentSessionId = plugin.hermesClient.getSessionId();
       if (!currentSessionId) return;
 
       const existingMessages = chatStore.get(messagesAtom);
@@ -222,7 +257,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       console.log("[ChatView] Loading history for session:", currentSessionId);
 
       try {
-        const historyMessages = await plugin.claudeClient.fetchHistory();
+        const historyMessages = await plugin.hermesClient.fetchHistory();
         if (historyMessages.length > 0) {
           const chatMessages = mapHistoryMessages(historyMessages);
           chatStore.set(messagesAtom, chatMessages);
@@ -283,16 +318,16 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   }, []);
 
   const handleNewChat = useCallback(() => {
-    plugin.claudeClient?.clearSession();
+    plugin.hermesClient?.clearSession();
     clearMessages();
     setSessionId(null);
     setSessionTitle(null);
     setSessionType(null);
     setSessionEpoch(null);
     // Notify SessionsView
-    window.dispatchEvent(new CustomEvent("claude-agent:session-changed", { detail: { sessionId: null } }));
-    window.dispatchEvent(new CustomEvent("claude-agent:refresh-sessions"));
-  }, [plugin.claudeClient]);
+    window.dispatchEvent(new CustomEvent(AGENT_EVENTS.sessionChanged, { detail: { sessionId: null } }));
+    window.dispatchEvent(new CustomEvent(AGENT_EVENTS.refreshSessions));
+  }, [plugin.hermesClient]);
 
   // Initialize slash commands
   useEffect(() => {
@@ -304,8 +339,8 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     const handleOpenFile = (event: CustomEvent<{ path: string }>) => {
       app.workspace.openLinkText(event.detail.path, "", false);
     };
-    window.addEventListener("claude-agent:open-file", handleOpenFile as EventListener);
-    return () => window.removeEventListener("claude-agent:open-file", handleOpenFile as EventListener);
+    window.addEventListener(AGENT_EVENTS.openFile, handleOpenFile as EventListener);
+    return () => window.removeEventListener(AGENT_EVENTS.openFile, handleOpenFile as EventListener);
   }, [app]);
 
   // Listen for "add note to chat" events from RelevantNotesView
@@ -317,12 +352,12 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     };
 
     window.addEventListener(
-      "claude-agent:add-note-to-chat",
+      AGENT_EVENTS.addNoteToChat,
       handleAddNoteToChat as EventListener
     );
     return () => {
       window.removeEventListener(
-        "claude-agent:add-note-to-chat",
+        AGENT_EVENTS.addNoteToChat,
         handleAddNoteToChat as EventListener
       );
     };
@@ -331,8 +366,8 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   // Re-resolve session metadata when refresh-sessions fires (e.g. after /rename, chat completion)
   useEffect(() => {
     const handler = () => setSessionRefreshTrigger((n) => n + 1);
-    window.addEventListener("claude-agent:refresh-sessions", handler);
-    return () => window.removeEventListener("claude-agent:refresh-sessions", handler);
+    window.addEventListener(AGENT_EVENTS.refreshSessions, handler);
+    return () => window.removeEventListener(AGENT_EVENTS.refreshSessions, handler);
   }, []);
 
   // Listen for "session deleted" events from SessionsView — clear chat if active session was nuked
@@ -344,23 +379,23 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       setSessionType(null);
       setSessionEpoch(null);
     };
-    window.addEventListener("claude-agent:session-deleted", handleSessionDeleted);
-    return () => window.removeEventListener("claude-agent:session-deleted", handleSessionDeleted);
+    window.addEventListener(AGENT_EVENTS.sessionDeleted, handleSessionDeleted);
+    return () => window.removeEventListener(AGENT_EVENTS.sessionDeleted, handleSessionDeleted);
   }, []);
 
   // Listen for "switch session" events from SessionsView
   useEffect(() => {
     const handleSwitchSession = async (event: CustomEvent<{ sessionId: string }>) => {
       const targetSessionId = event.detail.sessionId;
-      if (!plugin.claudeClient) return;
+      if (!plugin.hermesClient) return;
 
       clearMessages();
-      plugin.claudeClient.switchSession(targetSessionId);
+      plugin.hermesClient.switchSession(targetSessionId);
       setSessionId(targetSessionId);
 
       // Load history for the switched session
       try {
-        const historyMessages = await plugin.claudeClient.fetchHistory();
+        const historyMessages = await plugin.hermesClient.fetchHistory();
         if (historyMessages.length > 0) {
           chatStore.set(messagesAtom, mapHistoryMessages(historyMessages));
         }
@@ -368,21 +403,21 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         console.warn("[ChatView] Failed to load session history:", error);
       } finally {
         // Signal that the switch (including history load) is complete
-        window.dispatchEvent(new CustomEvent("claude-agent:switch-session-done"));
+        window.dispatchEvent(new CustomEvent(AGENT_EVENTS.switchSessionDone));
       }
     };
 
-    window.addEventListener("claude-agent:switch-session", handleSwitchSession as EventListener);
-    return () => window.removeEventListener("claude-agent:switch-session", handleSwitchSession as EventListener);
-  }, [plugin.claudeClient]);
+    window.addEventListener(AGENT_EVENTS.switchSession, handleSwitchSession as EventListener);
+    return () => window.removeEventListener(AGENT_EVENTS.switchSession, handleSwitchSession as EventListener);
+  }, [plugin.hermesClient]);
 
   // Listen for "scroll to flashcard" events (dedup — card already explained)
   useEffect(() => {
     const handleScrollToFlashcard = (event: CustomEvent<{ flashcardId: string }>) => {
       setPendingScrollFlashcardId(event.detail.flashcardId);
     };
-    window.addEventListener("claude-agent:scroll-to-flashcard", handleScrollToFlashcard as EventListener);
-    return () => window.removeEventListener("claude-agent:scroll-to-flashcard", handleScrollToFlashcard as EventListener);
+    window.addEventListener(AGENT_EVENTS.scrollToFlashcard, handleScrollToFlashcard as EventListener);
+    return () => window.removeEventListener(AGENT_EVENTS.scrollToFlashcard, handleScrollToFlashcard as EventListener);
   }, []);
 
   // Resolve session title + type from registry when sessionId changes
@@ -393,42 +428,42 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       }
 
       // Re-read sessionId — initial state may have been null before client was ready
-      const resolvedId = sessionId || plugin.claudeClient?.getSessionId() || null;
+      const resolvedId = sessionId || plugin.hermesClient?.getSessionId() || null;
       if (resolvedId && !sessionId) {
         setSessionId(resolvedId);
       }
 
-      if (!resolvedId || !plugin.claudeClient) {
+      if (!resolvedId || !plugin.hermesClient) {
         setSessionTitle(null);
         setSessionType(null);
         setSessionEpoch(null);
             return;
       }
 
-      const sessions = await plugin.claudeClient.fetchSessions({ status: "all" });
+      const sessions = await plugin.hermesClient.fetchSessions({ status: "all" });
       const entry = sessions.find(s => s.id === resolvedId);
       setSessionTitle(entry?.title || null);
       setSessionType(entry?.type || null);
       setSessionEpoch(entry?.epoch || null);
     };
     resolve();
-  }, [sessionId, plugin.claudeClient, sessionRefreshTrigger]);
+  }, [sessionId, plugin.hermesClient, sessionRefreshTrigger]);
 
   const handleMarkDone = useCallback(async () => {
-    if (!plugin.claudeClient || !sessionId) return;
-    await plugin.claudeClient.updateSession(sessionId, { status: "done" });
-    plugin.claudeClient.clearSession();
+    if (!plugin.hermesClient || !sessionId) return;
+    await plugin.hermesClient.updateSession(sessionId, { status: "done" });
+    plugin.hermesClient.clearSession();
     clearMessages();
     setSessionId(null);
     setSessionTitle(null);
     setSessionType(null);
     setSessionEpoch(null);
-    window.dispatchEvent(new CustomEvent("claude-agent:session-changed", { detail: { sessionId: null } }));
-    window.dispatchEvent(new CustomEvent("claude-agent:refresh-sessions"));
-  }, [plugin.claudeClient, sessionId]);
+    window.dispatchEvent(new CustomEvent(AGENT_EVENTS.sessionChanged, { detail: { sessionId: null } }));
+    window.dispatchEvent(new CustomEvent(AGENT_EVENTS.refreshSessions));
+  }, [plugin.hermesClient, sessionId]);
 
   const handleInterrupt = useCallback(async () => {
-    const success = await plugin.claudeClient?.interrupt();
+    const success = await plugin.hermesClient?.interrupt();
     if (success) {
       setStreaming(false);
       setLoading(false);
@@ -455,11 +490,10 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         ? { text: selectionContext.text.slice(0, 300), fileName: selectionContext.fileName, startLine: selectionContext.startLine, endLine: selectionContext.endLine }
         : undefined;
 
-      // If query is active, inject into it instead of starting a new one.
-      // Note: isStreaming may be false (turn finished) but queryId still alive.
+      // If a bridge chat is active, steer it instead of starting another one.
       // Skip injection when sessionMeta is set — the message targets a specific session
-      // (e.g. flashcard explain → daily study session), not the currently active query.
-      if (plugin.claudeClient?.isQueryActive() && !sessionMeta) {
+      // (e.g. flashcard explain → daily study session), not the active bridge chat.
+      if (plugin.hermesClient?.isChatActive() && !sessionMeta) {
         // Show user message immediately
         addMessage({
           id: generateMessageId(),
@@ -474,7 +508,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         setStreaming(true);
         setLoading(true);
         const queueId = addToQueue(message);
-        const success = await plugin.claudeClient.injectMessage(message, fileContext, mentionedFiles, selectionContext, images);
+        const success = await plugin.hermesClient.injectMessage(message, selectionContext, images);
         updateQueueStatus(queueId, success ? "injected" : "failed");
         return;
       }
@@ -515,9 +549,9 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           await plugin.initializationPromise;
         }
 
-        if (!plugin.claudeClient) {
+        if (!plugin.hermesClient) {
           throw new Error(
-            "Claude client is not initialized. Please check that the proxy server is running."
+            "Hermes client is not initialized. Please check that the bridge is running."
           );
         }
 
@@ -545,12 +579,12 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           }
         };
 
-        for await (const chunk of plugin.claudeClient.chat(message, fileContext, mentionedFiles, selectionContext, highMatchNotes, flashcardMeta, sessionMeta, images)) {
+        for await (const chunk of plugin.hermesClient.chat(message, fileContext, mentionedFiles, selectionContext, highMatchNotes, flashcardMeta, sessionMeta, images)) {
           switch (chunk.type) {
-            case "text":
-              fullResponse = chunk.content;
-              updateStreamingMessage(fullResponse);
-              break;
+				case "text":
+					fullResponse += chunk.content;
+					updateStreamingMessage(fullResponse);
+					break;
 
             case "tool_use":
               // Flush any accumulated text before showing tool block
@@ -597,14 +631,9 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
               });
               break;
 
-            case "query_ready":
-              // queryId captured by client internally, nothing to render
-              break;
-
             case "result":
               // Turn complete — flush any accumulated text and clear streaming state.
-              // In streaming-input mode, this fires after each turn while the SSE
-              // connection stays open. "done" only fires when the query truly ends.
+              // "done" follows after the bridge finishes the chat lifecycle.
               if (fullResponse && !/^compacted$/i.test(fullResponse.trim())) {
                 clearStreamingMessage();
                 addMessage({
@@ -622,7 +651,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
               break;
 
             case "error":
-              setError(chunk.content || "Unknown error (no details from server)");
+              setError(chunk.content || "Unknown error (no details from bridge)");
               break;
 
             case "interrupted":
@@ -645,7 +674,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
               break;
 
             case "done":
-              // Final cleanup — query fully closed (iterable exhausted).
+              // Final cleanup — chat lifecycle closed (event queue exhausted).
               if (fullResponse && !/^compacted$/i.test(fullResponse.trim())) {
                 clearStreamingMessage();
                 addMessage({
@@ -672,8 +701,8 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         setStreaming(false);
         setLoading(false);
         // Notify SessionsView to refresh (new session may have been created)
-        window.dispatchEvent(new CustomEvent("claude-agent:refresh-sessions"));
-        window.dispatchEvent(new CustomEvent("claude-agent:session-changed", { detail: { sessionId: plugin.claudeClient?.getSessionId() ?? null } }));
+        window.dispatchEvent(new CustomEvent(AGENT_EVENTS.refreshSessions));
+        window.dispatchEvent(new CustomEvent(AGENT_EVENTS.sessionChanged, { detail: { sessionId: plugin.hermesClient?.getSessionId() ?? null } }));
       }
     },
     [plugin, activeFile, isContextCleared, selection, includeRelevantNotes, relevantNotes, isStreaming]
@@ -714,11 +743,11 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           setSessionTitle(null);
           setSessionType(null);
           setSessionEpoch(null);
-                window.dispatchEvent(new CustomEvent("claude-agent:session-changed", { detail: { sessionId: null } }));
-          window.dispatchEvent(new CustomEvent("claude-agent:refresh-sessions"));
+                window.dispatchEvent(new CustomEvent(AGENT_EVENTS.sessionChanged, { detail: { sessionId: null } }));
+          window.dispatchEvent(new CustomEvent(AGENT_EVENTS.refreshSessions));
         }
         if (commandName === "sessions" || commandName === "history") {
-          window.dispatchEvent(new CustomEvent("claude-agent:refresh-sessions"));
+          window.dispatchEvent(new CustomEvent(AGENT_EVENTS.refreshSessions));
         }
       } catch (error) {
         const errorMessage =
@@ -742,15 +771,27 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         handleSend(message, [], flashcardMeta, sessionMeta, eventNotes);
       }
     };
-    window.addEventListener("claude-agent:send-message", handleSendMessage as EventListener);
-    return () => window.removeEventListener("claude-agent:send-message", handleSendMessage as EventListener);
+    window.addEventListener(AGENT_EVENTS.sendMessage, handleSendMessage as EventListener);
+    return () => window.removeEventListener(AGENT_EVENTS.sendMessage, handleSendMessage as EventListener);
   }, [handleSend]);
 
-  const handleModelChange = useCallback((newModel: ClaudeModel) => {
-    chatStore.set(modelAtom, newModel);
-    plugin.settings.model = newModel;
-    plugin.saveSettings();
-    window.dispatchEvent(new CustomEvent("claude-agent:focus-input"));
+  const handleModelChange = useCallback(async (newModel: HermesModel) => {
+    if (!plugin.hermesClient) return;
+    setIsModelLoading(true);
+    try {
+      const result = await plugin.hermesClient.setModel(newModel);
+      const effectiveModel = result.models?.currentModelId || newModel;
+      chatStore.set(modelAtom, effectiveModel);
+      setModelOptions(result.models?.availableModels || []);
+      plugin.settings.model = effectiveModel;
+      await plugin.saveSettings();
+      setError(null);
+      window.dispatchEvent(new CustomEvent(AGENT_EVENTS.focusInput));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not switch Hermes model");
+    } finally {
+      setIsModelLoading(false);
+    }
   }, [plugin]);
 
   const handleIncludeNotesChange = useCallback((enabled: boolean) => {
@@ -765,7 +806,7 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     plugin.settings.chatViewLocation = newLocation;
     plugin.saveSettings();
     // Dispatch event to relocate the view
-    window.dispatchEvent(new CustomEvent("claude-agent:relocate-view", {
+    window.dispatchEvent(new CustomEvent(AGENT_EVENTS.relocateView, {
       detail: { location: newLocation },
     }));
   }, [plugin, viewLocation]);
@@ -777,8 +818,8 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
       setDropdownQuery("");
       return;
     }
-    if (!plugin.claudeClient) return;
-    const sessions = await plugin.claudeClient.fetchSessions({ status: "in_progress" });
+    if (!plugin.hermesClient) return;
+    const sessions = await plugin.hermesClient.fetchSessions({ status: "in_progress" });
     const currentFilePath = activeFile?.path;
     // Sort: file-relevant first, then by updatedAt desc
     const sorted = sessions.sort((a, b) => {
@@ -792,13 +833,13 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
     setSessionDropdown(sorted);
     // Auto-focus input after render
     requestAnimationFrame(() => dropdownInputRef.current?.focus());
-  }, [sessionDropdown, plugin.claudeClient, activeFile]);
+  }, [sessionDropdown, plugin.hermesClient, activeFile]);
 
   const handleSessionSelect = useCallback((targetId: string) => {
     setSessionDropdown(null);
     setDropdownQuery("");
     setDropdownIndex(-1);
-    window.dispatchEvent(new CustomEvent("claude-agent:switch-session", { detail: { sessionId: targetId } }));
+    window.dispatchEvent(new CustomEvent(AGENT_EVENTS.switchSession, { detail: { sessionId: targetId } }));
   }, []);
 
   const filteredDropdown = sessionDropdown?.filter(
@@ -827,8 +868,8 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   // Listen for command to open session switcher (Alt+L)
   useEffect(() => {
     const handleOpenSwitcher = () => handleSessionDropdownToggle();
-    window.addEventListener("claude-agent:open-session-switcher", handleOpenSwitcher);
-    return () => window.removeEventListener("claude-agent:open-session-switcher", handleOpenSwitcher);
+    window.addEventListener(AGENT_EVENTS.openSessionSwitcher, handleOpenSwitcher);
+    return () => window.removeEventListener(AGENT_EVENTS.openSessionSwitcher, handleOpenSwitcher);
   }, [handleSessionDropdownToggle]);
 
   const showFileChip = activeFile && !isContextCleared;
@@ -838,15 +879,15 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
 
   return (
     <AppProvider app={app} indexClient={plugin.vectorStore}>
-    <div className="claude-agent-container">
-      <div className={`claude-agent-session-header ${isFlashcardSession ? "flashcard-study" : ""}`} ref={dropdownRef}>
-        {isFlashcardSession && <span className="claude-agent-session-header-icon">&#128218;</span>}
-        <span className="claude-agent-session-header-title" onClick={handleSessionDropdownToggle}>
+    <div className="hermes-agent-container">
+      <div className={`hermes-agent-session-header ${isFlashcardSession ? "flashcard-study" : ""}`} ref={dropdownRef}>
+        {isFlashcardSession && <span className="hermes-agent-session-header-icon">&#128218;</span>}
+        <span className="hermes-agent-session-header-title" onClick={handleSessionDropdownToggle}>
           {sessionTitle || "New Chat"}
         </span>
         {sessionId && (
           <span
-            className={`claude-agent-session-id ${copiedSessionId ? "copied" : ""}`}
+            className={`hermes-agent-session-id ${copiedSessionId ? "copied" : ""}`}
             onClick={(e) => {
               if (e.metaKey) {
                 const vaultPath = (app.vault.adapter as any).basePath;
@@ -863,31 +904,31 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           </span>
         )}
         <button
-          className="claude-agent-new-chat-button clickable-icon"
+          className="hermes-agent-new-chat-button clickable-icon"
           onClick={handleNewChat}
           disabled={isLoading}
           title="New chat"
         >+</button>
         {sessionId && (
           <button
-            className="claude-agent-done-button clickable-icon"
+            className="hermes-agent-done-button clickable-icon"
             onClick={handleMarkDone}
             disabled={isLoading}
             title="Mark done"
           >&#10003;</button>
         )}
         <span
-          className="claude-agent-view-location-toggle"
+          className="hermes-agent-view-location-toggle"
           onClick={handleViewLocationToggle}
           title={viewLocation === "sidebar" ? "Move to center tab" : "Move to sidebar"}
         >
-          <span ref={viewLocationIconRef} className="claude-agent-view-location-icon" />
+          <span ref={viewLocationIconRef} className="hermes-agent-view-location-icon" />
         </span>
         {sessionDropdown && (
-          <div className="claude-agent-session-dropdown">
+          <div className="hermes-agent-session-dropdown">
             <input
               ref={dropdownInputRef}
-              className="claude-agent-session-dropdown-search"
+              className="hermes-agent-session-dropdown-search"
               type="text"
               placeholder="Search sessions…"
               value={dropdownQuery}
@@ -912,17 +953,17 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
               }}
             />
             {filteredDropdown && filteredDropdown.length === 0 ? (
-              <div className="claude-agent-session-dropdown-empty">
+              <div className="hermes-agent-session-dropdown-empty">
                 {dropdownQuery ? "No matches" : "No active sessions"}
               </div>
             ) : filteredDropdown?.map((s, i) => (
               <div
                 key={s.id}
-                className={`claude-agent-session-dropdown-item ${s.id === sessionId ? "active" : ""} ${i === dropdownIndex ? "highlighted" : ""}`}
+                className={`hermes-agent-session-dropdown-item ${s.id === sessionId ? "active" : ""} ${i === dropdownIndex ? "highlighted" : ""}`}
                 onClick={() => handleSessionSelect(s.id)}
               >
-                <span className="claude-agent-session-dropdown-title">{s.title || s.id.slice(0, 12)}</span>
-                <span className="claude-agent-session-dropdown-meta">{s.model}</span>
+                <span className="hermes-agent-session-dropdown-title">{s.title || s.id.slice(0, 12)}</span>
+                <span className="hermes-agent-session-dropdown-meta">{s.model}</span>
               </div>
             ))}
           </div>
@@ -932,9 +973,9 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
         pendingScrollFlashcardId={pendingScrollFlashcardId}
         onScrollComplete={() => setPendingScrollFlashcardId(null)}
       />
-      <div className="claude-agent-input-area">
+      <div className="hermes-agent-input-area">
         {(showFileChip || showSelectionChip) && (
-          <div className="claude-agent-context-chips">
+          <div className="hermes-agent-context-chips">
             {showFileChip && (
               <ActiveFileChip activeFile={activeFile} onClear={handleClearContext} />
             )}
@@ -958,39 +999,47 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
           hasSelection={showSelectionChip}
           onClearSelection={handleClearSelection}
         />
-        <div className="claude-agent-input-footer">
-          <span ref={brainIconRef} className="claude-agent-model-icon" />
+        <div className="hermes-agent-input-footer">
+          <span ref={brainIconRef} className="hermes-agent-model-icon" />
           <select
             ref={modelSelectRef}
-            className="claude-agent-model-select"
+            className="hermes-agent-model-select"
             value={model}
-            onChange={(e) => handleModelChange(e.target.value as ClaudeModel)}
-            disabled={isLoading}
+            onChange={(e) => void handleModelChange(e.target.value as HermesModel)}
+            disabled={isLoading || isModelLoading}
+            title={model === "hermes"
+              ? "Resolving Hermes provider and model…"
+              : `${providerFromModelId(model)} · ${modelOptions.find((item) => item.modelId === model)?.name || model}`}
           >
-            <option value="haiku">Haiku</option>
-            <option value="sonnet">Sonnet</option>
-            <option value="opus">Opus</option>
+            {modelOptions.length === 0 && (
+              <option value={model}>{isModelLoading ? "Loading model…" : model}</option>
+            )}
+            {modelOptions.map((item) => (
+              <option key={item.modelId} value={item.modelId} title={item.description}>
+                {item.name} · {providerFromModelId(item.modelId)}
+              </option>
+            ))}
           </select>
           <span
-            className={`claude-agent-include-notes-toggle ${includeRelevantNotes ? "active" : ""}`}
+            className={`hermes-agent-include-notes-toggle ${includeRelevantNotes ? "active" : ""}`}
             onClick={() => {
               console.log("[Related toggle] clicked, isLoading:", isLoading, "current:", includeRelevantNotes);
               if (!isLoading) handleIncludeNotesChange(!includeRelevantNotes);
             }}
           >
-            <span ref={checkIconRef} className="claude-agent-include-notes-check" />
+            <span ref={checkIconRef} className="hermes-agent-include-notes-check" />
             Related
           </span>
           <span
-            className="claude-agent-attach-button clickable-icon"
+            className="hermes-agent-attach-button clickable-icon"
             onClick={() => inputRef?.triggerAttach()}
             title="Attach image"
             ref={(el) => { if (el) setIcon(el, "paperclip"); }}
           />
-          <div className={`claude-agent-connection-status ${connectionStatus}`} title={
-            connectionError || (connectionStatus === "connected" ? "Connected to server" : connectionStatus === "connecting" ? "Connecting..." : connectionStatus === "error" ? "Connection error" : "Disconnected")
+          <div className={`hermes-agent-connection-status ${connectionStatus}`} title={
+            connectionError || (connectionStatus === "connected" ? "Connected to Hermes bridge" : connectionStatus === "connecting" ? "Connecting..." : connectionStatus === "error" ? "Connection error" : "Disconnected")
           }>
-            <span className="claude-agent-connection-dot" />
+            <span className="hermes-agent-connection-dot" />
           </div>
         </div>
       </div>
@@ -999,21 +1048,23 @@ function ChatContainer({ plugin, app }: ChatContainerProps) {
   );
 }
 
-export class ClaudeAgentChatView extends ItemView {
+export class HermesAgentChatView extends ItemView {
   private root: Root | null = null;
-  private plugin: ClaudeAgentPlugin;
+  private plugin: HermesAgentPlugin;
+  private readonly viewType: string;
 
-  constructor(leaf: WorkspaceLeaf, plugin: ClaudeAgentPlugin) {
+  constructor(leaf: WorkspaceLeaf, plugin: HermesAgentPlugin, viewType = CHAT_VIEW_TYPE) {
     super(leaf);
     this.plugin = plugin;
+    this.viewType = viewType;
   }
 
   getViewType(): string {
-    return CHAT_VIEW_TYPE;
+    return this.viewType;
   }
 
   getDisplayText(): string {
-    return "Claude Agent";
+    return "Hermes Agent";
   }
 
   getIcon(): string {

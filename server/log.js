@@ -2,7 +2,8 @@ import { appendFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 
-export const LOG_FILE = join(homedir(), ".claude-agent-proxy.log");
+export const LOG_FILE = process.env.HERMES_AGENT_LOG_FILE
+  || join(homedir(), ".hermes-agent-bridge.log");
 
 // Initialize log file on import
 writeFileSync(LOG_FILE, `\n=== Server started at ${new Date().toISOString()} ===\n`);

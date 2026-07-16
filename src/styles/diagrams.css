@@ -1,6 +1,6 @@
 /* DOT/Graphviz diagrams and LaTeX/MathJax click-to-copy */
 
-.claude-agent-dot-diagram {
+.hermes-agent-dot-diagram {
   position: relative;
   background-color: var(--background-secondary);
   border-radius: 8px;
@@ -9,13 +9,13 @@
   overflow-x: auto;
 }
 
-.claude-agent-dot-diagram svg {
+.hermes-agent-dot-diagram svg {
   max-width: 100%;
   height: auto;
   display: block;
 }
 
-.claude-agent-dot-diagram text {
+.hermes-agent-dot-diagram text {
   font-family: var(--font-text);
   font-size: 0.85em;
 }
@@ -23,7 +23,7 @@
 /* Dark mode: invert the SVG so all colors adapt automatically.
    hue-rotate(180deg) compensates for the hue shift from inversion,
    keeping blues blue-ish, reds red-ish, etc. */
-.theme-dark .claude-agent-dot-diagram svg {
+.theme-dark .hermes-agent-dot-diagram svg {
   filter: invert(0.88) hue-rotate(180deg);
 }
 
@@ -34,7 +34,7 @@
 /* Our chat isn't inside .markdown-rendered, so Obsidian's base
    copy-code-button styles (position: absolute, etc.) don't apply.
    We replicate them here. */
-.claude-agent-message .copy-code-button {
+.hermes-agent-message .copy-code-button {
   position: absolute;
   top: 0;
   right: 0;
@@ -49,21 +49,21 @@
   box-shadow: none;
 }
 
-.claude-agent-message .copy-code-button:hover {
+.hermes-agent-message .copy-code-button:hover {
   background: var(--interactive-accent);
   color: var(--text-on-accent);
 }
 
 /* Show copy button on hover — code blocks, DOT diagrams, LaTeX */
-.claude-agent-message pre:hover > .copy-code-button,
-.claude-agent-dot-diagram:hover .copy-code-button,
-.claude-agent-math-block:hover .copy-code-button {
+.hermes-agent-message pre:hover > .copy-code-button,
+.hermes-agent-dot-diagram:hover .copy-code-button,
+.hermes-agent-math-block:hover .copy-code-button {
   opacity: 1;
 }
 
 /* Copy-button group container (DOT, LaTeX, future snippets) */
 
-.claude-agent-copy-buttons {
+.hermes-agent-copy-buttons {
   position: absolute;
   top: 0;
   right: 0;
@@ -72,23 +72,23 @@
 }
 
 /* Override Obsidian's position: absolute on copy-code-button when inside our group */
-.claude-agent-copy-buttons .copy-code-button {
+.hermes-agent-copy-buttons .copy-code-button {
   position: static;
 }
 
 /* Error state */
-.claude-agent-dot-diagram.dot-error {
+.hermes-agent-dot-diagram.dot-error {
   border: 1px solid var(--text-error);
   background-color: rgba(var(--color-red-rgb, 255, 0, 0), 0.05);
 }
 
-.claude-agent-dot-error-msg {
+.hermes-agent-dot-error-msg {
   color: var(--text-error);
   font-size: 12px;
   margin-bottom: 8px;
 }
 
-.claude-agent-dot-diagram.dot-error pre {
+.hermes-agent-dot-diagram.dot-error pre {
   margin: 0;
   font-size: 12px;
   opacity: 0.7;
@@ -96,6 +96,6 @@
 
 /* LaTeX/MathJax display-math wrapper (copy button host) */
 
-.claude-agent-math-block {
+.hermes-agent-math-block {
   position: relative;
 }

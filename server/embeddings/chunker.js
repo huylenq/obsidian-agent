@@ -10,6 +10,9 @@ export function chunkMarkdown(content, path) {
   // Strip YAML frontmatter
   const stripped = content.replace(/^---\n[\s\S]*?\n---\n?/, "");
 
+  // Empty and frontmatter-only notes have no semantic content to index.
+  if (!stripped.trim()) return [];
+
   if (stripped.length <= CHUNK_SIZE) {
     return [{ id: `${path}::0`, path, title, content: stripped, chunkIndex: 0 }];
   }
@@ -27,7 +30,10 @@ export function chunkMarkdown(content, path) {
     }
   }
 
-  return chunks.map((text, i) => ({
+  // A leading newline before the first heading can create an empty section.
+  // Remove empty sections before assigning indices so every indexed note has
+  // a stable chunk 0, which is used as its representative vector.
+  return chunks.filter((text) => text.trim()).map((text, i) => ({
     id: `${path}::${i}`,
     path,
     title,

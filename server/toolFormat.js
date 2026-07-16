@@ -154,7 +154,7 @@ function formatMcpInput(server, tool, input) {
 /**
  * Normalize a Read/Write/Edit `file_path` to a vault-relative path.
  *
- * Claude's SDK reports `file_path` as an absolute filesystem path. The Obsidian
+ * Agent tools may report `file_path` as an absolute filesystem path. The Obsidian
  * client expects vault-relative paths for `metadataCache` lookups + wikilinks.
  * If `vaultPath` is provided and the file lives inside it, strip the prefix.
  * Otherwise return as-is (e.g., the agent reading `/etc/hosts` — out of vault).

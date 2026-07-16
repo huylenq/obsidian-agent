@@ -61,19 +61,19 @@ function GenericBlock({ block }: ToolCallBlockProps) {
   useLucideIcon(chevronRef, "chevron-right");
 
   return (
-    <div className={`claude-agent-tool-block ${status}`}>
+    <div className={`hermes-agent-tool-block ${status}`}>
       <div
-        className="claude-agent-tool-block-header"
+        className="hermes-agent-tool-block-header"
         onClick={() => setExpanded(!expanded)}
       >
-        <span className={`claude-agent-tool-icon ${status}`}>
+        <span className={`hermes-agent-tool-icon ${status}`}>
           <span ref={iconRef} />
         </span>
-        <span className="claude-agent-tool-block-name">{displayToolName(block.toolName)}</span>
-        <span className="claude-agent-tool-block-desc">{block.description}</span>
+        <span className="hermes-agent-tool-block-name">{displayToolName(block.toolName)}</span>
+        <span className="hermes-agent-tool-block-desc">{block.description}</span>
         <span
           ref={chevronRef}
-          className={`claude-agent-tool-block-chevron ${expanded ? "expanded" : ""}`}
+          className={`hermes-agent-tool-block-chevron ${expanded ? "expanded" : ""}`}
         />
       </div>
       {expanded && <BlockBody block={block} />}
@@ -83,25 +83,25 @@ function GenericBlock({ block }: ToolCallBlockProps) {
 
 function BlockBody({ block }: ToolCallBlockProps) {
   return (
-    <div className="claude-agent-tool-block-body">
+    <div className="hermes-agent-tool-block-body">
       {block.input && (
         <>
-          <span className="claude-agent-tool-block-label">IN</span>
-          <pre className="claude-agent-tool-block-content">{block.input}</pre>
+          <span className="hermes-agent-tool-block-label">IN</span>
+          <pre className="hermes-agent-tool-block-content">{block.input}</pre>
         </>
       )}
       {block.output && (
         <>
-          <span className={`claude-agent-tool-block-label ${block.isError ? "error" : ""}`}>
+          <span className={`hermes-agent-tool-block-label ${block.isError ? "error" : ""}`}>
             {block.isError ? "ERR" : "OUT"}
           </span>
-          <pre className={`claude-agent-tool-block-content ${block.isError ? "error" : ""}`}>
+          <pre className={`hermes-agent-tool-block-content ${block.isError ? "error" : ""}`}>
             {block.output}
           </pre>
         </>
       )}
       {block.isRunning && !block.output && (
-        <span className="claude-agent-tool-block-running">Running...</span>
+        <span className="hermes-agent-tool-block-running">Running...</span>
       )}
     </div>
   );
@@ -137,24 +137,24 @@ function PkmHeader({ block, expanded, onToggle, status, trailing, subline, inGro
   const verb = PKM_VERBS[block.toolName] ?? block.toolName;
 
   return (
-    <div className="claude-agent-tool-block-header claude-agent-tool-block-pkm" onClick={onToggle}>
+    <div className="hermes-agent-tool-block-header hermes-agent-tool-block-pkm" onClick={onToggle}>
       {!inGroup && (
-        <span className={`claude-agent-tool-icon ${status}`}>
+        <span className={`hermes-agent-tool-icon ${status}`}>
           <span ref={iconRef} />
         </span>
       )}
-      <div className="claude-agent-tool-block-pkm-main">
-        <div className="claude-agent-tool-block-pkm-row">
-          <span className="claude-agent-tool-block-pkm-verb">{verb}</span>
+      <div className="hermes-agent-tool-block-pkm-main">
+        <div className="hermes-agent-tool-block-pkm-row">
+          <span className="hermes-agent-tool-block-pkm-verb">{verb}</span>
           {block.filePath && <WikilinkPill path={block.filePath} anchorName={anchorName} />}
           {block.filePath && <NoteMetadataStrip path={block.filePath} />}
           {trailing}
         </div>
-        {subline && <div className="claude-agent-tool-block-pkm-subline">{subline}</div>}
+        {subline && <div className="hermes-agent-tool-block-pkm-subline">{subline}</div>}
       </div>
       <span
         ref={chevronRef}
-        className={`claude-agent-tool-block-chevron ${expanded ? "expanded" : ""}`}
+        className={`hermes-agent-tool-block-chevron ${expanded ? "expanded" : ""}`}
       />
     </div>
   );
@@ -168,7 +168,7 @@ function ReadBlock({ block, inGroup, anchorName }: ToolCallBlockProps) {
   const [expanded, setExpanded] = useState(false);
   const status = getBlockStatus(block);
   return (
-    <div className={`claude-agent-tool-block ${status}`}>
+    <div className={`hermes-agent-tool-block ${status}`}>
       <PkmHeader
         block={block}
         expanded={expanded}
@@ -197,30 +197,30 @@ function renderSemanticDiff(diff: SemanticEditDiff): React.ReactNode {
       diff.tags.removed.length > 0);
   if (!hasAnything) return null;
   return (
-    <div className="claude-agent-edit-semantic-diff">
+    <div className="hermes-agent-edit-semantic-diff">
       {diff.rename?.titleChanged && (
-        <span className="claude-agent-edit-rename">
+        <span className="hermes-agent-edit-rename">
           renamed → <em>"{diff.rename.titleChanged.to ?? ""}"</em>
         </span>
       )}
       {diff.rename?.aliasesChanged && !diff.rename.titleChanged && (
-        <span className="claude-agent-edit-rename">aliases changed</span>
+        <span className="hermes-agent-edit-rename">aliases changed</span>
       )}
       {diff.links.added.map((l) => (
-        <span key={`+l${l}`} className="claude-agent-edit-delta added">
+        <span key={`+l${l}`} className="hermes-agent-edit-delta added">
           +<WikilinkPill path={l} small />
         </span>
       ))}
       {diff.links.removed.map((l) => (
-        <span key={`-l${l}`} className="claude-agent-edit-delta removed">
+        <span key={`-l${l}`} className="hermes-agent-edit-delta removed">
           −<WikilinkPill path={l} small />
         </span>
       ))}
       {diff.tags.added.map((t) => (
-        <span key={`+t${t}`} className="claude-agent-edit-delta added tag">+{t}</span>
+        <span key={`+t${t}`} className="hermes-agent-edit-delta added tag">+{t}</span>
       ))}
       {diff.tags.removed.map((t) => (
-        <span key={`-t${t}`} className="claude-agent-edit-delta removed tag">−{t}</span>
+        <span key={`-t${t}`} className="hermes-agent-edit-delta removed tag">−{t}</span>
       ))}
     </div>
   );
@@ -229,7 +229,7 @@ function renderSemanticDiff(diff: SemanticEditDiff): React.ReactNode {
 function CountBadge({ count }: { count: number }) {
   if (count <= 1) return null;
   return (
-    <span className="claude-agent-merged-count" title={`${count} consecutive calls on this file`}>
+    <span className="hermes-agent-merged-count" title={`${count} consecutive calls on this file`}>
       ×{count}
     </span>
   );
@@ -242,7 +242,7 @@ function EditBlock({ block, inGroup, anchorName }: ToolCallBlockProps) {
   const subline = renderSemanticDiff(diff);
 
   return (
-    <div className={`claude-agent-tool-block ${status}`}>
+    <div className={`hermes-agent-tool-block ${status}`}>
       <PkmHeader
         block={block}
         expanded={expanded}
@@ -275,7 +275,7 @@ function WriteBlock({ block, inGroup, anchorName }: ToolCallBlockProps) {
   const trailing = overLong ? <WordCountWarning words={wc} /> : null;
 
   return (
-    <div className={`claude-agent-tool-block ${status}`}>
+    <div className={`hermes-agent-tool-block ${status}`}>
       <PkmHeader
         block={block}
         expanded={expanded}
@@ -294,15 +294,15 @@ function WriteBlock({ block, inGroup, anchorName }: ToolCallBlockProps) {
 function WriteCard({ snippet, cited }: { snippet: string; cited: readonly string[] }) {
   if (!snippet && cited.length === 0) return null;
   return (
-    <div className="claude-agent-write-card" onClick={(e) => e.stopPropagation()}>
-      {snippet && <div className="claude-agent-write-card-snippet">{snippet}</div>}
+    <div className="hermes-agent-write-card" onClick={(e) => e.stopPropagation()}>
+      {snippet && <div className="hermes-agent-write-card-snippet">{snippet}</div>}
       {cited.length > 0 && (
-        <div className="claude-agent-write-card-cites">
+        <div className="hermes-agent-write-card-cites">
           {cited.slice(0, 8).map((c) => (
             <WikilinkPill key={c} path={c} small />
           ))}
           {cited.length > 8 && (
-            <span className="claude-agent-write-card-cites-more">+{cited.length - 8}</span>
+            <span className="hermes-agent-write-card-cites-more">+{cited.length - 8}</span>
           )}
         </div>
       )}
@@ -314,8 +314,8 @@ function WordCountWarning({ words }: { words: number }) {
   const ref = useRef<HTMLSpanElement>(null);
   useLucideIcon(ref, "triangle-alert");
   return (
-    <span className="claude-agent-write-tag warn" title="Atomic-note guardrail">
-      <span ref={ref} className="claude-agent-write-tag-icon" />
+    <span className="hermes-agent-write-tag warn" title="Atomic-note guardrail">
+      <span ref={ref} className="hermes-agent-write-tag-icon" />
       {words} words — consider splitting
     </span>
   );
@@ -348,7 +348,7 @@ function MergedSimpleBlock({ blocks, inGroup, anchorName }: MergedFileBlockProps
   const first = blocks[0];
   const status = getBlockStatus(first);
   return (
-    <div className={`claude-agent-tool-block ${status}`}>
+    <div className={`hermes-agent-tool-block ${status}`}>
       <PkmHeader
         block={first}
         expanded={expanded}
@@ -373,7 +373,7 @@ function MergedEditBlock({ blocks, inGroup, anchorName }: MergedFileBlockProps) 
   );
   const subline = renderSemanticDiff(merged);
   return (
-    <div className={`claude-agent-tool-block ${status}`}>
+    <div className={`hermes-agent-tool-block ${status}`}>
       <PkmHeader
         block={first}
         expanded={expanded}
@@ -407,7 +407,7 @@ function MergedWriteBlock({ blocks, inGroup, anchorName }: MergedFileBlockProps)
     </>
   );
   return (
-    <div className={`claude-agent-tool-block ${status}`}>
+    <div className={`hermes-agent-tool-block ${status}`}>
       <PkmHeader
         block={first}
         expanded={expanded}
@@ -427,24 +427,24 @@ function MergedWriteBlock({ blocks, inGroup, anchorName }: MergedFileBlockProps)
 // with a numbered separator so the chronology stays inspectable.
 function MergedBlockBody({ blocks }: { blocks: ToolBlock[] }) {
   return (
-    <div className="claude-agent-tool-block-body merged">
+    <div className="hermes-agent-tool-block-body merged">
       {blocks.map((b, i) => (
-        <div key={b.toolUseId} className="claude-agent-merged-step">
-          <div className="claude-agent-merged-step-header">
+        <div key={b.toolUseId} className="hermes-agent-merged-step">
+          <div className="hermes-agent-merged-step-header">
             {i + 1} / {blocks.length}
           </div>
           {b.input && (
             <>
-              <span className="claude-agent-tool-block-label">IN</span>
-              <pre className="claude-agent-tool-block-content">{b.input}</pre>
+              <span className="hermes-agent-tool-block-label">IN</span>
+              <pre className="hermes-agent-tool-block-content">{b.input}</pre>
             </>
           )}
           {b.output && (
             <>
-              <span className={`claude-agent-tool-block-label ${b.isError ? "error" : ""}`}>
+              <span className={`hermes-agent-tool-block-label ${b.isError ? "error" : ""}`}>
                 {b.isError ? "ERR" : "OUT"}
               </span>
-              <pre className={`claude-agent-tool-block-content ${b.isError ? "error" : ""}`}>
+              <pre className={`hermes-agent-tool-block-content ${b.isError ? "error" : ""}`}>
                 {b.output}
               </pre>
             </>

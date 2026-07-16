@@ -51,6 +51,8 @@ export async function getOrCreateTable(db) {
  * mtime: file mtime for all chunks (same file)
  */
 export async function upsertChunks(table, chunks, vectors, mtime) {
+  if (chunks.length === 0) return;
+
   const rows = chunks.map((chunk, i) => ({
     id: chunk.id,
     path: chunk.path,
@@ -66,6 +68,11 @@ export async function upsertChunks(table, chunks, vectors, mtime) {
     .mergeInsert("id")
     .whenMatchedUpdateAll()
     .whenNotMatchedInsertAll()
+    // Remove chunks that belonged to an older layout of this note. Without
+    // this, shrinking or re-splitting a note leaves stale searchable content.
+    .whenNotMatchedBySourceDelete({
+      where: `path = ${sqlQuote(chunks[0].path)}`,
+    })
     .execute(data);
 }
 

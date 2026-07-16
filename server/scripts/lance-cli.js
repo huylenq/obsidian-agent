@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// CLI for the vault's LanceDB index — same code path as the proxy server.
+// CLI for the vault's LanceDB index — same code path as the Hermes bridge.
 // `reindex` performs a real (incremental) build, not a dry run.
 //
 // Usage:

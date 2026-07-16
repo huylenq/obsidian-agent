@@ -1,21 +1,21 @@
-import { readFileSync, existsSync, writeFileSync, mkdirSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
-import { query } from "@anthropic-ai/claude-agent-sdk";
-import { log, logError } from "./log.js";
+import { readFileSync, existsSync, writeFileSync, mkdirSync, appendFileSync } from "fs";
+import { dirname, join } from "path";
+import { getProjectDir } from "./storage.js";
 
-const COMPACT_SUMMARY_CWD = "/tmp/claude-agent-compact-summaries";
-
-export function encodePath(workingDirectory) {
-  return workingDirectory ? workingDirectory.replace(/[\/\s~]/g, "-") : "";
-}
+export { encodePath } from "./storage.js";
 
 export function getTranscriptPath(workingDirectory, sessionId) {
-  return join(homedir(), ".claude", "projects", encodePath(workingDirectory), `${sessionId}.jsonl`);
+  return join(getProjectDir(workingDirectory), `${sessionId}.jsonl`);
 }
 
 export function getSummariesPath(workingDirectory, sessionId) {
-  return join(homedir(), ".claude", "projects", encodePath(workingDirectory), `${sessionId}.summaries.json`);
+  return join(getProjectDir(workingDirectory), `${sessionId}.summaries.json`);
+}
+
+export function appendTranscriptEntry(workingDirectory, sessionId, entry) {
+  const transcriptPath = getTranscriptPath(workingDirectory, sessionId);
+  mkdirSync(dirname(transcriptPath), { recursive: true });
+  appendFileSync(transcriptPath, `${JSON.stringify({ timestamp: Date.now(), ...entry })}\n`);
 }
 
 /** Extract text content from a transcript entry's message field */
@@ -68,60 +68,6 @@ export function readLatestSegmentMessages(transcriptPath) {
     } catch { /* skip malformed */ }
   }
   return segment;
-}
-
-/** Generate a compact summary via Agent SDK with a throwaway /tmp session */
-export async function generateCompactSummary(messages) {
-  if (messages.length === 0) return null;
-
-  // Cap at 30 messages, truncate each to 300 chars
-  const capped = messages.slice(-30);
-  const conversationText = capped
-    .map(m => `${m.role === "user" ? "User" : "Assistant"}: ${m.content.slice(0, 300)}`)
-    .join("\n\n");
-
-  const prompt = `Summarize this conversation in 2-3 concise bullet points using the bullet character. Focus on topics discussed and key outcomes. Be very brief — no preamble.\n\nConversation:\n${conversationText}`;
-
-  mkdirSync(COMPACT_SUMMARY_CWD, { recursive: true });
-
-  try {
-    log("[Proxy] Generating compact summary...");
-    const response = query({
-      prompt,
-      options: {
-        model: "haiku",
-        maxTurns: 1,
-        permissionMode: "bypassPermissions",
-        cwd: COMPACT_SUMMARY_CWD,
-        systemPrompt: "You are a conversation summarizer. Output only bullet points, nothing else. Use the bullet character for each point.",
-      },
-    });
-
-    let summary = "";
-    for await (const msg of response) {
-      if (msg.type === "assistant") {
-        if (typeof msg.content === "string") {
-          summary = msg.content;
-        } else if (Array.isArray(msg.content)) {
-          for (const block of msg.content) {
-            if (block.type === "text") summary += block.text;
-          }
-        }
-        if (msg.message?.content && Array.isArray(msg.message.content)) {
-          for (const block of msg.message.content) {
-            if (block.type === "text") summary += block.text;
-          }
-        }
-      }
-    }
-
-    const trimmed = summary.trim();
-    log("[Proxy] Compact summary generated:", trimmed.slice(0, 200));
-    return trimmed || null;
-  } catch (error) {
-    logError("[Proxy] Failed to generate compact summary:", error);
-    return null;
-  }
 }
 
 export function loadSummaries(summariesPath) {

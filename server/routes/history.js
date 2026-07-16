@@ -9,7 +9,8 @@ const router = Router();
 
 /**
  * Get session history from transcript file
- * Claude Code stores transcripts at ~/.claude/projects/{encoded-path}/{session-id}.jsonl
+ * The bridge stores display transcripts at
+ * ~/.hermes/obsidian-agent/projects/{encoded-path}/{session-id}.jsonl.
  */
 router.post("/history", (req, res) => {
   const { sessionId } = req.body;
@@ -19,17 +20,17 @@ router.post("/history", (req, res) => {
     return res.status(400).json({ error: "sessionId is required" });
   }
 
-  log("[Proxy] Fetching history for session:", sessionId);
+  log("[Hermes Bridge] Fetching history for session:", sessionId);
 
   try {
     const transcriptPath = getTranscriptPath(vaultPath, sessionId);
 
     if (!existsSync(transcriptPath)) {
-      log("[Proxy] Transcript file not found at:", transcriptPath);
+      log("[Hermes Bridge] Transcript file not found at:", transcriptPath);
       return res.json({ messages: [] });
     }
 
-    log("[Proxy] Reading transcript from:", transcriptPath);
+    log("[Hermes Bridge] Reading transcript from:", transcriptPath);
 
     const content = readFileSync(transcriptPath, "utf-8");
     const lines = content.trim().split("\n");
@@ -148,7 +149,7 @@ router.post("/history", (req, res) => {
         }
       } catch (parseError) {
         // Skip malformed lines
-        log("[Proxy] Skipping malformed line");
+        log("[Hermes Bridge] Skipping malformed line");
       }
     }
 
@@ -190,11 +191,11 @@ router.post("/history", (req, res) => {
       }
     }
 
-    log("[Proxy] Found", messages.length, "messages in history");
+    log("[Hermes Bridge] Found", messages.length, "messages in history");
     res.json({ messages });
 
   } catch (error) {
-    logError("[Proxy] Error reading history:", error);
+    logError("[Hermes Bridge] Error reading history:", error);
     res.status(500).json({ error: error.message });
   }
 });

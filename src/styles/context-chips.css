@@ -1,6 +1,6 @@
 /* Active file chip, selection chip, context chips container */
 
-.claude-agent-context-chips {
+.hermes-agent-context-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -8,7 +8,7 @@
 
 /* Active file chip */
 
-.claude-agent-active-file-chip {
+.hermes-agent-active-file-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -20,28 +20,28 @@
   width: fit-content;
 }
 
-.claude-agent-active-file-icon {
+.hermes-agent-active-file-icon {
   display: flex;
   align-items: center;
   color: var(--text-muted);
 }
 
-.claude-agent-active-file-icon svg {
+.hermes-agent-active-file-icon svg {
   width: 14px;
   height: 14px;
 }
 
-.claude-agent-active-file-name {
+.hermes-agent-active-file-name {
   color: var(--text-normal);
   font-weight: 500;
 }
 
-.claude-agent-active-file-label {
+.hermes-agent-active-file-label {
   color: var(--text-muted);
   font-size: 11px;
 }
 
-.claude-agent-active-file-clear {
+.hermes-agent-active-file-clear {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -56,19 +56,19 @@
   cursor: pointer;
 }
 
-.claude-agent-active-file-clear svg {
+.hermes-agent-active-file-clear svg {
   width: 12px;
   height: 12px;
 }
 
-.claude-agent-active-file-clear:hover {
+.hermes-agent-active-file-clear:hover {
   background-color: var(--background-modifier-hover);
   color: var(--text-normal);
 }
 
 /* Selection chip */
 
-.claude-agent-selection-chip {
+.hermes-agent-selection-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -81,19 +81,19 @@
   max-width: 100%;
 }
 
-.claude-agent-selection-icon {
+.hermes-agent-selection-icon {
   display: flex;
   align-items: center;
   color: var(--interactive-accent);
   flex-shrink: 0;
 }
 
-.claude-agent-selection-icon svg {
+.hermes-agent-selection-icon svg {
   width: 14px;
   height: 14px;
 }
 
-.claude-agent-selection-preview {
+.hermes-agent-selection-preview {
   color: var(--text-normal);
   font-style: italic;
   white-space: nowrap;
@@ -102,21 +102,21 @@
   max-width: 200px;
 }
 
-.claude-agent-selection-lines {
+.hermes-agent-selection-lines {
   color: var(--text-muted);
   font-size: 11px;
   font-family: var(--font-monospace);
   flex-shrink: 0;
 }
 
-.claude-agent-selection-label {
+.hermes-agent-selection-label {
   color: var(--interactive-accent);
   font-size: 11px;
   font-weight: 500;
   flex-shrink: 0;
 }
 
-.claude-agent-selection-clear {
+.hermes-agent-selection-clear {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -132,12 +132,12 @@
   flex-shrink: 0;
 }
 
-.claude-agent-selection-clear svg {
+.hermes-agent-selection-clear svg {
   width: 12px;
   height: 12px;
 }
 
-.claude-agent-selection-clear:hover {
+.hermes-agent-selection-clear:hover {
   background-color: var(--background-modifier-hover);
   color: var(--text-normal);
 }

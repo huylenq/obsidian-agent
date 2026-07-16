@@ -10,7 +10,7 @@ import { setIcon } from "obsidian";
 /** Create a copy button matching Obsidian's copy-code-button style (icon only). */
 export function createCopyButton(getText: () => string): HTMLButtonElement {
   const btn = document.createElement("button");
-  btn.className = "copy-code-button claude-agent-copy-btn";
+  btn.className = "copy-code-button hermes-agent-copy-btn";
   setIcon(btn, "copy");
   let resetTimer: ReturnType<typeof setTimeout> | null = null;
   btn.addEventListener("click", (e) => {
@@ -31,7 +31,7 @@ export function createCopyButton(getText: () => string): HTMLButtonElement {
 /** Create a button group container (floating top-right, visible on parent hover). */
 export function createCopyButtonGroup(...buttons: HTMLButtonElement[]): HTMLDivElement {
   const group = document.createElement("div");
-  group.className = "claude-agent-copy-buttons";
+  group.className = "hermes-agent-copy-buttons";
   group.append(...buttons);
   return group;
 }
@@ -70,10 +70,10 @@ export function attachLatexCopyButtons(container: HTMLElement, rawMarkdown: stri
     if (!mathSpan?.parentElement) continue;
 
     // Already wrapped
-    if (mathSpan.parentElement.classList.contains("claude-agent-math-block")) continue;
+    if (mathSpan.parentElement.classList.contains("hermes-agent-math-block")) continue;
 
     const wrapper = document.createElement("div");
-    wrapper.className = "claude-agent-math-block";
+    wrapper.className = "hermes-agent-math-block";
     mathSpan.parentElement.insertBefore(wrapper, mathSpan);
     wrapper.appendChild(mathSpan);
 

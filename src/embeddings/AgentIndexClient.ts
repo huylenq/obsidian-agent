@@ -15,7 +15,7 @@ export class AgentIndexClient implements IIndexClient {
   private ready = false;
 
   constructor(
-    private proxyUrl: string,
+    private bridgeUrl: string,
     private authToken?: string
   ) {}
 
@@ -28,7 +28,7 @@ export class AgentIndexClient implements IIndexClient {
   async initialize(): Promise<boolean> {
     try {
       const res = await requestUrl({
-        url: `${this.proxyUrl}/index/status`,
+        url: `${this.bridgeUrl}/index/status`,
         headers: this.headers(),
       });
       this.ready = res.json.available === true;
@@ -46,7 +46,7 @@ export class AgentIndexClient implements IIndexClient {
   async getStatus(): Promise<IndexStatus | null> {
     try {
       const res = await requestUrl({
-        url: `${this.proxyUrl}/index/status`,
+        url: `${this.bridgeUrl}/index/status`,
         headers: this.headers(),
       });
       return res.json as IndexStatus;
@@ -63,7 +63,7 @@ export class AgentIndexClient implements IIndexClient {
 
     try {
       const res = await requestUrl({
-        url: `${this.proxyUrl}/index/search-by-path`,
+        url: `${this.bridgeUrl}/index/search-by-path`,
         method: "POST",
         headers: this.headers(),
         body: JSON.stringify({
@@ -87,7 +87,7 @@ export class AgentIndexClient implements IIndexClient {
 
     try {
       const res = await requestUrl({
-        url: `${this.proxyUrl}/index/pairwise`,
+        url: `${this.bridgeUrl}/index/pairwise`,
         method: "POST",
         headers: this.headers(),
         body: JSON.stringify({ paths, threshold }),
@@ -109,7 +109,7 @@ export class AgentIndexClient implements IIndexClient {
     try {
       const headers: Record<string, string> = {};
       if (this.authToken) headers.Authorization = `Bearer ${this.authToken}`;
-      const res = await fetch(`${this.proxyUrl}/index/rebuild`, {
+      const res = await fetch(`${this.bridgeUrl}/index/rebuild`, {
         method: "POST",
         headers,
       });

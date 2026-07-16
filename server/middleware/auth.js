@@ -1,5 +1,5 @@
 /**
- * Auth middleware for Claude Agent Proxy
+ * Auth middleware for the Hermes bridge HTTP endpoints.
  *
  * If AUTH_TOKEN is set in environment:
  * - Validates Bearer token on all routes except GET /health

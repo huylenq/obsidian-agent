@@ -17,12 +17,13 @@ import {
 } from "@/state/sessionState";
 import type { ActiveFileContext, SessionStatus, SessionsMode } from "@/types";
 import { SessionCard } from "./Sessions/SessionCard";
-import type ClaudeAgentPlugin from "@/main";
+import type HermesAgentPlugin from "@/main";
+import { AGENT_EVENTS } from "@/events";
 
-export const SESSIONS_VIEW_TYPE = "claude-agent-sessions";
+export const SESSIONS_VIEW_TYPE = "hermes-agent-sessions";
 
 interface SessionsContainerProps {
-  plugin: ClaudeAgentPlugin;
+  plugin: HermesAgentPlugin;
   app: App;
 }
 
@@ -75,7 +76,7 @@ function SessionsContainer({ plugin, app }: SessionsContainerProps) {
 
   const [activeFile, setActiveFile] = useState<ActiveFileContext | undefined>(undefined);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(
-    plugin.claudeClient?.getSessionId() ?? null
+    plugin.hermesClient?.getSessionId() ?? null
   );
 
   // Track active file
@@ -97,13 +98,13 @@ function SessionsContainer({ plugin, app }: SessionsContainerProps) {
     const handleSessionChange = (e: CustomEvent<{ sessionId: string | null }>) => {
       setCurrentSessionId(e.detail.sessionId);
     };
-    window.addEventListener("claude-agent:session-changed", handleSessionChange as EventListener);
-    return () => window.removeEventListener("claude-agent:session-changed", handleSessionChange as EventListener);
+    window.addEventListener(AGENT_EVENTS.sessionChanged, handleSessionChange as EventListener);
+    return () => window.removeEventListener(AGENT_EVENTS.sessionChanged, handleSessionChange as EventListener);
   }, []);
 
   // Fetch sessions
   const fetchSessions = useCallback(async () => {
-    if (!plugin.claudeClient) return;
+    if (!plugin.hermesClient) return;
 
     setLoadingSessions(true);
     setSessionsError(null);
@@ -120,14 +121,14 @@ function SessionsContainer({ plugin, app }: SessionsContainerProps) {
         filters.file = activeFile.path;
       }
 
-      const result = await plugin.claudeClient.fetchSessions(filters);
+      const result = await plugin.hermesClient.fetchSessions(filters);
       setSessions(result);
     } catch (err) {
       setSessionsError(err instanceof Error ? err.message : "Failed to fetch sessions");
     } finally {
       setLoadingSessions(false);
     }
-  }, [plugin.claudeClient, activeFile]);
+  }, [plugin.hermesClient, activeFile]);
 
   // Auto-fetch on active file change (thisFile mode)
   useEffect(() => {
@@ -144,8 +145,8 @@ function SessionsContainer({ plugin, app }: SessionsContainerProps) {
   // Listen for refresh events (from /sessions command, after chat completes, etc.)
   useEffect(() => {
     const handle = () => fetchSessions();
-    window.addEventListener("claude-agent:refresh-sessions", handle);
-    return () => window.removeEventListener("claude-agent:refresh-sessions", handle);
+    window.addEventListener(AGENT_EVENTS.refreshSessions, handle);
+    return () => window.removeEventListener(AGENT_EVENTS.refreshSessions, handle);
   }, [fetchSessions]);
 
   // Auto-trigger migration on first load
@@ -154,8 +155,8 @@ function SessionsContainer({ plugin, app }: SessionsContainerProps) {
       if (plugin.initializationPromise) {
         await plugin.initializationPromise;
       }
-      if (plugin.claudeClient) {
-        await plugin.claudeClient.migrateSessionRegistry();
+      if (plugin.hermesClient) {
+        await plugin.hermesClient.migrateSessionRegistry();
         fetchSessions();
       }
     };
@@ -172,26 +173,26 @@ function SessionsContainer({ plugin, app }: SessionsContainerProps) {
 
   const handleSwitchSession = (sessionId: string) => {
     window.dispatchEvent(
-      new CustomEvent("claude-agent:switch-session", { detail: { sessionId } })
+      new CustomEvent(AGENT_EVENTS.switchSession, { detail: { sessionId } })
     );
     setCurrentSessionId(sessionId);
   };
 
   const handleToggleStatus = async (sessionId: string, newStatus: SessionStatus) => {
-    if (!plugin.claudeClient) return;
-    await plugin.claudeClient.updateSession(sessionId, { status: newStatus });
+    if (!plugin.hermesClient) return;
+    await plugin.hermesClient.updateSession(sessionId, { status: newStatus });
     fetchSessions();
   };
 
   const handleDeleteSession = async (sessionId: string) => {
-    if (!plugin.claudeClient) return;
-    const ok = await plugin.claudeClient.deleteSession(sessionId);
+    if (!plugin.hermesClient) return;
+    const ok = await plugin.hermesClient.deleteSession(sessionId);
     if (!ok) return;
 
     // If we just nuked the active session, reset ChatView to new chat
     if (sessionId === currentSessionId) {
-      plugin.claudeClient.clearSession();
-      window.dispatchEvent(new CustomEvent("claude-agent:session-deleted"));
+      plugin.hermesClient.clearSession();
+      window.dispatchEvent(new CustomEvent(AGENT_EVENTS.sessionDeleted));
       setCurrentSessionId(null);
     }
 
@@ -199,10 +200,10 @@ function SessionsContainer({ plugin, app }: SessionsContainerProps) {
   };
 
   return (
-    <div className="claude-agent-sessions-standalone">
-      <div className="claude-agent-sessions-toolbar">
+    <div className="hermes-agent-sessions-standalone">
+      <div className="hermes-agent-sessions-toolbar">
         {/* Mode toggle */}
-        <div className="claude-agent-sessions-mode-toggle">
+        <div className="hermes-agent-sessions-mode-toggle">
           <ModeToggleButton
             icon="file"
             isActive={mode === "thisFile"}
@@ -235,13 +236,13 @@ function SessionsContainer({ plugin, app }: SessionsContainerProps) {
         />
       </div>
 
-      <div className={`claude-agent-sessions-list ${isLoading ? "loading" : ""}`}>
+      <div className={`hermes-agent-sessions-list ${isLoading ? "loading" : ""}`}>
         {error && (
-          <div className="claude-agent-sessions-error">{error}</div>
+          <div className="hermes-agent-sessions-error">{error}</div>
         )}
 
         {!isLoading && sessions.length === 0 && !error && (
-          <div className="claude-agent-sessions-empty">
+          <div className="hermes-agent-sessions-empty">
             {mode === "thisFile" ? "No sessions for this file" : "No sessions found"}
           </div>
         )}
@@ -268,15 +269,17 @@ function SessionsContainer({ plugin, app }: SessionsContainerProps) {
 
 export class SessionsView extends ItemView {
   private root: Root | null = null;
-  private plugin: ClaudeAgentPlugin;
+  private plugin: HermesAgentPlugin;
+  private readonly viewType: string;
 
-  constructor(leaf: WorkspaceLeaf, plugin: ClaudeAgentPlugin) {
+  constructor(leaf: WorkspaceLeaf, plugin: HermesAgentPlugin, viewType = SESSIONS_VIEW_TYPE) {
     super(leaf);
     this.plugin = plugin;
+    this.viewType = viewType;
   }
 
   getViewType(): string {
-    return SESSIONS_VIEW_TYPE;
+    return this.viewType;
   }
 
   getDisplayText(): string {
@@ -290,7 +293,7 @@ export class SessionsView extends ItemView {
   async onOpen(): Promise<void> {
     const container = this.containerEl.children[1];
     container.empty();
-    container.addClass("claude-agent-sessions-view");
+    container.addClass("hermes-agent-sessions-view");
 
     this.root = createRoot(container);
     this.root.render(

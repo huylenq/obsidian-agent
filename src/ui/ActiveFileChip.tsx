@@ -24,12 +24,12 @@ export function ActiveFileChip({ activeFile, onClear }: ActiveFileChipProps) {
   }, []);
 
   return (
-    <div className="claude-agent-active-file-chip">
-      <span ref={iconRef} className="claude-agent-active-file-icon" />
-      <span className="claude-agent-active-file-name">{activeFile.name}</span>
-      <span className="claude-agent-active-file-label">Current</span>
+    <div className="hermes-agent-active-file-chip">
+      <span ref={iconRef} className="hermes-agent-active-file-icon" />
+      <span className="hermes-agent-active-file-name">{activeFile.name}</span>
+      <span className="hermes-agent-active-file-label">Current</span>
       <button
-        className="claude-agent-active-file-clear"
+        className="hermes-agent-active-file-clear"
         onClick={onClear}
         aria-label="Remove file context"
       >

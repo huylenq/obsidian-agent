@@ -18,12 +18,13 @@ import {
 import type { SearchMode, ActiveFileContext, RelevantNote } from "@/types";
 import { RelevantNoteCard } from "./RelevantNotes/RelevantNoteCard";
 import { AgentIndexClient, rankNotes } from "@/embeddings";
-import type ClaudeAgentPlugin from "@/main";
+import type HermesAgentPlugin from "@/main";
+import { AGENT_EVENTS } from "@/events";
 
-export const RELEVANT_NOTES_VIEW_TYPE = "claude-agent-relevant-notes";
+export const RELEVANT_NOTES_VIEW_TYPE = "hermes-agent-relevant-notes";
 
 interface RelevantNotesContainerProps {
-  plugin: ClaudeAgentPlugin;
+  plugin: HermesAgentPlugin;
   app: App;
 }
 
@@ -37,19 +38,19 @@ function RelevantNotesContainer({ plugin, app }: RelevantNotesContainerProps) {
   const indexClientRef = useRef<AgentIndexClient | null>(null);
   const [activeFile, setActiveFile] = useState<ActiveFileContext | undefined>(undefined);
 
-  // Initialize index client (waits for server to be ready)
+  // Initialize index client (waits for the bridge to be ready)
   useEffect(() => {
     let cancelled = false;
     const tryInit = async () => {
       for (let attempt = 0; attempt < 10 && !cancelled; attempt++) {
-        if (plugin.claudeClient) {
-          const { proxyUrl, authToken } = plugin.claudeClient;
-          const client = new AgentIndexClient(proxyUrl, authToken);
+        if (plugin.hermesClient) {
+          const { bridgeUrl, authToken } = plugin.hermesClient;
+          const client = new AgentIndexClient(bridgeUrl, authToken);
           const success = await client.initialize();
           if (success && !cancelled) {
             indexClientRef.current = client;
             setIndexAvailable(true);
-            console.log("[RelevantNotesView] Index server connected");
+            console.log("[RelevantNotesView] Hermes bridge index connected");
             return;
           }
         }
@@ -137,7 +138,7 @@ function RelevantNotesContainer({ plugin, app }: RelevantNotesContainerProps) {
   // Handle adding note to chat via custom event
   const handleAddNoteToChat = useCallback((notePath: string) => {
     window.dispatchEvent(
-      new CustomEvent("claude-agent:add-note-to-chat", { detail: { notePath } })
+      new CustomEvent(AGENT_EVENTS.addNoteToChat, { detail: { notePath } })
     );
   }, []);
 
@@ -148,19 +149,19 @@ function RelevantNotesContainer({ plugin, app }: RelevantNotesContainerProps) {
 
   if (!indexAvailable) {
     return (
-      <div className="claude-agent-relevant-notes-standalone">
-        <div className="claude-agent-relevant-notes-empty">
-          Index not available. Make sure the server is running and OPENAI_API_KEY is set.
+      <div className="hermes-agent-relevant-notes-standalone">
+        <div className="hermes-agent-relevant-notes-empty">
+          Index not available. Make sure the Hermes bridge is running and OPENAI_API_KEY is set.
         </div>
       </div>
     );
   }
 
   return (
-    <div className="claude-agent-relevant-notes-standalone">
-      <div className="claude-agent-relevant-notes-toolbar">
+    <div className="hermes-agent-relevant-notes-standalone">
+      <div className="hermes-agent-relevant-notes-toolbar">
         {/* Mode toggle */}
-        <div className="claude-agent-relevant-notes-mode-toggle">
+        <div className="hermes-agent-relevant-notes-mode-toggle">
           <button
             className={searchMode === "currentFile" ? "active" : ""}
             onClick={() => handleModeChange("currentFile")}
@@ -186,7 +187,7 @@ function RelevantNotesContainer({ plugin, app }: RelevantNotesContainerProps) {
 
         {/* Refresh button */}
         <button
-          className={`claude-agent-relevant-notes-refresh ${isSearching ? "spinning" : ""}`}
+          className={`hermes-agent-relevant-notes-refresh ${isSearching ? "spinning" : ""}`}
           onClick={searchRelevantNotes}
           title="Refresh relevant notes"
           disabled={isSearching}
@@ -199,13 +200,13 @@ function RelevantNotesContainer({ plugin, app }: RelevantNotesContainerProps) {
         </button>
       </div>
 
-      <div className={`claude-agent-relevant-notes-list ${isSearching ? "searching" : ""}`}>
+      <div className={`hermes-agent-relevant-notes-list ${isSearching ? "searching" : ""}`}>
         {error && (
-          <div className="claude-agent-relevant-notes-error">{error}</div>
+          <div className="hermes-agent-relevant-notes-error">{error}</div>
         )}
 
         {!isSearching && notes.length === 0 && !error && (
-          <div className="claude-agent-relevant-notes-empty">
+          <div className="hermes-agent-relevant-notes-empty">
             No relevant notes found
           </div>
         )}
@@ -225,15 +226,17 @@ function RelevantNotesContainer({ plugin, app }: RelevantNotesContainerProps) {
 
 export class RelevantNotesView extends ItemView {
   private root: Root | null = null;
-  private plugin: ClaudeAgentPlugin;
+  private plugin: HermesAgentPlugin;
+  private readonly viewType: string;
 
-  constructor(leaf: WorkspaceLeaf, plugin: ClaudeAgentPlugin) {
+  constructor(leaf: WorkspaceLeaf, plugin: HermesAgentPlugin, viewType = RELEVANT_NOTES_VIEW_TYPE) {
     super(leaf);
     this.plugin = plugin;
+    this.viewType = viewType;
   }
 
   getViewType(): string {
-    return RELEVANT_NOTES_VIEW_TYPE;
+    return this.viewType;
   }
 
   getDisplayText(): string {
@@ -247,7 +250,7 @@ export class RelevantNotesView extends ItemView {
   async onOpen(): Promise<void> {
     const container = this.containerEl.children[1];
     container.empty();
-    container.addClass("claude-agent-relevant-notes-view");
+    container.addClass("hermes-agent-relevant-notes-view");
 
     this.root = createRoot(container);
     this.root.render(

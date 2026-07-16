@@ -1,10 +1,10 @@
 /* PKM-native renderers for Read / Write / Edit tool blocks.
-   Visually layered on top of the generic .claude-agent-tool-block styles
+   Visually layered on top of the generic .hermes-agent-tool-block styles
    in messages.css — here we only add the wikilink-aware extras. */
 
 /* ---------- Wikilink pill ---------- */
 
-.claude-agent-wikilink-pill {
+.hermes-agent-wikilink-pill {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -23,25 +23,25 @@
   white-space: nowrap;
 }
 
-.claude-agent-wikilink-pill:hover {
+.hermes-agent-wikilink-pill:hover {
   background: var(--background-modifier-active-hover, var(--background-modifier-hover));
   border-color: var(--background-modifier-border);
 }
 
-.claude-agent-wikilink-pill.unresolved {
+.hermes-agent-wikilink-pill.unresolved {
   color: var(--text-muted);
   font-style: italic;
   font-weight: 500;
 }
 
-.claude-agent-wikilink-pill.small {
+.hermes-agent-wikilink-pill.small {
   font-size: 0.82em;
   padding: 0 4px 0 3px;
   gap: 3px;
   font-weight: 500;
 }
 
-.claude-agent-wikilink-pill-name {
+.hermes-agent-wikilink-pill-name {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -49,14 +49,14 @@
 
 /* ---------- Note metadata strip ---------- */
 
-.claude-agent-note-meta-strip {
+.hermes-agent-note-meta-strip {
   display: inline-flex;
   flex-wrap: wrap;
   gap: 4px;
   align-items: center;
 }
 
-.claude-agent-note-meta-chip {
+.hermes-agent-note-meta-chip {
   font-size: 0.72em;
   padding: 0 5px;
   border-radius: 3px;
@@ -66,23 +66,23 @@
   white-space: nowrap;
 }
 
-.claude-agent-note-meta-chip.tag {
+.hermes-agent-note-meta-chip.tag {
   color: var(--text-accent);
   background: var(--background-secondary-alt, var(--background-secondary));
 }
 
-.claude-agent-note-meta-chip.muted {
+.hermes-agent-note-meta-chip.muted {
   color: var(--text-faint);
   background: transparent;
 }
 
 /* ---------- PKM header layout ---------- */
 
-.claude-agent-tool-block-header.claude-agent-tool-block-pkm {
+.hermes-agent-tool-block-header.hermes-agent-tool-block-pkm {
   align-items: flex-start;
 }
 
-.claude-agent-tool-block-pkm-main {
+.hermes-agent-tool-block-pkm-main {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
@@ -90,7 +90,7 @@
   gap: 2px;
 }
 
-.claude-agent-tool-block-pkm-row {
+.hermes-agent-tool-block-pkm-row {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -98,13 +98,13 @@
   min-width: 0;
 }
 
-.claude-agent-tool-block-pkm-verb {
+.hermes-agent-tool-block-pkm-verb {
   font-weight: 600;
   color: var(--text-normal);
   font-size: 0.92em;
 }
 
-.claude-agent-tool-block-pkm-subline {
+.hermes-agent-tool-block-pkm-subline {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -115,24 +115,24 @@
 
 /* The PKM header has its own meta strip — stop the chevron from forcing
    the icon disc to vertically center against a multi-line header. */
-.claude-agent-tool-block-header.claude-agent-tool-block-pkm > .claude-agent-tool-icon {
+.hermes-agent-tool-block-header.hermes-agent-tool-block-pkm > .hermes-agent-tool-icon {
   margin-top: 1px;
 }
 
-.claude-agent-tool-block-header.claude-agent-tool-block-pkm > .claude-agent-tool-block-chevron {
+.hermes-agent-tool-block-header.hermes-agent-tool-block-pkm > .hermes-agent-tool-block-chevron {
   align-self: center;
 }
 
 /* ---------- Edit semantic diff ---------- */
 
-.claude-agent-edit-semantic-diff {
+.hermes-agent-edit-semantic-diff {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
 }
 
-.claude-agent-edit-delta {
+.hermes-agent-edit-delta {
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -141,37 +141,37 @@
   line-height: 1.4;
 }
 
-.claude-agent-edit-delta.added {
+.hermes-agent-edit-delta.added {
   color: var(--color-green, #4caf50);
 }
 
-.claude-agent-edit-delta.removed {
+.hermes-agent-edit-delta.removed {
   color: var(--color-red, #f44336);
 }
 
-.claude-agent-edit-delta.tag {
+.hermes-agent-edit-delta.tag {
   font-family: inherit;
 }
 
-.claude-agent-edit-delta.muted {
+.hermes-agent-edit-delta.muted {
   color: var(--text-faint);
   font-style: italic;
   font-family: inherit;
 }
 
-.claude-agent-edit-rename {
+.hermes-agent-edit-rename {
   color: var(--text-muted);
   font-size: 0.9em;
 }
 
-.claude-agent-edit-rename em {
+.hermes-agent-edit-rename em {
   color: var(--text-normal);
   font-style: italic;
 }
 
 /* ---------- Write card ---------- */
 
-.claude-agent-write-tag {
+.hermes-agent-write-tag {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -187,25 +187,25 @@
   white-space: nowrap;
 }
 
-.claude-agent-write-tag.warn {
+.hermes-agent-write-tag.warn {
   color: var(--text-warning, #d97706);
   background: transparent;
   border: 1px solid var(--background-modifier-border);
 }
 
-.claude-agent-write-tag-icon {
+.hermes-agent-write-tag-icon {
   display: inline-flex;
   align-items: center;
   line-height: 0;
 }
 
-.claude-agent-write-tag-icon .svg-icon {
+.hermes-agent-write-tag-icon .svg-icon {
   width: 11px;
   height: 11px;
   stroke-width: 2.2;
 }
 
-.claude-agent-write-card {
+.hermes-agent-write-card {
   margin: 4px 6px 6px 32px;
   padding: 8px 10px;
   border: 1px solid var(--background-modifier-border);
@@ -215,27 +215,27 @@
   font-size: 0.9em;
 }
 
-.claude-agent-write-card-snippet {
+.hermes-agent-write-card-snippet {
   color: var(--text-muted);
   line-height: 1.4;
   margin-bottom: 6px;
 }
 
-.claude-agent-write-card-cites {
+.hermes-agent-write-card-cites {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   align-items: center;
 }
 
-.claude-agent-write-card-cites-more {
+.hermes-agent-write-card-cites-more {
   font-size: 0.75em;
   color: var(--text-faint);
 }
 
 /* Inside an expanded group, child rows lose their leading icon (PkmHeader
    suppresses it via inGroup). Reclaim the indent so content sits flush. */
-.claude-agent-tool-group-body .claude-agent-write-card {
+.hermes-agent-tool-group-body .hermes-agent-write-card {
   margin-left: 0;
 }
 
@@ -249,19 +249,19 @@
    double-blend. See LinkArcs.tsx for the inset math.
    ===================================================================== */
 
-.claude-agent-tool-group-arc-layout {
+.hermes-agent-tool-group-arc-layout {
   position: relative;
   isolation: isolate; /* fresh stacking context; arcs stay scoped */
 }
 
-.claude-agent-link-arcs-layer {
+.hermes-agent-link-arcs-layer {
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 1; /* above body's normal-flow content */
 }
 
-.claude-agent-link-arc {
+.hermes-agent-link-arc {
   position: absolute;
   pointer-events: none;
   overflow: visible;
@@ -270,7 +270,7 @@
   color: var(--background-modifier-hover);
 }
 
-.claude-agent-link-arc path {
+.hermes-agent-link-arc path {
   fill: none;
   stroke: currentColor;
   stroke-width: 4;
@@ -283,13 +283,13 @@
   vector-effect: non-scaling-stroke;
 }
 
-.claude-agent-link-arc.bidi path {
+.hermes-agent-link-arc.bidi path {
   stroke-width: 5;
 }
 
 /* Endpoint markers — currently target-only. Source uses the line's own round
    cap as its terminator. */
-.claude-agent-link-arc-marker {
+.hermes-agent-link-arc-marker {
   position: absolute;
   pointer-events: none;
   background: var(--background-modifier-hover);
@@ -302,7 +302,7 @@
    `--rot` is supplied by LinkArcs (Bezier end-tangent); transform-origin at
    the apex (50% 100%) so the tip stays anchored to (left, top) regardless
    of rotation, and the base sweeps around. */
-.claude-agent-link-arc-marker.target {
+.hermes-agent-link-arc-marker.target {
   width: 14px;
   height: 6px;
   clip-path: polygon(0 0, 100% 0, 50% 100%);
@@ -312,7 +312,7 @@
 
 /* ---------- Merged-run count badge + expanded body ---------- */
 
-.claude-agent-merged-count {
+.hermes-agent-merged-count {
   display: inline-flex;
   align-items: center;
   font-size: 0.72em;
@@ -325,18 +325,18 @@
   letter-spacing: 0.02em;
 }
 
-.claude-agent-tool-block-body.merged {
+.hermes-agent-tool-block-body.merged {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.claude-agent-merged-step {
+.hermes-agent-merged-step {
   border-left: 2px solid var(--background-modifier-border);
   padding-left: 8px;
 }
 
-.claude-agent-merged-step-header {
+.hermes-agent-merged-step-header {
   font-size: 0.7em;
   font-weight: 600;
   color: var(--text-faint);
@@ -349,7 +349,7 @@
    Graph toggle button (header) + collapsible graph panel below the stack
    ===================================================================== */
 
-.claude-agent-tool-group-graph-toggle {
+.hermes-agent-tool-group-graph-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -365,29 +365,29 @@
   transition: background 0.12s ease, color 0.12s ease, transform 0.18s ease-out;
 }
 
-.claude-agent-tool-group-graph-toggle:hover {
+.hermes-agent-tool-group-graph-toggle:hover {
   background: var(--background-modifier-hover);
   color: var(--text-normal);
 }
 
-.claude-agent-tool-group-graph-toggle.active {
+.hermes-agent-tool-group-graph-toggle.active {
   background: var(--background-modifier-active-hover, var(--interactive-accent));
   color: var(--text-on-accent, var(--text-normal));
 }
 
-.claude-agent-tool-group-graph-toggle .svg-icon {
+.hermes-agent-tool-group-graph-toggle .svg-icon {
   width: 14px;
   height: 14px;
 }
 
-.claude-agent-tool-group-graph {
+.hermes-agent-tool-group-graph {
   margin-top: 6px;
   border-top: 1px solid var(--background-modifier-border);
   padding: 10px 0 4px 0;
   min-width: 0;
 }
 
-.claude-agent-touched-graph-panel {
+.hermes-agent-touched-graph-panel {
   position: relative;
   width: 100%;
   height: 280px;
@@ -396,19 +396,19 @@
   overflow: hidden;
 }
 
-.claude-agent-touched-graph-panel.empty {
+.hermes-agent-touched-graph-panel.empty {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 60px;
 }
 
-.claude-agent-touched-graph-empty {
+.hermes-agent-touched-graph-empty {
   font-size: 0.8em;
   color: var(--text-faint);
 }
 
-.claude-agent-touched-graph-panel .claude-agent-graph-canvas {
+.hermes-agent-touched-graph-panel .hermes-agent-graph-canvas {
   width: 100%;
   height: 100%;
   display: block;

@@ -103,22 +103,22 @@ export const NoteMetadataStrip = memo(function NoteMetadataStrip({ path }: NoteM
   const extraTags = tags.length - visibleTags.length;
 
   return (
-    <div className="claude-agent-note-meta-strip">
+    <div className="hermes-agent-note-meta-strip">
       {backlinkCount > 0 && (
-        <span className="claude-agent-note-meta-chip" title="Backlinks">
+        <span className="hermes-agent-note-meta-chip" title="Backlinks">
           {backlinkCount} backlink{backlinkCount === 1 ? "" : "s"}
         </span>
       )}
       {visibleTags.map((t) => (
-        <span key={t} className="claude-agent-note-meta-chip tag" title={t}>
+        <span key={t} className="hermes-agent-note-meta-chip tag" title={t}>
           {t}
         </span>
       ))}
       {extraTags > 0 && (
-        <span className="claude-agent-note-meta-chip tag muted">+{extraTags}</span>
+        <span className="hermes-agent-note-meta-chip tag muted">+{extraTags}</span>
       )}
       {mtime && (
-        <span className="claude-agent-note-meta-chip muted" title={new Date(mtime).toLocaleString()}>
+        <span className="hermes-agent-note-meta-chip muted" title={new Date(mtime).toLocaleString()}>
           {relativeTime(mtime)}
         </span>
       )}

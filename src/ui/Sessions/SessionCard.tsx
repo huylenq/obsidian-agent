@@ -31,10 +31,10 @@ export function SessionCard({ session, isActive, onSwitch, onToggleStatus, onDel
   }, []);
 
   return (
-    <div className={`claude-agent-session-card ${isActive ? "active" : ""}`}>
-      <div className="claude-agent-session-card-header">
+    <div className={`hermes-agent-session-card ${isActive ? "active" : ""}`}>
+      <div className="hermes-agent-session-card-header">
         <button
-          className={`claude-agent-session-status-dot ${isDone ? "done" : "in-progress"}`}
+          className={`hermes-agent-session-status-dot ${isDone ? "done" : "in-progress"}`}
           onClick={(e) => {
             e.stopPropagation();
             onToggleStatus();
@@ -44,19 +44,19 @@ export function SessionCard({ session, isActive, onSwitch, onToggleStatus, onDel
           {isDone ? "\u2713" : "\u25CF"}
         </button>
         <span
-          className="claude-agent-session-card-title"
+          className="hermes-agent-session-card-title"
           onClick={onSwitch}
           title={session.title || session.id}
         >
-          {isFlashcard && <span ref={typeIconRef} className="claude-agent-session-type-icon" />}
+          {isFlashcard && <span ref={typeIconRef} className="hermes-agent-session-type-icon" />}
           {session.title || session.id.slice(0, 12)}
         </span>
-        <div className="claude-agent-session-card-meta">
-          <span className="claude-agent-session-card-date">{dateStr}</span>
-          <span className="claude-agent-session-card-model">{session.model}</span>
+        <div className="hermes-agent-session-card-meta">
+          <span className="hermes-agent-session-card-date">{dateStr}</span>
+          <span className="hermes-agent-session-card-model">{session.model}</span>
           <span
             ref={deleteIconRef}
-            className="claude-agent-session-delete clickable-icon"
+            className="hermes-agent-session-delete clickable-icon"
             onClick={(e) => {
               e.stopPropagation();
               onDelete();
@@ -66,14 +66,14 @@ export function SessionCard({ session, isActive, onSwitch, onToggleStatus, onDel
         </div>
       </div>
       {session.files.length > 0 && (
-        <div className="claude-agent-session-card-files">
+        <div className="hermes-agent-session-card-files">
           {session.files.slice(0, 3).map((f) => (
-            <span key={f} className="claude-agent-session-file-chip" title={f}>
+            <span key={f} className="hermes-agent-session-file-chip" title={f}>
               {f.split("/").pop()}
             </span>
           ))}
           {session.files.length > 3 && (
-            <span className="claude-agent-session-file-chip">+{session.files.length - 3}</span>
+            <span className="hermes-agent-session-file-chip">+{session.files.length - 3}</span>
           )}
         </div>
       )}

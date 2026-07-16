@@ -1,9 +1,9 @@
 {
   "id": "claude-agent",
-  "name": "Claude Agent",
+  "name": "Hermes Agent",
   "version": "2025-02-22-1",
   "minAppVersion": "1.0.0",
-  "description": "Chat with your Obsidian vault using Claude Agent SDK and RAG-powered semantic search",
+  "description": "Chat with your Obsidian vault using Hermes Agent over ACP and RAG-powered semantic search",
   "author": "Huy",
   "isDesktopOnly": false
 }

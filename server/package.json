@@ -1,18 +1,19 @@
 {
-  "name": "claude-agent-proxy",
+  "name": "hermes-agent-bridge",
   "version": "0.1.0",
-  "description": "Local proxy server for Claude Agent SDK",
+  "description": "WebSocket bridge between Obsidian and Hermes ACP",
   "type": "module",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "test": "node --test"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "latest",
     "@lancedb/lancedb": "^0.15.0",
     "apache-arrow": "^18.1.0",
+    "cors": "^2.8.5",
     "express": "^4.18.2",
-    "cors": "^2.8.5"
+    "ws": "8.18.3"
   }
 }

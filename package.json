@@ -1,7 +1,7 @@
 {
-  "name": "obsidian-claude-agent",
+  "name": "obsidian-hermes-agent",
   "version": "0.1.0",
-  "description": "Chat with your Obsidian vault using Claude Agent SDK",
+  "description": "Chat with your Obsidian vault using Hermes Agent over ACP",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
@@ -13,7 +13,8 @@
   },
   "keywords": [
     "obsidian",
-    "claude",
+    "hermes",
+    "acp",
     "ai",
     "agent"
   ],

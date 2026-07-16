@@ -83,14 +83,14 @@ export function TouchedGraphPanel({ paths, runningPath }: TouchedGraphPanelProps
 
   if (!data || data.nodes.length === 0) {
     return (
-      <div className="claude-agent-touched-graph-panel empty">
-        <span className="claude-agent-touched-graph-empty">No vault links</span>
+      <div className="hermes-agent-touched-graph-panel empty">
+        <span className="hermes-agent-touched-graph-empty">No vault links</span>
       </div>
     );
   }
 
   return (
-    <div className="claude-agent-touched-graph-panel">
+    <div className="hermes-agent-touched-graph-panel">
       <GraphCanvas
         data={data}
         settings={settings}

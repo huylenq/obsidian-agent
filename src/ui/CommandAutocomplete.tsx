@@ -26,7 +26,7 @@ export function CommandAutocomplete({
   if (commands.length === 0) return null;
 
   return (
-    <div className="claude-agent-mention-autocomplete" ref={listRef}>
+    <div className="hermes-agent-mention-autocomplete" ref={listRef}>
       {commands.map((command, index) => (
         <CommandItem
           key={command.name}
@@ -56,14 +56,14 @@ function CommandItem({ command, isSelected, onClick }: CommandItemProps) {
 
   return (
     <div
-      className={`claude-agent-mention-item ${isSelected ? "selected" : ""}`}
+      className={`hermes-agent-mention-item ${isSelected ? "selected" : ""}`}
       onClick={onClick}
       onMouseDown={(e) => e.preventDefault()}
     >
-      <span ref={iconRef} className="claude-agent-mention-icon" />
-      <div className="claude-agent-mention-text">
-        <span className="claude-agent-mention-name">/{command.name}</span>
-        <span className="claude-agent-mention-path">{command.description}</span>
+      <span ref={iconRef} className="hermes-agent-mention-icon" />
+      <div className="hermes-agent-mention-text">
+        <span className="hermes-agent-mention-name">/{command.name}</span>
+        <span className="hermes-agent-mention-path">{command.description}</span>
       </div>
     </div>
   );

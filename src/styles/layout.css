@@ -1,11 +1,12 @@
 /* Container, header, session info, messages area, empty state */
 
 /* Override Obsidian's default view-content padding for our chat view */
+.workspace-leaf-content[data-type="hermes-agent-chat"] .view-content,
 .workspace-leaf-content[data-type="claude-agent-chat"] .view-content {
   padding: 0;
 }
 
-.claude-agent-container {
+.hermes-agent-container {
   /* One theme-aware surface shared by the chat canvas and any paint used as
      an overlap cutout. Keeping both on the same token makes masked tool-icon
      discs disappear into the canvas across Obsidian themes. */
@@ -20,7 +21,7 @@
 }
 
 /* Header removed — styles kept for reference */
-.claude-agent-header {
+.hermes-agent-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -28,35 +29,35 @@
   border-bottom: 1px solid var(--background-modifier-border);
 }
 
-.claude-agent-session-info {
+.hermes-agent-session-info {
   display: flex;
   align-items: center;
   flex: 1;
 }
 
-.claude-agent-session-id {
+.hermes-agent-session-id {
   font-size: 11px;
   font-family: var(--font-monospace);
   color: var(--text-muted);
   cursor: default;
 }
 
-.claude-agent-session-id:not(.claude-agent-session-new):hover {
+.hermes-agent-session-id:not(.hermes-agent-session-new):hover {
   color: var(--text-normal);
 }
 
-.claude-agent-session-new {
+.hermes-agent-session-new {
   font-style: italic;
 }
 
-.claude-agent-new-chat-button:disabled {
+.hermes-agent-new-chat-button:disabled {
   opacity: 0.3;
   cursor: not-allowed;
 }
 
 /* View location toggle (sidebar/tab) */
 
-.claude-agent-session-header .claude-agent-view-location-toggle {
+.hermes-agent-session-header .hermes-agent-view-location-toggle {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -67,24 +68,24 @@
   pointer-events: auto;
 }
 
-.claude-agent-session-header .claude-agent-view-location-toggle:hover {
+.hermes-agent-session-header .hermes-agent-view-location-toggle:hover {
   color: var(--text-muted);
   background-color: var(--background-modifier-hover);
 }
 
-.claude-agent-view-location-icon {
+.hermes-agent-view-location-icon {
   display: flex;
   align-items: center;
 }
 
-.claude-agent-view-location-icon svg {
+.hermes-agent-view-location-icon svg {
   width: 18px;
   height: 18px;
 }
 
 /* Session header bar */
 
-.claude-agent-session-header {
+.hermes-agent-session-header {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -103,22 +104,22 @@
   border-radius: 6px;
 }
 
-.claude-agent-session-header.flashcard-study {
+.hermes-agent-session-header.flashcard-study {
   background: transparent;
   color: var(--text-accent);
 }
 
-.claude-agent-session-header.flashcard-study .claude-agent-session-header-title {
+.hermes-agent-session-header.flashcard-study .hermes-agent-session-header-title {
   font-weight: 600;
 }
 
 
-.claude-agent-session-header-icon {
+.hermes-agent-session-header-icon {
   font-size: 1.1em;
   pointer-events: auto;
 }
 
-.claude-agent-session-header-title {
+.hermes-agent-session-header-title {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -130,11 +131,11 @@
   cursor: pointer;
 }
 
-.claude-agent-session-header-title:hover {
+.hermes-agent-session-header-title:hover {
   color: var(--text-normal);
 }
 
-.claude-agent-session-id {
+.hermes-agent-session-id {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -147,27 +148,27 @@
   flex-shrink: 0;
 }
 
-.claude-agent-session-id:hover {
+.hermes-agent-session-id:hover {
   color: var(--text-muted);
 }
 
-.claude-agent-session-id.copied {
+.hermes-agent-session-id.copied {
   color: var(--color-green);
 }
 
-.claude-agent-session-header .claude-agent-new-chat-button {
+.hermes-agent-session-header .hermes-agent-new-chat-button {
   margin-left: auto;
   pointer-events: auto;
   font-size: 0.9em;
 }
 
-.claude-agent-session-header .claude-agent-done-button {
+.hermes-agent-session-header .hermes-agent-done-button {
   pointer-events: auto;
   font-size: 0.75em;
 }
 
 
-.claude-agent-messages {
+.hermes-agent-messages {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
@@ -177,7 +178,7 @@
   gap: 12px;
 }
 
-.claude-agent-empty-state {
+.hermes-agent-empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -189,20 +190,20 @@
   font-size: 0.9em;
 }
 
-.claude-agent-empty-state h3 {
+.hermes-agent-empty-state h3 {
   margin-bottom: 8px;
   color: var(--text-normal);
   font-size: 1em;
 }
 
-.claude-agent-empty-state p {
+.hermes-agent-empty-state p {
   font-size: 0.85em;
   line-height: 1.4;
 }
 
 /* Session dropdown (from header title click) */
 
-.claude-agent-session-dropdown {
+.hermes-agent-session-dropdown {
   position: absolute;
   top: 100%;
   left: 0;
@@ -218,7 +219,7 @@
   z-index: 11;
 }
 
-.claude-agent-session-dropdown-search {
+.hermes-agent-session-dropdown-search {
   width: 100%;
   padding: 6px 12px;
   border: none;
@@ -230,18 +231,18 @@
   box-sizing: border-box;
 }
 
-.claude-agent-session-dropdown-search::placeholder {
+.hermes-agent-session-dropdown-search::placeholder {
   color: var(--text-faint);
 }
 
-.claude-agent-session-dropdown-empty {
+.hermes-agent-session-dropdown-empty {
   padding: 12px;
   text-align: center;
   color: var(--text-muted);
   font-size: 12px;
 }
 
-.claude-agent-session-dropdown-item {
+.hermes-agent-session-dropdown-item {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -250,16 +251,16 @@
   font-size: 12px;
 }
 
-.claude-agent-session-dropdown-item:hover,
-.claude-agent-session-dropdown-item.highlighted {
+.hermes-agent-session-dropdown-item:hover,
+.hermes-agent-session-dropdown-item.highlighted {
   background-color: var(--background-modifier-hover);
 }
 
-.claude-agent-session-dropdown-item.active {
+.hermes-agent-session-dropdown-item.active {
   background-color: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
 }
 
-.claude-agent-session-dropdown-title {
+.hermes-agent-session-dropdown-title {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -268,11 +269,11 @@
   color: var(--text-normal);
 }
 
-.claude-agent-session-dropdown-item.active .claude-agent-session-dropdown-title {
+.hermes-agent-session-dropdown-item.active .hermes-agent-session-dropdown-title {
   color: var(--interactive-accent);
 }
 
-.claude-agent-session-dropdown-meta {
+.hermes-agent-session-dropdown-meta {
   font-size: 10px;
   padding: 1px 5px;
   border-radius: 4px;

@@ -13,7 +13,7 @@ export interface ToolBlock {
   output?: string;
   isError?: boolean;
   isRunning?: boolean;
-  // Vault-aware structured fields populated by the server for Read/Write/Edit
+  // Vault-aware structured fields populated by the bridge for Read/Write/Edit
   // so the UI can render wikilinks, metadata strips, and semantic diffs without
   // re-parsing `description` / `input`.
   filePath?: string;       // vault-relative path (Read/Write/Edit)
@@ -63,7 +63,25 @@ export interface SelectionContext {
   endLine?: number;   // Line where selection ends (1-indexed)
 }
 
-export type ClaudeModel = "haiku" | "sonnet" | "opus";
+// ACP model choice IDs preserve both provider and model (for example
+// `openai-codex:gpt-5.6-sol`). Legacy settings may still contain `hermes`.
+export type HermesModel = string;
+
+export interface HermesModelInfo {
+  modelId: HermesModel;
+  name: string;
+  description?: string;
+}
+
+export interface HermesModelState {
+  currentModelId: HermesModel;
+  availableModels: HermesModelInfo[];
+}
+
+export interface HermesSessionModelResponse {
+  sessionId: string;
+  models?: HermesModelState;
+}
 
 export type ChatViewLocation = "sidebar" | "tab";
 
@@ -95,36 +113,38 @@ export const DEFAULT_GRAPH_VIEW_SETTINGS: GraphViewSettings = {
   centerForce: 0.5,
   repelForce: 100,
   linkDistance: 250,
-  floatSliders: false,
+  floatSliders: true,
   pinnedNodes: [],
 };
 
-export interface ClaudeAgentSettings {
+export interface HermesAgentSettings {
+  sessionBackend: "hermes-acp";
   systemPrompt: string;
   showDebugInfo: boolean;
   sessionId: string | null;
-  model: ClaudeModel;
+  model: HermesModel;
   includeRelevantNotes: boolean;
   graphSettings: GraphViewSettings;
   openaiApiKey: string;
   connectionMode: ConnectionMode;
-  remoteServerUrl: string;
+  remoteBridgeUrl: string;
   remoteAuthToken: string;
   chatViewLocation: ChatViewLocation;
 }
 
-export const DEFAULT_SETTINGS: ClaudeAgentSettings = {
+export const DEFAULT_SETTINGS: HermesAgentSettings = {
+  sessionBackend: "hermes-acp",
   systemPrompt: `You are a helpful assistant that answers questions about the user's Obsidian vault.
-Use the available MCP tools to search and read notes when needed.
+Use the available tools to search and read notes when needed.
 Be concise and accurate.`,
   showDebugInfo: false,
   sessionId: null,
-  model: "haiku",
+  model: "hermes",
   includeRelevantNotes: true,
   graphSettings: DEFAULT_GRAPH_VIEW_SETTINGS,
   openaiApiKey: "",
   connectionMode: "local",
-  remoteServerUrl: "",
+  remoteBridgeUrl: "",
   remoteAuthToken: "",
   chatViewLocation: "sidebar",
 };
@@ -181,7 +201,7 @@ export interface SessionEntry {
   status: SessionStatus;
   createdAt: number;
   updatedAt: number;
-  model: ClaudeModel;
+  model: HermesModel;
   messageCount: number;
   files: string[];              // vault-relative note paths (deduped)
   type?: SessionType;           // undefined = regular (backcompat)
@@ -230,4 +250,3 @@ export interface GraphData {
   edges: GraphEdge[];
   centerPath: string;
 }
-

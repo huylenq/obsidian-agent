@@ -1,35 +1,35 @@
 /* Message bubbles, content, loading animation */
 
-.claude-agent-message {
+.hermes-agent-message {
   padding: 0 16px;
   border-radius: 8px;
   max-width: 85%;
   word-wrap: break-word;
 }
 
-.claude-agent-message.user {
+.hermes-agent-message.user {
   background-color: var(--interactive-accent);
   color: var(--text-on-accent);
   align-self: flex-end;
   margin-left: auto;
 }
 
-.claude-agent-message.assistant {
+.hermes-agent-message.assistant {
   background-color: var(--background-secondary);
   color: var(--text-normal);
   align-self: flex-start;
 }
 
 /* Mobile: widen bubbles for tab view */
-.is-mobile .claude-agent-message.assistant {
+.is-mobile .hermes-agent-message.assistant {
   max-width: 100%;
 }
 
-.is-mobile .claude-agent-message.user {
+.is-mobile .hermes-agent-message.user {
   max-width: 92%;
 }
 
-.claude-agent-message.error {
+.hermes-agent-message.error {
   background-color: var(--background-modifier-error);
   color: var(--text-on-accent, var(--text-normal));
   user-select: text;
@@ -37,7 +37,7 @@
   cursor: text;
 }
 
-.claude-agent-message-content {
+.hermes-agent-message-content {
   user-select: text;
   -webkit-user-select: text;
   min-width: 0;
@@ -45,7 +45,7 @@
 
 /* Images in message bubbles */
 
-.claude-agent-message-images {
+.hermes-agent-message-images {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -53,20 +53,20 @@
   padding-top: 8px;
 }
 
-.claude-agent-message-image {
+.hermes-agent-message-image {
   max-width: 100%;
   max-height: 200px;
   border-radius: 6px;
   cursor: pointer;
 }
 
-.claude-agent-message.user .claude-agent-message-image {
+.hermes-agent-message.user .hermes-agent-message-image {
   max-height: 150px;
 }
 
 /* Selection context block on user messages */
 
-.claude-agent-selection-block {
+.hermes-agent-selection-block {
   margin: 8px 0 4px;
   padding: 6px 10px;
   border-radius: 4px;
@@ -74,11 +74,11 @@
   font-size: 0.85em;
 }
 
-.theme-light .claude-agent-selection-block {
+.theme-light .hermes-agent-selection-block {
   background: rgba(255, 255, 255, 0.2);
 }
 
-.claude-agent-selection-block-header {
+.hermes-agent-selection-block-header {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -87,7 +87,7 @@
   margin-bottom: 3px;
 }
 
-.claude-agent-selection-block-text {
+.hermes-agent-selection-block-text {
   font-family: var(--font-monospace);
   font-size: 0.88em;
   white-space: pre-wrap;
@@ -97,7 +97,7 @@
 }
 
 /* Code blocks: wrap instead of overflowing the bubble */
-.claude-agent-message pre {
+.hermes-agent-message pre {
   white-space: pre-wrap;
   word-wrap: break-word;
   position: relative;
@@ -105,19 +105,19 @@
 
 
 /* Inline code: allow wrapping */
-.claude-agent-message code:not(pre code) {
+.hermes-agent-message code:not(pre code) {
   word-break: break-word;
   white-space: pre-wrap;
 }
 
-.claude-agent-message.tool-call {
+.hermes-agent-message.tool-call {
   background-color: var(--background-modifier-border);
   font-size: 0.85em;
   opacity: 0.8;
   font-family: var(--font-monospace);
 }
 
-.claude-agent-source {
+.hermes-agent-source {
   font-size: 0.8em;
   color: var(--text-muted);
   margin-top: 8px;
@@ -125,13 +125,13 @@
   border-top: 1px solid var(--background-modifier-border);
 }
 
-.claude-agent-source a {
+.hermes-agent-source a {
   color: var(--text-accent);
 }
 
 /* Compact boundary */
 
-.claude-agent-compact-boundary {
+.hermes-agent-compact-boundary {
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -142,27 +142,27 @@
   max-width: 100%;
 }
 
-.claude-agent-compact-boundary-line {
+.hermes-agent-compact-boundary-line {
   height: 1px;
   background: var(--background-modifier-border);
   flex-shrink: 0;
 }
 
-.claude-agent-compact-chevron {
+.hermes-agent-compact-chevron {
   display: inline-block;
   font-size: 0.9em;
   transition: transform 0.15s ease-out;
 }
 
-.claude-agent-compact-chevron.expanded {
+.hermes-agent-compact-chevron.expanded {
   transform: rotate(90deg);
 }
 
-.claude-agent-compact-label {
+.hermes-agent-compact-label {
   white-space: nowrap;
 }
 
-.claude-agent-compact-boundary-header {
+.hermes-agent-compact-boundary-header {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -172,11 +172,11 @@
   transition: color 0.15s ease-out;
 }
 
-.claude-agent-compact-boundary:hover .claude-agent-compact-boundary-header {
+.hermes-agent-compact-boundary:hover .hermes-agent-compact-boundary-header {
   color: var(--text-normal);
 }
 
-.claude-agent-compact-summary {
+.hermes-agent-compact-summary {
   padding: 4px 8px 2px 20px;
   color: var(--text-faint);
   font-size: 0.75em;
@@ -185,7 +185,7 @@
   white-space: pre-wrap;
 }
 
-.claude-agent-compact-sdk-summary {
+.hermes-agent-compact-sdk-summary {
   padding: 4px 12px;
   margin: 4px 8px;
   border-radius: 6px;
@@ -195,17 +195,17 @@
   overflow-y: auto;
 }
 
-.claude-agent-compact-sdk-summary-content {
+.hermes-agent-compact-sdk-summary-content {
   color: var(--text-muted);
 }
 
 /* Flashcard explain — highlight on scroll-to-existing dedup */
 
-.claude-agent-marker-highlight .claude-agent-fc-bubble {
-  animation: claude-agent-marker-glow 2s ease-out forwards;
+.hermes-agent-marker-highlight .hermes-agent-fc-bubble {
+  animation: hermes-agent-marker-glow 2s ease-out forwards;
 }
 
-@keyframes claude-agent-marker-glow {
+@keyframes hermes-agent-marker-glow {
   0% {
     border-width: 2px;
     border-color: var(--interactive-accent);
@@ -218,11 +218,11 @@
   }
 }
 
-.theme-dark .claude-agent-marker-highlight .claude-agent-fc-bubble {
-  animation: claude-agent-marker-glow-dark 2s ease-out forwards;
+.theme-dark .hermes-agent-marker-highlight .hermes-agent-fc-bubble {
+  animation: hermes-agent-marker-glow-dark 2s ease-out forwards;
 }
 
-@keyframes claude-agent-marker-glow-dark {
+@keyframes hermes-agent-marker-glow-dark {
   0% {
     border-width: 2px;
     border-color: var(--interactive-accent);
@@ -237,7 +237,7 @@
 
 /* Flashcard explain — delta symbol */
 
-.claude-agent-fc-delta {
+.hermes-agent-fc-delta {
   font-weight: 700;
   font-size: 1.1em;
   line-height: 1;
@@ -245,21 +245,21 @@
   flex-shrink: 0;
 }
 
-.theme-dark .claude-agent-fc-delta {
+.theme-dark .hermes-agent-fc-delta {
   color: #42a5f5;
 }
 
-.claude-agent-fc-delta.clickable {
+.hermes-agent-fc-delta.clickable {
   cursor: pointer;
 }
 
-.claude-agent-fc-delta.clickable:hover {
+.hermes-agent-fc-delta.clickable:hover {
   opacity: 0.7;
 }
 
 /* Flashcard explain — card bubble */
 
-.claude-agent-fc-row {
+.hermes-agent-fc-row {
   display: flex;
   flex-direction: column;
   align-self: flex-end;
@@ -267,19 +267,19 @@
   max-width: 85%;
 }
 
-.claude-agent-fc-card-row {
+.hermes-agent-fc-card-row {
   display: flex;
   align-items: center;
   gap: 0;
 }
 
-.claude-agent-fc-bubble-wrap {
+.hermes-agent-fc-bubble-wrap {
   flex: 1;
   min-width: 0;
   margin-left: 1rem;
 }
 
-.claude-agent-fc-bubble {
+.hermes-agent-fc-bubble {
   border-radius: 8px;
   background-color: var(--background-secondary);
   color: var(--text-normal);
@@ -287,33 +287,33 @@
   cursor: pointer;
 }
 
-.claude-agent-fc-bubble:hover {
+.hermes-agent-fc-bubble:hover {
   opacity: 0.85;
 }
 
-.theme-dark .claude-agent-fc-bubble {
+.theme-dark .hermes-agent-fc-bubble {
   border-color: #42a5f5;
 }
 
-.claude-agent-fc-question {
+.hermes-agent-fc-question {
   padding: 10px 14px 8px;
 }
 
-.claude-agent-fc-answer {
+.hermes-agent-fc-answer {
   padding: 8px 14px 10px;
   opacity: 0.75;
   font-size: 0.9em;
   overflow-x: auto;
 }
 
-.claude-agent-fc-divider {
+.hermes-agent-fc-divider {
   height: 1px;
   margin: 0 14px;
   background: currentColor;
   opacity: 0.15;
 }
 
-.claude-agent-fc-raw-prompt {
+.hermes-agent-fc-raw-prompt {
   margin-top: 6px;
   padding: 10px 14px;
   border-radius: 8px;
@@ -324,7 +324,7 @@
 
 /* Tool blocks */
 
-.claude-agent-message.tool_block {
+.hermes-agent-message.tool_block {
   max-width: 100%;
   /* Left padding chosen so the tool icon's left edge aligns with the
      prose-message text column (prose has padding-left: 16px, header has
@@ -336,16 +336,16 @@
   gap: 2px;
 }
 
-.claude-agent-tool-block {
+.hermes-agent-tool-block {
   position: relative;
 }
 
-.claude-agent-tool-block.error > .claude-agent-tool-block-header {
+.hermes-agent-tool-block.error > .hermes-agent-tool-block-header {
   border-left: 2px solid var(--text-error);
   padding-left: 4px;
 }
 
-.claude-agent-tool-block-header {
+.hermes-agent-tool-block-header {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -356,12 +356,12 @@
   transition: background 0.1s;
 }
 
-.claude-agent-tool-block-header:hover {
+.hermes-agent-tool-block-header:hover {
   background: var(--background-modifier-hover);
 }
 
 /* Shared base for both single-call and stacked-group tool icons. */
-.claude-agent-tool-icon {
+.hermes-agent-tool-icon {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -377,36 +377,36 @@
 
 /* Inner span is where setIcon writes the SVG — collapse to its content
    so the outer flex centers on the SVG's actual bounds. */
-.claude-agent-tool-icon > span {
+.hermes-agent-tool-icon > span {
   display: inline-flex;
 }
 
-.claude-agent-tool-icon .svg-icon {
+.hermes-agent-tool-icon .svg-icon {
   width: 15px;
   height: 15px;
   display: block;
   stroke-width: 2.6;
 }
 
-.claude-agent-tool-icon.running {
+.hermes-agent-tool-icon.running {
   background: var(--interactive-accent);
   color: var(--text-on-accent);
   box-shadow: none;
-  animation: claude-agent-pulse 1.2s infinite;
+  animation: hermes-agent-pulse 1.2s infinite;
 }
 
-.claude-agent-tool-icon.error {
+.hermes-agent-tool-icon.error {
   background: var(--text-error);
   color: var(--text-on-accent);
   box-shadow: none;
 }
 
-@keyframes claude-agent-pulse {
+@keyframes hermes-agent-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
 }
 
-.claude-agent-tool-block-mcp-badge {
+.hermes-agent-tool-block-mcp-badge {
   font-size: 0.7em;
   font-weight: 500;
   padding: 1px 5px;
@@ -416,13 +416,13 @@
   flex-shrink: 0;
 }
 
-.claude-agent-tool-block-name {
+.hermes-agent-tool-block-name {
   font-weight: 600;
   color: var(--text-normal);
   white-space: nowrap;
 }
 
-.claude-agent-tool-block-desc {
+.hermes-agent-tool-block-desc {
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -431,7 +431,7 @@
   min-width: 0;
 }
 
-.claude-agent-tool-block-chevron {
+.hermes-agent-tool-block-chevron {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -442,22 +442,22 @@
   transition: transform 0.15s ease-out, opacity 0.1s;
 }
 
-.claude-agent-tool-block-chevron .svg-icon {
+.hermes-agent-tool-block-chevron .svg-icon {
   width: 14px;
   height: 14px;
   stroke-width: 2;
 }
 
-.claude-agent-tool-block-header:hover .claude-agent-tool-block-chevron,
-.claude-agent-tool-group-header:hover .claude-agent-tool-block-chevron {
+.hermes-agent-tool-block-header:hover .hermes-agent-tool-block-chevron,
+.hermes-agent-tool-group-header:hover .hermes-agent-tool-block-chevron {
   opacity: 1;
 }
 
-.claude-agent-tool-block-chevron.expanded {
+.hermes-agent-tool-block-chevron.expanded {
   transform: rotate(90deg);
 }
 
-.claude-agent-tool-block-body {
+.hermes-agent-tool-block-body {
   margin: 2px 6px 4px 32px;
   padding: 6px 8px;
   border-radius: 4px;
@@ -467,7 +467,7 @@
   overflow-y: auto;
 }
 
-.claude-agent-tool-block-label {
+.hermes-agent-tool-block-label {
   display: inline-block;
   font-size: 0.75em;
   font-weight: 600;
@@ -477,11 +477,11 @@
   margin: 4px 0 2px;
 }
 
-.claude-agent-tool-block-label.error {
+.hermes-agent-tool-block-label.error {
   color: var(--text-error);
 }
 
-.claude-agent-tool-block-content {
+.hermes-agent-tool-block-content {
   font-family: var(--font-monospace);
   font-size: 0.92em;
   white-space: pre-wrap;
@@ -492,12 +492,12 @@
   color: var(--text-muted);
 }
 
-.claude-agent-tool-block-content.error {
+.hermes-agent-tool-block-content.error {
   color: var(--text-error);
   background: var(--background-modifier-error);
 }
 
-.claude-agent-tool-block-running {
+.hermes-agent-tool-block-running {
   font-size: 0.85em;
   color: var(--text-faint);
   font-style: italic;
@@ -505,16 +505,16 @@
 
 /* Tool group (collapses consecutive tool calls under one header) */
 
-.claude-agent-tool-group {
+.hermes-agent-tool-group {
   position: relative;
 }
 
-.claude-agent-tool-group.error > .claude-agent-tool-group-header {
+.hermes-agent-tool-group.error > .hermes-agent-tool-group-header {
   border-left: 2px solid var(--text-error);
   padding-left: 4px;
 }
 
-.claude-agent-tool-group-header {
+.hermes-agent-tool-group-header {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -526,19 +526,19 @@
   user-select: none;
 }
 
-.claude-agent-tool-group-header:hover {
+.hermes-agent-tool-group-header:hover {
   background: var(--background-modifier-hover);
 }
 
 /* Stacked tool icons (one per unique tool kind, overlapping w/ rim) */
-.claude-agent-tool-group-icons {
+.hermes-agent-tool-group-icons {
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
   min-width: 0;
 }
 
-.claude-agent-tool-group-detail {
+.hermes-agent-tool-group-detail {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -547,15 +547,15 @@
   color: var(--text-normal);
 }
 
-.claude-agent-tool-group-detail strong {
+.hermes-agent-tool-group-detail strong {
   font-weight: 600;
 }
 
-.claude-agent-tool-group-detail.running {
+.hermes-agent-tool-group-detail.running {
   font-style: italic;
 }
 
-.claude-agent-tool-group-detail.error {
+.hermes-agent-tool-group-detail.error {
   color: var(--text-error);
 }
 
@@ -563,7 +563,7 @@
    transform driven by --stack-index (set inline from React). Disc lives on a
    child element so the rim-cut mask can carve the disc background without
    clipping the SVG glyph above it. */
-.claude-agent-tool-group-icon {
+.hermes-agent-tool-group-icon {
   margin-left: -12px;
   background: transparent;
   /* Transform (compositor) — animating margin here would relay out the
@@ -571,29 +571,29 @@
   transition: transform 0.18s ease-out;
 }
 
-.claude-agent-tool-group-icon:first-child {
+.hermes-agent-tool-group-icon:first-child {
   margin-left: 0;
 }
 
-.claude-agent-tool-group-header:hover .claude-agent-tool-group-icon {
+.hermes-agent-tool-group-header:hover .hermes-agent-tool-group-icon {
   transform: translateX(calc(var(--stack-index, 0) * 6px));
   /* Promote only while spreading — keeps idle stacks off their own layers. */
   will-change: transform;
 }
 
-.claude-agent-tool-group-header:hover .claude-agent-tool-group-detail,
-.claude-agent-tool-group-header:hover .claude-agent-tool-group-graph-toggle,
-.claude-agent-tool-group-header:hover > .claude-agent-tool-block-chevron {
+.hermes-agent-tool-group-header:hover .hermes-agent-tool-group-detail,
+.hermes-agent-tool-group-header:hover .hermes-agent-tool-group-graph-toggle,
+.hermes-agent-tool-group-header:hover > .hermes-agent-tool-block-chevron {
   transform: translateX(var(--icon-spread, 0));
 }
 
-.claude-agent-tool-group-detail,
-.claude-agent-tool-group-graph-toggle,
-.claude-agent-tool-group-header > .claude-agent-tool-block-chevron {
+.hermes-agent-tool-group-detail,
+.hermes-agent-tool-group-graph-toggle,
+.hermes-agent-tool-group-header > .hermes-agent-tool-block-chevron {
   transition: transform 0.18s ease-out;
 }
 
-.claude-agent-tool-group-icon-disc {
+.hermes-agent-tool-group-icon-disc {
   position: absolute;
   inset: 0;
   /* Paint with the actual chat canvas surface: this disc is an overlap
@@ -609,7 +609,7 @@
   pointer-events: none;
 }
 
-.claude-agent-tool-group-icon-glyph {
+.hermes-agent-tool-group-icon-glyph {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -620,28 +620,28 @@
 
 /* Once hover spreads the icons apart, no overlap needs cutting. Let the row's
    semi-transparent hover surface paint through every disc, including latest. */
-.claude-agent-tool-group-header:hover .claude-agent-tool-group-icon .claude-agent-tool-group-icon-disc {
+.hermes-agent-tool-group-header:hover .hermes-agent-tool-group-icon .hermes-agent-tool-group-icon-disc {
   background: transparent;
 }
 
-.claude-agent-tool-group-icon.latest {
+.hermes-agent-tool-group-icon.latest {
   color: var(--interactive-accent);
   z-index: 1;
 }
 
-.claude-agent-tool-group-icon.latest .claude-agent-tool-group-icon-disc {
+.hermes-agent-tool-group-icon.latest .hermes-agent-tool-group-icon-disc {
   background: var(--hermes-agent-chat-background);
 }
 
-.claude-agent-tool-group-icon.latest .claude-agent-tool-group-icon-glyph {
-  animation: claude-agent-pulse 1.2s infinite;
+.hermes-agent-tool-group-icon.latest .hermes-agent-tool-group-icon-glyph {
+  animation: hermes-agent-pulse 1.2s infinite;
 }
 
-.claude-agent-tool-group.error .claude-agent-tool-group-icon.latest {
+.hermes-agent-tool-group.error .hermes-agent-tool-group-icon.latest {
   color: var(--text-error);
 }
 
-.claude-agent-tool-group-body {
+.hermes-agent-tool-group-body {
   padding: 10px 0 6px 10px;
   display: flex;
   flex-direction: column;
@@ -651,13 +651,13 @@
 /* Children inside a group render as an activity-log stream: smaller
    disc-less glyph colored by status, distinct from the parent header's
    heavier accent-disc style. */
-.claude-agent-tool-group-body .claude-agent-tool-block-header {
+.hermes-agent-tool-group-body .hermes-agent-tool-block-header {
   font-size: 0.92em;
 }
 
-.claude-agent-tool-group-body .claude-agent-tool-icon,
-.claude-agent-tool-group-body .claude-agent-tool-icon.running,
-.claude-agent-tool-group-body .claude-agent-tool-icon.error {
+.hermes-agent-tool-group-body .hermes-agent-tool-icon,
+.hermes-agent-tool-group-body .hermes-agent-tool-icon.running,
+.hermes-agent-tool-group-body .hermes-agent-tool-icon.error {
   width: 16px;
   height: 16px;
   background: transparent;
@@ -666,16 +666,16 @@
   animation: none;
 }
 
-.claude-agent-tool-group-body .claude-agent-tool-icon.running {
+.hermes-agent-tool-group-body .hermes-agent-tool-icon.running {
   color: var(--interactive-accent);
-  animation: claude-agent-pulse 1.2s infinite;
+  animation: hermes-agent-pulse 1.2s infinite;
 }
 
-.claude-agent-tool-group-body .claude-agent-tool-icon.error {
+.hermes-agent-tool-group-body .hermes-agent-tool-icon.error {
   color: var(--text-error);
 }
 
-.claude-agent-tool-group-body .claude-agent-tool-icon .svg-icon {
+.hermes-agent-tool-group-body .hermes-agent-tool-icon .svg-icon {
   width: 14px;
   height: 14px;
   stroke-width: 2.4;
@@ -683,18 +683,18 @@
 
 /* Group children no longer need the per-block error stripe — the
    status-tinted icon already signals the failure. */
-.claude-agent-tool-group-body .claude-agent-tool-block.error > .claude-agent-tool-block-header {
+.hermes-agent-tool-group-body .hermes-agent-tool-block.error > .hermes-agent-tool-block-header {
   border-left: none;
   padding-left: 6px;
 }
 
-.claude-agent-tool-group-body .claude-agent-tool-block-body {
+.hermes-agent-tool-group-body .hermes-agent-tool-block-body {
   margin-left: 22px;
 }
 
 /* Loading indicator */
 
-.claude-agent-loading {
+.hermes-agent-loading {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -702,28 +702,28 @@
   color: var(--text-muted);
 }
 
-.claude-agent-loading-dots {
+.hermes-agent-loading-dots {
   display: flex;
   gap: 4px;
 }
 
-.claude-agent-loading-dot {
+.hermes-agent-loading-dot {
   width: 6px;
   height: 6px;
   background-color: var(--text-muted);
   border-radius: 50%;
-  animation: claude-agent-bounce 1.4s infinite ease-in-out both;
+  animation: hermes-agent-bounce 1.4s infinite ease-in-out both;
 }
 
-.claude-agent-loading-dot:nth-child(1) {
+.hermes-agent-loading-dot:nth-child(1) {
   animation-delay: -0.32s;
 }
 
-.claude-agent-loading-dot:nth-child(2) {
+.hermes-agent-loading-dot:nth-child(2) {
   animation-delay: -0.16s;
 }
 
-@keyframes claude-agent-bounce {
+@keyframes hermes-agent-bounce {
   0%, 80%, 100% {
     transform: scale(0);
   }

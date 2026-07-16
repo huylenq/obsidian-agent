@@ -1,6 +1,6 @@
 /* Relevant notes section, cards, badges, standalone view */
 
-.claude-agent-resize-handle {
+.hermes-agent-resize-handle {
   height: 6px;
   background: transparent;
   cursor: row-resize;
@@ -8,7 +8,7 @@
   position: relative;
 }
 
-.claude-agent-resize-handle::after {
+.hermes-agent-resize-handle::after {
   content: "";
   position: absolute;
   left: 50%;
@@ -22,12 +22,12 @@
   transition: opacity 0.15s, background-color 0.15s;
 }
 
-.claude-agent-resize-handle:hover::after {
+.hermes-agent-resize-handle:hover::after {
   opacity: 1;
   background-color: var(--interactive-accent);
 }
 
-.claude-agent-relevant-notes {
+.hermes-agent-relevant-notes {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -35,7 +35,7 @@
   /* height is set inline: auto when collapsed, user-defined when expanded */
 }
 
-.claude-agent-relevant-notes-header {
+.hermes-agent-relevant-notes-header {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -47,56 +47,56 @@
   color: var(--text-muted);
 }
 
-.claude-agent-relevant-notes-header:hover {
+.hermes-agent-relevant-notes-header:hover {
   background-color: var(--background-secondary);
 }
 
-.claude-agent-relevant-notes-chevron {
+.hermes-agent-relevant-notes-chevron {
   display: flex;
   align-items: center;
   color: var(--text-muted);
 }
 
-.claude-agent-relevant-notes-chevron svg {
+.hermes-agent-relevant-notes-chevron svg {
   width: 14px;
   height: 14px;
 }
 
-.claude-agent-relevant-notes-count {
+.hermes-agent-relevant-notes-count {
   background-color: var(--background-modifier-border);
   padding: 2px 6px;
   border-radius: 10px;
   font-size: 11px;
 }
 
-.claude-agent-relevant-notes-content {
+.hermes-agent-relevant-notes-content {
   flex: 1;
   overflow-y: auto;
   padding: 0 16px 12px;
   transition: opacity 0.15s ease-out;
 }
 
-.claude-agent-relevant-notes-content.searching {
+.hermes-agent-relevant-notes-content.searching {
   opacity: 0.5;
   pointer-events: none;
 }
 
-.claude-agent-relevant-notes-empty,
-.claude-agent-relevant-notes-loading,
-.claude-agent-relevant-notes-error {
+.hermes-agent-relevant-notes-empty,
+.hermes-agent-relevant-notes-loading,
+.hermes-agent-relevant-notes-error {
   padding: 12px;
   text-align: center;
   color: var(--text-muted);
   font-size: 12px;
 }
 
-.claude-agent-relevant-notes-error {
+.hermes-agent-relevant-notes-error {
   color: var(--text-error);
 }
 
 /* Mode toggle buttons */
 
-.claude-agent-relevant-notes-mode-toggle {
+.hermes-agent-relevant-notes-mode-toggle {
   margin-left: auto;
   display: flex;
   gap: 2px;
@@ -105,7 +105,7 @@
   padding: 2px;
 }
 
-.claude-agent-relevant-notes-mode-toggle button {
+.hermes-agent-relevant-notes-mode-toggle button {
   padding: 4px 6px;
   border: none;
   border-radius: 4px;
@@ -116,23 +116,23 @@
   align-items: center;
 }
 
-.claude-agent-relevant-notes-mode-toggle button svg {
+.hermes-agent-relevant-notes-mode-toggle button svg {
   width: 14px;
   height: 14px;
 }
 
-.claude-agent-relevant-notes-mode-toggle button:hover {
+.hermes-agent-relevant-notes-mode-toggle button:hover {
   color: var(--text-normal);
 }
 
-.claude-agent-relevant-notes-mode-toggle button.active {
+.hermes-agent-relevant-notes-mode-toggle button.active {
   background-color: var(--interactive-accent);
   color: var(--text-on-accent);
 }
 
 /* Refresh button */
 
-.claude-agent-relevant-notes-refresh {
+.hermes-agent-relevant-notes-refresh {
   padding: 4px;
   border: none;
   border-radius: 4px;
@@ -143,28 +143,28 @@
   align-items: center;
 }
 
-.claude-agent-relevant-notes-refresh svg {
+.hermes-agent-relevant-notes-refresh svg {
   width: 14px;
   height: 14px;
 }
 
-.claude-agent-relevant-notes-refresh:hover {
+.hermes-agent-relevant-notes-refresh:hover {
   color: var(--text-normal);
   background-color: var(--background-modifier-hover);
 }
 
-.claude-agent-relevant-notes-refresh:disabled {
+.hermes-agent-relevant-notes-refresh:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.claude-agent-relevant-notes-refresh.spinning {
+.hermes-agent-relevant-notes-refresh.spinning {
   animation: spin 1s linear infinite;
 }
 
 /* Icon spans */
 
-.claude-agent-icon {
+.hermes-agent-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -172,7 +172,7 @@
   min-height: 14px;
 }
 
-.claude-agent-icon svg {
+.hermes-agent-icon svg {
   width: 14px;
   height: 14px;
 }
@@ -188,7 +188,7 @@
 
 /* Note card */
 
-.claude-agent-relevant-note-card {
+.hermes-agent-relevant-note-card {
   position: relative;
   padding: 8px 10px 8px 14px;
   margin-bottom: 6px;
@@ -196,7 +196,7 @@
   border-radius: 6px;
 }
 
-.claude-agent-relevant-note-card::before {
+.hermes-agent-relevant-note-card::before {
   content: "";
   position: absolute;
   left: 4px;
@@ -207,34 +207,34 @@
   background-color: var(--background-modifier-border);
 }
 
-.claude-agent-relevant-note-card:last-child {
+.hermes-agent-relevant-note-card:last-child {
   margin-bottom: 0;
 }
 
-.claude-agent-relevant-note-card.high::before {
+.hermes-agent-relevant-note-card.high::before {
   background-color: var(--color-green);
 }
 
-.claude-agent-relevant-note-card.medium::before {
+.hermes-agent-relevant-note-card.medium::before {
   background-color: var(--color-orange);
 }
 
-.claude-agent-relevant-note-card.low::before {
+.hermes-agent-relevant-note-card.low::before {
   background-color: var(--text-muted);
 }
 
-.claude-agent-relevant-note-card:hover {
+.hermes-agent-relevant-note-card:hover {
   background-color: var(--background-modifier-hover);
 }
 
-.claude-agent-relevant-note-header {
+.hermes-agent-relevant-note-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
 
-.claude-agent-relevant-note-title {
+.hermes-agent-relevant-note-title {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-normal);
@@ -245,54 +245,54 @@
   flex: 1;
 }
 
-.claude-agent-relevant-note-title:hover {
+.hermes-agent-relevant-note-title:hover {
   color: var(--text-accent);
   text-decoration: underline;
 }
 
-.claude-agent-relevant-note-actions {
+.hermes-agent-relevant-note-actions {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
 }
 
-.claude-agent-relevant-note-link-badge {
+.hermes-agent-relevant-note-link-badge {
   display: flex;
   align-items: center;
   color: var(--text-muted);
 }
 
-.claude-agent-relevant-note-link-badge svg {
+.hermes-agent-relevant-note-link-badge svg {
   width: 12px;
   height: 12px;
 }
 
 /* Similarity badges */
 
-.claude-agent-similarity-badge {
+.hermes-agent-similarity-badge {
   font-size: 10px;
   padding: 2px 6px;
   border-radius: 4px;
   font-weight: 600;
 }
 
-.claude-agent-similarity-badge.high {
+.hermes-agent-similarity-badge.high {
   background-color: rgba(0, 200, 83, 0.2);
   color: var(--color-green);
 }
 
-.claude-agent-similarity-badge.medium {
+.hermes-agent-similarity-badge.medium {
   background-color: rgba(255, 193, 7, 0.2);
   color: var(--color-orange);
 }
 
-.claude-agent-similarity-badge.low {
+.hermes-agent-similarity-badge.low {
   background-color: rgba(158, 158, 158, 0.2);
   color: var(--text-muted);
 }
 
-.claude-agent-relevant-note-preview {
+.hermes-agent-relevant-note-preview {
   font-size: 11px;
   color: var(--text-muted);
   line-height: 1.3;
@@ -304,7 +304,7 @@
 
 /* Add to chat buttons */
 
-.claude-agent-add-to-chat-button {
+.hermes-agent-add-to-chat-button {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -317,18 +317,18 @@
   cursor: pointer;
 }
 
-.claude-agent-add-to-chat-button svg {
+.hermes-agent-add-to-chat-button svg {
   width: 12px;
   height: 12px;
 }
 
-.claude-agent-add-to-chat-button:hover {
+.hermes-agent-add-to-chat-button:hover {
   background-color: var(--interactive-accent);
   border-color: var(--interactive-accent);
   color: var(--text-on-accent);
 }
 
-.claude-agent-add-to-chat-icon {
+.hermes-agent-add-to-chat-icon {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -342,33 +342,33 @@
   cursor: pointer;
 }
 
-.claude-agent-add-to-chat-icon svg {
+.hermes-agent-add-to-chat-icon svg {
   width: 14px;
   height: 14px;
 }
 
-.claude-agent-add-to-chat-icon:hover {
+.hermes-agent-add-to-chat-icon:hover {
   background-color: var(--interactive-accent);
   color: var(--text-on-accent);
 }
 
 /* Standalone relevant notes view */
 
-.claude-agent-relevant-notes-view {
+.hermes-agent-relevant-notes-view {
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
 }
 
-.claude-agent-relevant-notes-standalone {
+.hermes-agent-relevant-notes-standalone {
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
 }
 
-.claude-agent-relevant-notes-toolbar {
+.hermes-agent-relevant-notes-toolbar {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -376,14 +376,14 @@
   border-bottom: 1px solid var(--background-modifier-border);
 }
 
-.claude-agent-relevant-notes-list {
+.hermes-agent-relevant-notes-list {
   flex: 1;
   overflow-y: auto;
   padding: 8px 12px;
   transition: opacity 0.15s ease-out;
 }
 
-.claude-agent-relevant-notes-list.searching {
+.hermes-agent-relevant-notes-list.searching {
   opacity: 0.5;
   pointer-events: none;
 }

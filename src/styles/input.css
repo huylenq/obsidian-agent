@@ -1,6 +1,6 @@
 /* Input area, textarea, send button, model select, notes checkbox */
 
-.claude-agent-input-area {
+.hermes-agent-input-area {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -11,15 +11,15 @@
 
 /* Mobile: add bottom padding to clear Obsidian's bottom navigation bar (main leaf only, not sidebar).
    Remove padding when input is focused (keyboard visible, nav bar hidden). */
-.is-mobile .mod-root .claude-agent-input-area {
+.is-mobile .mod-root .hermes-agent-input-area {
   padding-bottom: 84px;
 }
 
-.is-mobile .mod-root .claude-agent-input-area:focus-within {
+.is-mobile .mod-root .hermes-agent-input-area:focus-within {
   padding-bottom: 4px;
 }
 
-.claude-agent-input-container {
+.hermes-agent-input-container {
   display: flex;
   padding: 12px 16px;
   gap: 8px;
@@ -28,17 +28,17 @@
 }
 
 /* Override input container padding when inside input-area */
-.claude-agent-input-area .claude-agent-input-container {
+.hermes-agent-input-area .hermes-agent-input-container {
   padding: 0;
   border-top: none;
 }
 
-.claude-agent-input-wrapper {
+.hermes-agent-input-wrapper {
   position: relative;
   width: 100%;
 }
 
-textarea.claude-agent-input {
+textarea.hermes-agent-input {
   flex: 1;
   padding: 10px 14px;
   border: 1px solid var(--background-modifier-border);
@@ -51,19 +51,19 @@ textarea.claude-agent-input {
   max-height: 200px;
 }
 
-.claude-agent-input:focus {
+.hermes-agent-input:focus {
   outline: none;
   border-color: var(--interactive-accent);
 }
 
-.claude-agent-send-button.clickable-icon[disabled] {
+.hermes-agent-send-button.clickable-icon[disabled] {
   opacity: 0.3;
   cursor: not-allowed;
 }
 
 /* Interrupt button — replaces send button when streaming */
 
-.claude-agent-interrupt-button.clickable-icon {
+.hermes-agent-interrupt-button.clickable-icon {
   color: var(--text-error);
   font-size: 14px;
   line-height: 1;
@@ -71,13 +71,13 @@ textarea.claude-agent-input {
 
 /* Footer controls */
 
-.claude-agent-input-footer {
+.hermes-agent-input-footer {
   display: flex;
   align-items: center;
   justify-content: flex-start;
 }
 
-.claude-agent-model-select {
+.hermes-agent-model-select {
   padding: 2px 4px;
   font-size: 11px;
   border: none;
@@ -91,21 +91,21 @@ textarea.claude-agent-input {
   box-shadow: none;
 }
 
-.claude-agent-model-select:focus {
+.hermes-agent-model-select:focus {
   outline: none;
   box-shadow: none;
 }
 
-.claude-agent-model-select:hover {
+.hermes-agent-model-select:hover {
   background-color: var(--background-secondary);
 }
 
-.claude-agent-model-select:disabled {
+.hermes-agent-model-select:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.claude-agent-include-notes-toggle {
+.hermes-agent-include-notes-toggle {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -117,39 +117,39 @@ textarea.claude-agent-input {
   user-select: none;
 }
 
-.claude-agent-include-notes-toggle.active {
+.hermes-agent-include-notes-toggle.active {
   color: var(--text-normal);
   opacity: 1;
 }
 
-.claude-agent-include-notes-toggle:hover {
+.hermes-agent-include-notes-toggle:hover {
   text-decoration: underline;
 }
 
-.claude-agent-include-notes-check {
+.hermes-agent-include-notes-check {
   display: flex;
   align-items: center;
 }
 
-.claude-agent-include-notes-check svg {
+.hermes-agent-include-notes-check svg {
   width: 12px;
   height: 12px;
 }
 
-.claude-agent-model-icon {
+.hermes-agent-model-icon {
   display: flex;
   align-items: center;
   color: var(--text-faint);
 }
 
-.claude-agent-model-icon svg {
+.hermes-agent-model-icon svg {
   width: 12px;
   height: 12px;
 }
 
 /* Connection status indicator */
 
-.claude-agent-connection-status {
+.hermes-agent-connection-status {
   display: flex;
   align-items: center;
   margin-left: auto;
@@ -157,44 +157,44 @@ textarea.claude-agent-input {
   cursor: default;
 }
 
-.claude-agent-connection-dot {
+.hermes-agent-connection-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
-.claude-agent-connection-status.connected .claude-agent-connection-dot {
+.hermes-agent-connection-status.connected .hermes-agent-connection-dot {
   background-color: var(--text-success, #4caf50);
 }
 
-.claude-agent-connection-status.connecting .claude-agent-connection-dot {
+.hermes-agent-connection-status.connecting .hermes-agent-connection-dot {
   background-color: var(--text-warning, #ff9800);
-  animation: claude-agent-pulse 1.2s infinite;
+  animation: hermes-agent-pulse 1.2s infinite;
 }
 
-.claude-agent-connection-status.error .claude-agent-connection-dot {
+.hermes-agent-connection-status.error .hermes-agent-connection-dot {
   background-color: var(--text-error, #f44336);
 }
 
-.claude-agent-connection-status.disconnected .claude-agent-connection-dot {
+.hermes-agent-connection-status.disconnected .hermes-agent-connection-dot {
   background-color: var(--text-faint);
 }
 
 /* Image preview strip (above textarea when images are attached) */
 
-.claude-agent-image-previews {
+.hermes-agent-image-previews {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
   padding: 4px 0;
 }
 
-.claude-agent-image-preview {
+.hermes-agent-image-preview {
   position: relative;
 }
 
-.claude-agent-image-preview img {
+.hermes-agent-image-preview img {
   width: 48px;
   height: 48px;
   object-fit: cover;
@@ -202,7 +202,7 @@ textarea.claude-agent-input {
   border: 1px solid var(--background-modifier-border);
 }
 
-.claude-agent-image-preview-remove {
+.hermes-agent-image-preview-remove {
   position: absolute;
   top: -4px;
   right: -4px;
@@ -221,19 +221,19 @@ textarea.claude-agent-input {
   padding: 0;
 }
 
-.claude-agent-image-preview-remove:hover {
+.hermes-agent-image-preview-remove:hover {
   opacity: 0.85;
 }
 
 /* Attach button (paperclip icon in footer row) */
 
-.claude-agent-attach-button.clickable-icon {
+.hermes-agent-attach-button.clickable-icon {
   display: flex;
   align-items: center;
   color: var(--text-faint);
 }
 
-.claude-agent-attach-button.clickable-icon svg {
+.hermes-agent-attach-button.clickable-icon svg {
   width: 12px;
   height: 12px;
 }

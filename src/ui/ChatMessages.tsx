@@ -83,25 +83,25 @@ function CompactBoundary({
   const sdkSummary = meta?.sdkSummary;
 
   return (
-    <div className="claude-agent-compact-boundary" onClick={onToggle}>
-      <div className="claude-agent-compact-boundary-line" />
-      <div className="claude-agent-compact-boundary-header">
-        <span className={`claude-agent-compact-chevron ${isCollapsed ? "" : "expanded"}`}>
+    <div className="hermes-agent-compact-boundary" onClick={onToggle}>
+      <div className="hermes-agent-compact-boundary-line" />
+      <div className="hermes-agent-compact-boundary-header">
+        <span className={`hermes-agent-compact-chevron ${isCollapsed ? "" : "expanded"}`}>
           &#9656;
         </span>
-        <span className="claude-agent-compact-label">
+        <span className="hermes-agent-compact-label">
           {messageCount} messages compacted ({tokenLabel} tokens)
         </span>
       </div>
       {summary && (
-        <div className="claude-agent-compact-summary">{summary}</div>
+        <div className="hermes-agent-compact-summary">{summary}</div>
       )}
       {sdkSummary && (
-        <div className="claude-agent-compact-sdk-summary" onClick={(e) => e.stopPropagation()}>
-          <MarkdownContent content={sdkSummary} className="claude-agent-compact-sdk-summary-content" />
+        <div className="hermes-agent-compact-sdk-summary" onClick={(e) => e.stopPropagation()}>
+          <MarkdownContent content={sdkSummary} className="hermes-agent-compact-sdk-summary-content" />
         </div>
       )}
-      <div className="claude-agent-compact-boundary-line" />
+      <div className="hermes-agent-compact-boundary-line" />
     </div>
   );
 }
@@ -155,32 +155,32 @@ function FlashcardBubble({ fc, rawContent, flashcardId, canNavigate, onNavigate 
 
   return (
     <div
-      className="claude-agent-fc-row"
+      className="hermes-agent-fc-row"
       data-flashcard-id={flashcardId}
     >
-      <div className="claude-agent-fc-card-row">
+      <div className="hermes-agent-fc-card-row">
         <span
-          className={`claude-agent-fc-delta ${canNavigate ? "clickable" : ""}`}
+          className={`hermes-agent-fc-delta ${canNavigate ? "clickable" : ""}`}
           onClick={canNavigate ? onNavigate : undefined}
           title={canNavigate ? "Go to flashcard" : undefined}
         >
           {"\u0394"}
         </span>
-        <div className="claude-agent-fc-bubble-wrap">
+        <div className="hermes-agent-fc-bubble-wrap">
           <div
-            className="claude-agent-fc-bubble"
+            className="hermes-agent-fc-bubble"
             onClick={() => setShowPrompt(p => !p)}
             title="Click to reveal prompt"
           >
-            <MarkdownContent content={fc.question} className="claude-agent-fc-question" />
-            <div className="claude-agent-fc-divider" />
-            <MarkdownContent content={fc.answer} className="claude-agent-fc-answer" />
+            <MarkdownContent content={fc.question} className="hermes-agent-fc-question" />
+            <div className="hermes-agent-fc-divider" />
+            <MarkdownContent content={fc.answer} className="hermes-agent-fc-answer" />
           </div>
         </div>
       </div>
       {showPrompt && (
-        <div className="claude-agent-fc-raw-prompt">
-          <MarkdownContent content={rawContent} className="claude-agent-message-content" />
+        <div className="hermes-agent-fc-raw-prompt">
+          <MarkdownContent content={rawContent} className="hermes-agent-message-content" />
         </div>
       )}
     </div>
@@ -190,7 +190,7 @@ function FlashcardBubble({ fc, rawContent, flashcardId, canNavigate, onNavigate 
 function MessageBubble({ message, markerMetadata }: { message: ChatMessage; markerMetadata?: { flashcardId?: string; sourceFile?: string; question?: string } }) {
   if (message.role === "tool_block" && message.toolBlocks) {
     return (
-      <div className="claude-agent-message tool_block">
+      <div className="hermes-agent-message tool_block">
         <ToolGroup blocks={message.toolBlocks} />
       </div>
     );
@@ -238,42 +238,42 @@ function MessageBubble({ message, markerMetadata }: { message: ChatMessage; mark
 
   return (
     <div
-      className={`claude-agent-message ${message.role} ${message.toolName ? "tool-call" : ""}`}
+      className={`hermes-agent-message ${message.role} ${message.toolName ? "tool-call" : ""}`}
     >
       {message.images && message.images.length > 0 && (
-        <div className="claude-agent-message-images">
+        <div className="hermes-agent-message-images">
           {message.images.map((img, i) => (
             <img
               key={i}
               src={`data:${img.mediaType};base64,${img.data}`}
-              className="claude-agent-message-image"
+              className="hermes-agent-message-image"
               alt={img.name || "attached image"}
             />
           ))}
         </div>
       )}
       {sel && (
-        <div className="claude-agent-selection-block">
-          <div className="claude-agent-selection-block-header">
+        <div className="hermes-agent-selection-block">
+          <div className="hermes-agent-selection-block-header">
             <span ref={selIconRef} />
             <span>{selLabel}</span>
           </div>
           {sel.text && (
-            <div className="claude-agent-selection-block-text">
+            <div className="hermes-agent-selection-block-text">
               {truncateSelectionPreview(sel.text)}
             </div>
           )}
         </div>
       )}
       {message.toolName && (
-        <div className="claude-agent-tool-label">
+        <div className="hermes-agent-tool-label">
           {message.toolName}
         </div>
       )}
       {message.content && (
         <MarkdownContent
           content={message.content}
-          className="claude-agent-message-content"
+          className="hermes-agent-message-content"
         />
       )}
     </div>
@@ -341,10 +341,10 @@ export function ChatMessages({ pendingScrollFlashcardId, onScrollComplete }: Cha
 
     const target = elements[elements.length - 1];
     target.scrollIntoView({ behavior: "smooth", block: "center" });
-    target.classList.add("claude-agent-marker-highlight");
-    const bubble = target.querySelector(".claude-agent-fc-bubble");
+    target.classList.add("hermes-agent-marker-highlight");
+    const bubble = target.querySelector(".hermes-agent-fc-bubble");
     (bubble ?? target).addEventListener("animationend", () => {
-      target.classList.remove("claude-agent-marker-highlight");
+      target.classList.remove("hermes-agent-marker-highlight");
     }, { once: true });
     onScrollComplete?.();
   }, [messages, pendingScrollFlashcardId]);
@@ -358,15 +358,15 @@ export function ChatMessages({ pendingScrollFlashcardId, onScrollComplete }: Cha
 
   if (messages.length === 0 && !streamingMessage && !isLoading) {
     return (
-      <div className="claude-agent-empty-state">
+      <div className="hermes-agent-empty-state">
         <h3>Chat with your vault</h3>
-        <p>Ask questions about your notes and Claude will search and answer based on your knowledge base.</p>
+        <p>Ask questions about your notes and Hermes will search and answer based on your knowledge base.</p>
       </div>
     );
   }
 
   return (
-    <div className="claude-agent-messages" ref={containerRef}>
+    <div className="hermes-agent-messages" ref={containerRef}>
       {groups.map((group, groupIndex) => {
         const isCompact = !!group.boundary;
         const isCollapsed = isCompact && !expandedGroups.has(groupIndex);
@@ -396,29 +396,29 @@ export function ChatMessages({ pendingScrollFlashcardId, onScrollComplete }: Cha
 
       {/* Streaming message */}
       {streamingMessage && (
-        <div className="claude-agent-message assistant">
+        <div className="hermes-agent-message assistant">
           <MarkdownContent
             content={streamingMessage}
-            className="claude-agent-message-content"
+            className="hermes-agent-message-content"
           />
         </div>
       )}
 
       {/* Loading indicator */}
       {isLoading && !streamingMessage && (
-        <div className="claude-agent-loading">
-          <div className="claude-agent-loading-dots">
-            <div className="claude-agent-loading-dot"></div>
-            <div className="claude-agent-loading-dot"></div>
-            <div className="claude-agent-loading-dot"></div>
+        <div className="hermes-agent-loading">
+          <div className="hermes-agent-loading-dots">
+            <div className="hermes-agent-loading-dot"></div>
+            <div className="hermes-agent-loading-dot"></div>
+            <div className="hermes-agent-loading-dot"></div>
           </div>
-          <span>Claude is thinking...</span>
+          <span>Lulu is thinking...</span>
         </div>
       )}
 
       {/* Error message */}
       {error && (
-        <div className="claude-agent-message error">
+        <div className="hermes-agent-message error">
           <strong>Error:</strong> {error}
         </div>
       )}

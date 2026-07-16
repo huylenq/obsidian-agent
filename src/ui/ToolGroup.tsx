@@ -116,12 +116,12 @@ function StackedIcon({ icon, cutLeft, isLatest, stackIndex }: StackedIconProps) 
     : undefined;
   return (
     <span
-      className={`claude-agent-tool-icon claude-agent-tool-group-icon ${isLatest ? "latest" : ""}`}
+      className={`hermes-agent-tool-icon hermes-agent-tool-group-icon ${isLatest ? "latest" : ""}`}
       title={icon.label}
       style={{ ["--stack-index" as string]: stackIndex }}
     >
-      <span className="claude-agent-tool-group-icon-disc" style={discStyle} />
-      <span ref={glyphRef} className="claude-agent-tool-group-icon-glyph" />
+      <span className="hermes-agent-tool-group-icon-disc" style={discStyle} />
+      <span ref={glyphRef} className="hermes-agent-tool-group-icon-glyph" />
     </span>
   );
 }
@@ -207,7 +207,7 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
     const isAnchor = filePath != null && firstItemKeyByPath.get(filePath) === item.key;
     const anchorName = isAnchor && filePath ? pathAnchors.get(filePath) : undefined;
     return (
-      <div key={item.key} className="claude-agent-tool-group-row">
+      <div key={item.key} className="hermes-agent-tool-group-row">
         {item.kind === "single"
           ? <ToolCallBlock block={item.block} inGroup anchorName={anchorName} />
           : <MergedFileBlock blocks={item.blocks} inGroup anchorName={anchorName} />}
@@ -216,15 +216,15 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
   };
 
   return (
-    <div className={`claude-agent-tool-group ${status} ${expanded ? "expanded" : ""}`}>
+    <div className={`hermes-agent-tool-group ${status} ${expanded ? "expanded" : ""}`}>
       <div
-        className="claude-agent-tool-group-header"
+        className="hermes-agent-tool-group-header"
         onClick={() => setOverride(!expanded)}
         role="button"
         aria-expanded={expanded}
         style={{ ["--icon-spread" as string]: `${(icons.length - 1) * 6}px` }}
       >
-        <span className="claude-agent-tool-group-icons">
+        <span className="hermes-agent-tool-group-icons">
           {icons.map((ic, i) => (
             <StackedIcon
               key={ic.key}
@@ -235,7 +235,7 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
             />
           ))}
         </span>
-        <span className={`claude-agent-tool-group-detail ${status}`}>
+        <span className={`hermes-agent-tool-group-detail ${status}`}>
           {caption.map((p, i) => p.bold
             ? <strong key={i}>{p.text}</strong>
             : <React.Fragment key={i}>{p.text}</React.Fragment>)}
@@ -244,7 +244,7 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
           <button
             ref={graphToggleRef}
             type="button"
-            className={`claude-agent-tool-group-graph-toggle ${showGraph ? "active" : ""}`}
+            className={`hermes-agent-tool-group-graph-toggle ${showGraph ? "active" : ""}`}
             onClick={(e) => {
               e.stopPropagation();
               if (!showGraph && !expanded) setOverride(true);
@@ -257,7 +257,7 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
         )}
         <span
           ref={chevronRef}
-          className={`claude-agent-tool-block-chevron ${expanded ? "expanded" : ""}`}
+          className={`hermes-agent-tool-block-chevron ${expanded ? "expanded" : ""}`}
         />
       </div>
       {expanded && (
@@ -266,8 +266,8 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
               arc SVGs. The SVGs are siblings of the body so they share its
               coordinate space; pills inside the body publish anchor-names that
               the SVGs reference via anchor() inset functions. */}
-          <div className={`claude-agent-tool-group-arc-layout ${showArcs ? "with-arcs" : ""}`}>
-            <div className="claude-agent-tool-group-body">
+          <div className={`hermes-agent-tool-group-arc-layout ${showArcs ? "with-arcs" : ""}`}>
+            <div className="hermes-agent-tool-group-body">
               {groupedItems.map(renderItem)}
             </div>
             {showArcs && (
@@ -275,7 +275,7 @@ export function ToolGroup({ blocks }: ToolGroupProps) {
             )}
           </div>
           {showGraph && showArcs && (
-            <div className="claude-agent-tool-group-graph">
+            <div className="hermes-agent-tool-group-graph">
               <TouchedGraphPanel paths={vaultPaths} runningPath={runningPath} />
             </div>
           )}

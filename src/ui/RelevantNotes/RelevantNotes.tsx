@@ -80,13 +80,13 @@ export function RelevantNotes({
 
   if (!indexAvailable) {
     return (
-      <div className="claude-agent-relevant-notes">
-        <div className="claude-agent-relevant-notes-header">
-          <span ref={chevronRef} className="claude-agent-relevant-notes-chevron" />
+      <div className="hermes-agent-relevant-notes">
+        <div className="hermes-agent-relevant-notes-header">
+          <span ref={chevronRef} className="hermes-agent-relevant-notes-chevron" />
           <span>Relevant Notes</span>
         </div>
-        <div className="claude-agent-relevant-notes-empty">
-          Index not available. Make sure the server is running and OPENAI_API_KEY is set.
+        <div className="hermes-agent-relevant-notes-empty">
+          Index not available. Make sure the Hermes bridge is running and OPENAI_API_KEY is set.
         </div>
       </div>
     );
@@ -94,22 +94,22 @@ export function RelevantNotes({
 
   return (
     <div
-      className="claude-agent-relevant-notes"
+      className="hermes-agent-relevant-notes"
       style={{ height: isExpanded ? height : "auto" }}
     >
       <div
-        className="claude-agent-relevant-notes-header"
+        className="hermes-agent-relevant-notes-header"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <span ref={chevronRef} className="claude-agent-relevant-notes-chevron" />
+        <span ref={chevronRef} className="hermes-agent-relevant-notes-chevron" />
         <span>Relevant Notes</span>
         {notes.length > 0 && (
-          <span className="claude-agent-relevant-notes-count">{notes.length}</span>
+          <span className="hermes-agent-relevant-notes-count">{notes.length}</span>
         )}
 
         {/* Mode toggle - stop propagation to prevent collapse */}
         <div
-          className="claude-agent-relevant-notes-mode-toggle"
+          className="hermes-agent-relevant-notes-mode-toggle"
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -137,7 +137,7 @@ export function RelevantNotes({
 
         {/* Refresh button */}
         <button
-          className={`claude-agent-relevant-notes-refresh ${isSearching ? "spinning" : ""}`}
+          className={`hermes-agent-relevant-notes-refresh ${isSearching ? "spinning" : ""}`}
           onClick={(e) => {
             e.stopPropagation();
             onRefresh();
@@ -155,14 +155,14 @@ export function RelevantNotes({
 
       {isExpanded && (
         <>
-          <div className={`claude-agent-relevant-notes-content ${isSearching ? "searching" : ""}`}>
+          <div className={`hermes-agent-relevant-notes-content ${isSearching ? "searching" : ""}`}>
             {error && (
-              <div className="claude-agent-relevant-notes-error">{error}</div>
+              <div className="hermes-agent-relevant-notes-error">{error}</div>
             )}
 
             {/* Show empty state only when not searching and no notes */}
             {!isSearching && notes.length === 0 && !error && (
-              <div className="claude-agent-relevant-notes-empty">
+              <div className="hermes-agent-relevant-notes-empty">
                 No relevant notes found
               </div>
             )}

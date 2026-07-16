@@ -9,7 +9,7 @@ export const versionCommand: SlashCommand = {
     const version = context.plugin.manifest.version;
     return {
       success: true,
-      message: `Claude Agent v${version}`,
+      message: `Hermes Agent v${version}`,
     };
   },
 };

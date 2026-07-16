@@ -24,7 +24,7 @@ export function GraphTooltip({ node, edges, x, y }: GraphTooltipProps) {
 
   return (
     <div
-      className={`claude-agent-graph-tooltip${node ? " visible" : ""}`}
+      className={`hermes-agent-graph-tooltip${node ? " visible" : ""}`}
       style={{
         left: x + 12,
         top: y - 10,
@@ -32,16 +32,16 @@ export function GraphTooltip({ node, edges, x, y }: GraphTooltipProps) {
     >
       {node && (
         <>
-          <div className="claude-agent-graph-tooltip-title">{node.title}</div>
-          <div className="claude-agent-graph-tooltip-path">{node.id}</div>
-          <div className="claude-agent-graph-tooltip-meta">
+          <div className="hermes-agent-graph-tooltip-title">{node.title}</div>
+          <div className="hermes-agent-graph-tooltip-path">{node.id}</div>
+          <div className="hermes-agent-graph-tooltip-meta">
             <span>Depth: {node.depth}</span>
             {simEdge && <span>Similarity: {simEdge.weight.toFixed(2)}</span>}
-            {node.inVectorIndex && <span className="claude-agent-graph-tooltip-indexed">Indexed</span>}
-            {node.isPinned && <span className="claude-agent-graph-tooltip-pinned">Pinned</span>}
+            {node.inVectorIndex && <span className="hermes-agent-graph-tooltip-indexed">Indexed</span>}
+            {node.isPinned && <span className="hermes-agent-graph-tooltip-pinned">Pinned</span>}
           </div>
           {node.isPinned && node.pinnedConfig && (
-            <div className="claude-agent-graph-tooltip-meta">
+            <div className="hermes-agent-graph-tooltip-meta">
               {node.pinnedConfig.linkDepth != null && <span>Local depth: {node.pinnedConfig.linkDepth}</span>}
               {node.pinnedConfig.similarityThreshold != null && <span>Local sim: {node.pinnedConfig.similarityThreshold.toFixed(2)}</span>}
             </div>

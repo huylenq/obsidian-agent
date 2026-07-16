@@ -2,21 +2,21 @@
 
 /* Standalone sessions view */
 
-.claude-agent-sessions-view {
+.hermes-agent-sessions-view {
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
 }
 
-.claude-agent-sessions-standalone {
+.hermes-agent-sessions-standalone {
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
 }
 
-.claude-agent-sessions-toolbar {
+.hermes-agent-sessions-toolbar {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -24,33 +24,33 @@
   border-bottom: 1px solid var(--background-modifier-border);
 }
 
-.claude-agent-sessions-list {
+.hermes-agent-sessions-list {
   flex: 1;
   overflow-y: auto;
   padding: 8px 12px;
   transition: opacity 0.15s ease-out;
 }
 
-.claude-agent-sessions-list.loading {
+.hermes-agent-sessions-list.loading {
   opacity: 0.5;
   pointer-events: none;
 }
 
-.claude-agent-sessions-empty,
-.claude-agent-sessions-error {
+.hermes-agent-sessions-empty,
+.hermes-agent-sessions-error {
   padding: 12px;
   text-align: center;
   color: var(--text-muted);
   font-size: 12px;
 }
 
-.claude-agent-sessions-error {
+.hermes-agent-sessions-error {
   color: var(--text-error);
 }
 
 /* Mode toggle */
 
-.claude-agent-sessions-mode-toggle {
+.hermes-agent-sessions-mode-toggle {
   display: flex;
   gap: 2px;
   background-color: var(--background-secondary);
@@ -58,7 +58,7 @@
   padding: 2px;
 }
 
-.claude-agent-sessions-mode-toggle button {
+.hermes-agent-sessions-mode-toggle button {
   padding: 4px 6px;
   border: none;
   border-radius: 4px;
@@ -69,33 +69,33 @@
   align-items: center;
 }
 
-.claude-agent-sessions-mode-toggle button svg {
+.hermes-agent-sessions-mode-toggle button svg {
   width: 14px;
   height: 14px;
 }
 
-.claude-agent-sessions-mode-toggle button:hover {
+.hermes-agent-sessions-mode-toggle button:hover {
   color: var(--text-normal);
 }
 
-.claude-agent-sessions-mode-toggle button.active {
+.hermes-agent-sessions-mode-toggle button.active {
   background-color: var(--interactive-accent);
   color: var(--text-on-accent);
 }
 
 /* Toolbar clickable-icons — push refresh to the right */
 
-.claude-agent-sessions-toolbar .clickable-icon:last-child {
+.hermes-agent-sessions-toolbar .clickable-icon:last-child {
   margin-left: auto;
 }
 
-.claude-agent-sessions-toolbar .clickable-icon.spinning {
+.hermes-agent-sessions-toolbar .clickable-icon.spinning {
   animation: spin 1s linear infinite;
 }
 
 /* Session card */
 
-.claude-agent-session-card {
+.hermes-agent-session-card {
   padding: 8px 10px;
   margin-bottom: 6px;
   background-color: var(--background-secondary);
@@ -103,26 +103,26 @@
   border-left: 3px solid transparent;
 }
 
-.claude-agent-session-card:last-child {
+.hermes-agent-session-card:last-child {
   margin-bottom: 0;
 }
 
-.claude-agent-session-card.active {
+.hermes-agent-session-card.active {
   border-left-color: var(--interactive-accent);
   background-color: var(--background-secondary-alt);
 }
 
-.claude-agent-session-card:hover {
+.hermes-agent-session-card:hover {
   background-color: var(--background-modifier-hover);
 }
 
-.claude-agent-session-card-header {
+.hermes-agent-session-card-header {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.claude-agent-session-status-dot {
+.hermes-agent-session-status-dot {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -137,19 +137,19 @@
   flex-shrink: 0;
 }
 
-.claude-agent-session-status-dot.in-progress {
+.hermes-agent-session-status-dot.in-progress {
   color: var(--color-green);
 }
 
-.claude-agent-session-status-dot.done {
+.hermes-agent-session-status-dot.done {
   color: var(--text-muted);
 }
 
-.claude-agent-session-status-dot:hover {
+.hermes-agent-session-status-dot:hover {
   background-color: var(--background-modifier-hover);
 }
 
-.claude-agent-session-card-title {
+.hermes-agent-session-card-title {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-normal);
@@ -160,7 +160,7 @@
   flex: 1;
 }
 
-.claude-agent-session-type-icon {
+.hermes-agent-session-type-icon {
   display: inline-flex;
   align-items: center;
   margin-right: 4px;
@@ -168,29 +168,29 @@
   flex-shrink: 0;
 }
 
-.claude-agent-session-type-icon svg {
+.hermes-agent-session-type-icon svg {
   width: 14px;
   height: 14px;
 }
 
-.claude-agent-session-card-title:hover {
+.hermes-agent-session-card-title:hover {
   color: var(--text-accent);
   text-decoration: underline;
 }
 
-.claude-agent-session-card-meta {
+.hermes-agent-session-card-meta {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
 }
 
-.claude-agent-session-card-date {
+.hermes-agent-session-card-date {
   font-size: 11px;
   color: var(--text-muted);
 }
 
-.claude-agent-session-card-model {
+.hermes-agent-session-card-model {
   font-size: 10px;
   padding: 1px 5px;
   border-radius: 4px;
@@ -200,23 +200,23 @@
   text-transform: lowercase;
 }
 
-.claude-agent-session-delete {
+.hermes-agent-session-delete {
   opacity: 0;
   color: var(--text-muted);
   transition: opacity 0.15s, color 0.15s;
 }
 
-.claude-agent-session-card:hover .claude-agent-session-delete {
+.hermes-agent-session-card:hover .hermes-agent-session-delete {
   opacity: 1;
 }
 
-.claude-agent-session-delete:hover {
+.hermes-agent-session-delete:hover {
   color: var(--text-error);
 }
 
 /* File chips on session cards */
 
-.claude-agent-session-card-files {
+.hermes-agent-session-card-files {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -224,7 +224,7 @@
   padding-left: 24px;
 }
 
-.claude-agent-session-file-chip {
+.hermes-agent-session-file-chip {
   font-size: 10px;
   padding: 1px 6px;
   border-radius: 4px;
@@ -238,7 +238,7 @@
 
 /* Chat header — session title and done button */
 
-.claude-agent-session-title {
+.hermes-agent-session-title {
   font-size: 11px;
   color: var(--text-muted);
   cursor: default;
@@ -248,11 +248,11 @@
   max-width: 200px;
 }
 
-.claude-agent-session-title:hover {
+.hermes-agent-session-title:hover {
   color: var(--text-normal);
 }
 
-.claude-agent-done-button:disabled {
+.hermes-agent-done-button:disabled {
   opacity: 0.3;
   cursor: not-allowed;
 }

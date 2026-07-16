@@ -1,5 +1,5 @@
 import { atom, createStore } from "jotai";
-import { ChatMessage, ClaudeModel } from "@/types";
+import { ChatMessage, HermesModel } from "@/types";
 
 // Create a dedicated store for the chat state
 export const chatStore = createStore();
@@ -8,7 +8,7 @@ export const chatStore = createStore();
 export const messagesAtom = atom<ChatMessage[]>([]);
 
 // Model atom (for keyboard shortcut sync)
-export const modelAtom = atom<ClaudeModel>("haiku");
+export const modelAtom = atom<HermesModel>("hermes");
 
 // Loading state atom
 export const isLoadingAtom = atom<boolean>(false);
@@ -19,7 +19,7 @@ export const streamingMessageAtom = atom<string>("");
 // Error message atom
 export const errorAtom = atom<string | null>(null);
 
-// Streaming state — true when a query is active and can accept injected messages
+// Streaming state — true when a chat turn is active and can accept steering messages
 export const isStreamingAtom = atom<boolean>(false);
 
 export function setStreaming(streaming: boolean): void {

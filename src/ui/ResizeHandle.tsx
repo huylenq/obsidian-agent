@@ -45,7 +45,7 @@ export function ResizeHandle({ onResize, onResizeEnd }: ResizeHandleProps) {
 
   return (
     <div
-      className="claude-agent-resize-handle"
+      className="hermes-agent-resize-handle"
       onMouseDown={handleMouseDown}
     />
   );

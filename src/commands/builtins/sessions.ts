@@ -1,5 +1,6 @@
 import { SlashCommand } from "../types";
 import { setSessionsMode } from "@/state/sessionState";
+import { AGENT_EVENTS } from "@/events";
 
 export const sessionsCommand: SlashCommand = {
   name: "sessions",
@@ -10,7 +11,7 @@ export const sessionsCommand: SlashCommand = {
     setSessionsMode("all");
     // Open the sessions view in the sidebar
     await context.plugin.activateSessionsView();
-    window.dispatchEvent(new CustomEvent("claude-agent:refresh-sessions"));
+    window.dispatchEvent(new CustomEvent(AGENT_EVENTS.refreshSessions));
 
     return {
       success: true,

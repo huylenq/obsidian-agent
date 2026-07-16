@@ -51,7 +51,7 @@ const jsContext = await esbuild.context({
   format: "cjs",
   target: "es2020",
   logLevel: "info",
-  sourcemap: prod ? false : "inline",
+  sourcemap: "inline", // for convenient sake
   treeShaking: true,
   outfile: "dist/main.js",
   define: {

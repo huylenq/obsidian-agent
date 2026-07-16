@@ -1,7 +1,6 @@
 import { readFileSync, existsSync, writeFileSync, renameSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
-import { homedir } from "os";
-import { encodePath } from "./transcript.js";
+import { getProjectDir } from "./storage.js";
 import { logError } from "./log.js";
 
 /**
@@ -10,7 +9,7 @@ import { logError } from "./log.js";
  * or modified (Edit) during the session. Distinct from RelevantNotes which
  * is similarity-based.
  *
- * File layout: ~/.claude/projects/{encoded-path}/{sessionId}.touched.json
+ * File layout: ~/.hermes/obsidian-agent/projects/{encoded-path}/{sessionId}.touched.json
  *
  * @typedef {Object} TouchedEntry
  * @property {string} path     - Vault-relative or absolute file path (whatever
@@ -30,7 +29,7 @@ const CURRENT_VERSION = 1;
 
 /** Resolve the sidecar path for a session. */
 export function getTouchedPath(sessionId, workingDirectory) {
-  return join(homedir(), ".claude", "projects", encodePath(workingDirectory), `${sessionId}.touched.json`);
+  return join(getProjectDir(workingDirectory), `${sessionId}.touched.json`);
 }
 
 /**

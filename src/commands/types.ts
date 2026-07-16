@@ -1,8 +1,8 @@
 import { App } from "obsidian";
-import type ClaudeAgentPlugin from "@/main";
+import type HermesAgentPlugin from "@/main";
 
 export interface CommandContext {
-  plugin: ClaudeAgentPlugin;
+  plugin: HermesAgentPlugin;
   app: App;
   clearMessages: () => void;
 }

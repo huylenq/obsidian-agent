@@ -1,15 +1,23 @@
 import { Notice, Platform, Plugin, TFile, WorkspaceLeaf, requestUrl } from "obsidian";
-import { ClaudeAgentSettings, DEFAULT_SETTINGS, DEFAULT_GRAPH_VIEW_SETTINGS } from "./types";
-import { ClaudeAgentSettingTab } from "./settings";
-import { ClaudeAgentChatView, CHAT_VIEW_TYPE } from "./ui/ChatView";
+import { HermesAgentSettings, DEFAULT_SETTINGS, DEFAULT_GRAPH_VIEW_SETTINGS } from "./types";
+import { HermesAgentSettingTab } from "./settings";
+import { HermesAgentChatView, CHAT_VIEW_TYPE } from "./ui/ChatView";
 import { RelevantNotesView, RELEVANT_NOTES_VIEW_TYPE } from "./ui/RelevantNotesView";
 import { SessionsView, SESSIONS_VIEW_TYPE } from "./ui/SessionsView";
 import { GraphView, GRAPH_VIEW_TYPE } from "./ui/GraphView";
-import { ClaudeAgentClient } from "./claude/client";
+import { HermesAgentClient } from "./hermes/client";
 import { AgentIndexClient, rankNotes } from "./embeddings";
 import type { IndexStatus } from "./embeddings/AgentIndexClient";
 import type { RankedNote } from "./types";
 import { setConnectionStatus, setConnectionError } from "./state/connectionState";
+import { AGENT_EVENTS } from "./events";
+import {
+  LEGACY_COMMAND_IDS,
+  LEGACY_CONNECTION_FILE,
+  LEGACY_EVENTS,
+  LEGACY_SETTING_KEYS,
+  LEGACY_VIEW_TYPES,
+} from "./legacy";
 
 // Node.js imports - only available on desktop.
 // These are external in esbuild, so `require()` is emitted as-is in the bundle.
@@ -26,7 +34,7 @@ try {
   // Expected on mobile — Node.js builtins unavailable
 }
 
-const PROXY_PORT = 27181;
+const BRIDGE_PORT = 27182;
 
 interface ConnectionConfig {
   url: string;
@@ -39,34 +47,34 @@ interface ConnectionFile {
   timestamp: number;
 }
 
-const CONNECTION_FILE = "claude-agent-connection.json";
+const CONNECTION_FILE = "hermes-agent-connection.json";
 
 /**
  * Get connection URL and auth token based on settings and platform
  */
-function getConnectionConfig(settings: ClaudeAgentSettings, isMobile: boolean): ConnectionConfig {
+function getConnectionConfig(settings: HermesAgentSettings, isMobile: boolean): ConnectionConfig {
   if (isMobile) {
-    if (!settings.remoteServerUrl) {
+    if (!settings.remoteBridgeUrl) {
       throw new Error("No connection file found and no remote URL configured. Run scripts/start-mobile-server.sh on your Mac, or set remote URL manually in settings.");
     }
-    return { url: settings.remoteServerUrl, authToken: settings.remoteAuthToken || undefined };
+    return { url: settings.remoteBridgeUrl, authToken: settings.remoteAuthToken || undefined };
   }
   if (settings.connectionMode === "remote") {
-    if (!settings.remoteServerUrl) {
-      throw new Error("Remote mode requires server URL — configure it in settings");
+    if (!settings.remoteBridgeUrl) {
+      throw new Error("Remote mode requires a bridge URL — configure it in settings");
     }
-    return { url: settings.remoteServerUrl, authToken: settings.remoteAuthToken || undefined };
+    return { url: settings.remoteBridgeUrl, authToken: settings.remoteAuthToken || undefined };
   }
-  return { url: `http://localhost:${PROXY_PORT}`, authToken: settings.remoteAuthToken || undefined };
+  return { url: `http://localhost:${BRIDGE_PORT}`, authToken: settings.remoteAuthToken || undefined };
 }
 
-export default class ClaudeAgentPlugin extends Plugin {
-  settings: ClaudeAgentSettings = DEFAULT_SETTINGS;
-  claudeClient: ClaudeAgentClient | null = null;
+export default class HermesAgentPlugin extends Plugin {
+  settings: HermesAgentSettings = DEFAULT_SETTINGS;
+  hermesClient: HermesAgentClient | null = null;
   vectorStore: AgentIndexClient | null = null;
   /** The resolved connection URL (may come from auto-discovery or settings) */
-  activeConnectionUrl: string | null = null;
-  private serverProcess: import("child_process").ChildProcess | null = null;
+  activeBridgeUrl: string | null = null;
+  private bridgeProcess: import("child_process").ChildProcess | null = null;
   private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
   private indexStatusBar: HTMLElement | null = null;
   private indexPollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -81,7 +89,7 @@ export default class ClaudeAgentPlugin extends Plugin {
   initializationPromise: Promise<void> | null = null;
 
   async onload(): Promise<void> {
-    console.log("Loading Claude Agent plugin...");
+    console.log("Loading Hermes Agent plugin...");
 
     // Load settings
     await this.loadSettings();
@@ -91,30 +99,42 @@ export default class ClaudeAgentPlugin extends Plugin {
     // initializationPromise is assigned, causing "client not initialized" errors.
     this.initializationPromise = this.initializeClient();
 
-    // Init vector store after client is ready (needs proxyUrl)
+    // Init vector store after the bridge is ready.
     this.initializationPromise.then(() => this.initVectorStore());
 
     // Register the chat view
-    this.registerView(CHAT_VIEW_TYPE, (leaf) => new ClaudeAgentChatView(leaf, this));
+    this.registerView(CHAT_VIEW_TYPE, (leaf) => new HermesAgentChatView(leaf, this));
+    this.registerView(LEGACY_VIEW_TYPES.chat, (leaf) =>
+      new HermesAgentChatView(leaf, this, LEGACY_VIEW_TYPES.chat)
+    );
 
     // Register the relevant notes view
     this.registerView(RELEVANT_NOTES_VIEW_TYPE, (leaf) => new RelevantNotesView(leaf, this));
+    this.registerView(LEGACY_VIEW_TYPES.relevantNotes, (leaf) =>
+      new RelevantNotesView(leaf, this, LEGACY_VIEW_TYPES.relevantNotes)
+    );
 
     // Register the sessions view
     this.registerView(SESSIONS_VIEW_TYPE, (leaf) => new SessionsView(leaf, this));
+    this.registerView(LEGACY_VIEW_TYPES.sessions, (leaf) =>
+      new SessionsView(leaf, this, LEGACY_VIEW_TYPES.sessions)
+    );
 
     // Register the semantic graph view
     this.registerView(GRAPH_VIEW_TYPE, (leaf) => new GraphView(leaf, this));
+    this.registerView(LEGACY_VIEW_TYPES.graph, (leaf) =>
+      new GraphView(leaf, this, LEGACY_VIEW_TYPES.graph)
+    );
 
     // Add ribbon icon
-    this.addRibbonIcon("message-circle", "Open Claude Agent", () => {
+    this.addRibbonIcon("message-circle", "Open Hermes Agent", () => {
       this.activateChatView();
     });
 
     // Add command to open chat
     this.addCommand({
-      id: "open-claude-agent-chat",
-      name: "Open Claude Agent Chat",
+      id: LEGACY_COMMAND_IDS.openChat,
+      name: "Open Hermes Agent Chat",
       callback: () => {
         this.activateChatView();
       },
@@ -149,14 +169,14 @@ export default class ClaudeAgentPlugin extends Plugin {
 
     // Add command to start new chat (clears session for fresh conversation)
     this.addCommand({
-      id: "new-claude-agent-chat",
+      id: LEGACY_COMMAND_IDS.newChat,
       name: "New Chat",
       callback: async () => {
         const { clearMessages } = await import("./state/chatState");
         clearMessages();
         // Also clear the session so next message starts fresh
-        if (this.claudeClient) {
-          this.claudeClient.clearSession();
+        if (this.hermesClient) {
+          this.hermesClient.clearSession();
         }
         this.sentFlashcardPrompts.clear();
         this.pendingFlashcardEpoch = null;
@@ -169,7 +189,7 @@ export default class ClaudeAgentPlugin extends Plugin {
       id: "open-model-selector",
       name: "Open Model Selector",
       callback: () => {
-        window.dispatchEvent(new CustomEvent("claude-agent:open-model-selector"));
+        window.dispatchEvent(new CustomEvent(AGENT_EVENTS.openModelSelector));
       },
     });
 
@@ -178,7 +198,7 @@ export default class ClaudeAgentPlugin extends Plugin {
       id: "show-version",
       name: "Show Version",
       callback: () => {
-        new Notice(`Claude Agent v${this.manifest.version}`);
+        new Notice(`Hermes Agent v${this.manifest.version}`);
       },
     });
 
@@ -188,7 +208,7 @@ export default class ClaudeAgentPlugin extends Plugin {
       name: "Open Session Switcher",
       callback: () => {
         this.activateChatView().then(() => {
-          window.dispatchEvent(new CustomEvent("claude-agent:open-session-switcher"));
+          window.dispatchEvent(new CustomEvent(AGENT_EVENTS.openSessionSwitcher));
         });
       },
     });
@@ -200,7 +220,7 @@ export default class ClaudeAgentPlugin extends Plugin {
     });
 
     this.indexStatusBar = this.addStatusBarItem();
-    this.indexStatusBar.addClass("claude-agent-index-status");
+    this.indexStatusBar.addClass("hermes-agent-index-status");
     this.indexStatusBar.style.cursor = "pointer";
     this.indexStatusBar.style.display = "none";
     this.indexStatusBar.onclick = () => this.rebuildSemanticIndex();
@@ -215,7 +235,7 @@ export default class ClaudeAgentPlugin extends Plugin {
 
       // Concurrency guard — prevent rapid-fire duplicate handling
       if (this.isHandlingFlashcard) {
-        console.log("[ClaudeAgent] Ignoring flashcard request — already handling one");
+        console.log("[HermesAgent] Ignoring flashcard request — already handling one");
         return;
       }
       this.isHandlingFlashcard = true;
@@ -240,11 +260,11 @@ export default class ClaudeAgentPlugin extends Plugin {
 
           // Resolve or prepare daily flashcard session
           let targetSessionId: string | null = null;
-          if (this.claudeClient) {
+          if (this.hermesClient) {
             targetSessionId = await this.resolveFlashcardSession(epoch);
           }
 
-          const currentSessionId = this.claudeClient?.getSessionId() ?? null;
+          const currentSessionId = this.hermesClient?.getSessionId() ?? null;
           console.log("[FC-dedup] targetSession:", targetSessionId, "| currentSession:", currentSessionId);
 
           // Helper: switch to target session if not already viewing it
@@ -253,17 +273,17 @@ export default class ClaudeAgentPlugin extends Plugin {
               console.log("[FC-dedup] switching session:", currentSessionId, "→", targetSessionId);
               const switchDone = new Promise<void>(resolve => {
                 const handler = () => {
-                  window.removeEventListener('claude-agent:switch-session-done', handler);
+                  window.removeEventListener(AGENT_EVENTS.switchSessionDone, handler);
                   resolve();
                 };
-                window.addEventListener('claude-agent:switch-session-done', handler);
+                window.addEventListener(AGENT_EVENTS.switchSessionDone, handler);
                 // Safety timeout in case the event never fires
                 setTimeout(() => {
-                  window.removeEventListener('claude-agent:switch-session-done', handler);
+                  window.removeEventListener(AGENT_EVENTS.switchSessionDone, handler);
                   resolve();
                 }, 3000);
               });
-              window.dispatchEvent(new CustomEvent('claude-agent:switch-session', {
+              window.dispatchEvent(new CustomEvent(AGENT_EVENTS.switchSession, {
                 detail: { sessionId: targetSessionId },
               }));
               await switchDone;
@@ -272,13 +292,13 @@ export default class ClaudeAgentPlugin extends Plugin {
 
           // Dedup layer 1: marker-based (works across plugin reloads)
           if (targetSessionId && cardId) {
-            const markers = await this.claudeClient!.fetchMarkers(targetSessionId);
+            const markers = await this.hermesClient!.fetchMarkers(targetSessionId);
             const existing = markers.find(m => m.flashcardId === cardId);
             console.log("[FC-dedup] marker check:", markers.length, "markers,", "match:", !!existing);
             if (existing) {
               console.log("[FC-dedup] ✓ DEDUP via markers — scrolling to existing");
               await ensureTargetSession();
-              window.dispatchEvent(new CustomEvent('claude-agent:scroll-to-flashcard', {
+              window.dispatchEvent(new CustomEvent(AGENT_EVENTS.scrollToFlashcard, {
                 detail: { flashcardId: cardId },
               }));
               return;
@@ -294,7 +314,7 @@ export default class ClaudeAgentPlugin extends Plugin {
             await ensureTargetSession();
             if (cardId) {
               console.log("[FC-dedup] ✓ DEDUP via content — scrolling to cardId:", cardId);
-              window.dispatchEvent(new CustomEvent('claude-agent:scroll-to-flashcard', {
+              window.dispatchEvent(new CustomEvent(AGENT_EVENTS.scrollToFlashcard, {
                 detail: { flashcardId: cardId },
               }));
             } else {
@@ -309,8 +329,8 @@ export default class ClaudeAgentPlugin extends Plugin {
             await ensureTargetSession();
           } else {
             // Clear session so SDK creates a new one
-            if (this.claudeClient) {
-              this.claudeClient.clearSession();
+            if (this.hermesClient) {
+              this.hermesClient.clearSession();
               const { clearMessages } = await import("./state/chatState");
               clearMessages();
             }
@@ -334,7 +354,7 @@ export default class ClaudeAgentPlugin extends Plugin {
           this.pendingFlashcardEpoch = epoch;
           console.log("[FC-dedup] added to sentPrompts, new size:", this.sentFlashcardPrompts.size);
 
-          window.dispatchEvent(new CustomEvent('claude-agent:send-message', {
+          window.dispatchEvent(new CustomEvent(AGENT_EVENTS.sendMessage, {
             detail: {
               message: prompt,
               flashcardMeta: sourceFile ? { cardId: cardId || '', sourceFile, question: decodedQuestion } : undefined,
@@ -347,31 +367,33 @@ export default class ClaudeAgentPlugin extends Plugin {
         }
       });
     };
-    window.addEventListener('claude-agent:explain-flashcard', handleExplainFlashcard as EventListener);
-    this.register(() => window.removeEventListener('claude-agent:explain-flashcard', handleExplainFlashcard as EventListener));
+    for (const eventName of [AGENT_EVENTS.explainFlashcard, LEGACY_EVENTS.explainFlashcard]) {
+      window.addEventListener(eventName, handleExplainFlashcard as EventListener);
+      this.register(() => window.removeEventListener(eventName, handleExplainFlashcard as EventListener));
+    }
 
     // Listen for view relocation requests (from toggle button in ChatView)
     const handleRelocateView = (event: CustomEvent<{ location: "sidebar" | "tab" }>) => {
       this.relocateChatView(event.detail.location);
     };
-    window.addEventListener('claude-agent:relocate-view', handleRelocateView as EventListener);
-    this.register(() => window.removeEventListener('claude-agent:relocate-view', handleRelocateView as EventListener));
+    window.addEventListener(AGENT_EVENTS.relocateView, handleRelocateView as EventListener);
+    this.register(() => window.removeEventListener(AGENT_EVENTS.relocateView, handleRelocateView as EventListener));
 
     // Add settings tab
-    this.addSettingTab(new ClaudeAgentSettingTab(this.app, this));
+    this.addSettingTab(new HermesAgentSettingTab(this.app, this));
 
-    console.log("Claude Agent plugin loaded");
+    console.log("Hermes Agent plugin loaded");
   }
 
   private async initVectorStore(): Promise<void> {
-    if (!this.claudeClient) return;
+    if (!this.hermesClient) return;
     const client = new AgentIndexClient(
-      this.claudeClient.proxyUrl,
-      this.claudeClient.authToken
+      this.hermesClient.bridgeUrl,
+      this.hermesClient.authToken
     );
     if (await client.initialize()) {
       this.vectorStore = client;
-      console.log("[ClaudeAgent] Vector store initialized for flashcard enrichment");
+      console.log("[HermesAgent] Vector store initialized for flashcard enrichment");
     }
   }
 
@@ -414,7 +436,7 @@ export default class ClaudeAgentPlugin extends Plugin {
             }
           }
           if (inSection) {
-            const fcMatch = line.match(ClaudeAgentPlugin.FLASHCARD_LINE_RE);
+            const fcMatch = line.match(HermesAgentPlugin.FLASHCARD_LINE_RE);
             if (fcMatch) {
               const q = fcMatch[4].trim();
               const a = fcMatch[7].trim();
@@ -429,7 +451,7 @@ export default class ClaudeAgentPlugin extends Plugin {
       }
     }
 
-    console.log("[ClaudeAgent] Flashcard context:", fcRelevantNotes.length, "relevant notes,", siblingCards.length, "sibling cards");
+    console.log("[HermesAgent] Flashcard context:", fcRelevantNotes.length, "relevant notes,", siblingCards.length, "sibling cards");
     return { relevantNotes: fcRelevantNotes, siblingCards };
   }
 
@@ -438,20 +460,20 @@ export default class ClaudeAgentPlugin extends Plugin {
    * Returns the session ID if found, null otherwise.
    *
    * Handles TOCTOU race: the registry is only updated with type/epoch in the
-   * `finally` block of POST /chat. If a second explain arrives before the first
+   * bridge chat completion. If a second explain arrives before the first
    * chat completes, the registry query returns nothing. We fall back to the
    * current session if we recently dispatched a flashcard request for this epoch.
    */
   private async resolveFlashcardSession(epoch: string): Promise<string | null> {
-    if (!this.claudeClient) return null;
+    if (!this.hermesClient) return null;
 
-    // Check server registry first (authoritative once updated)
-    const sessions = await this.claudeClient.fetchSessionsByType("flashcard_study", epoch);
+    // Check the bridge registry first (authoritative once updated)
+    const sessions = await this.hermesClient.fetchSessionsByType("flashcard_study", epoch);
     if (sessions.length > 0) return sessions[0].id;
 
     // Fallback: registry not yet updated — use current session if we dispatched
     // a flashcard request for this same epoch
-    const currentId = this.claudeClient.getSessionId();
+    const currentId = this.hermesClient.getSessionId();
     if (currentId && this.pendingFlashcardEpoch === epoch) {
       console.log("[FC-resolve] registry miss, using pending session:", currentId);
       return currentId;
@@ -502,7 +524,7 @@ export default class ClaudeAgentPlugin extends Plugin {
       .trim();
 
     for (let i = 0; i < lines.length; i++) {
-      const match = lines[i].match(ClaudeAgentPlugin.FLASHCARD_LINE_RE);
+      const match = lines[i].match(HermesAgentPlugin.FLASHCARD_LINE_RE);
       if (!match) continue;
 
       const question = match[4].replace(/[^\w\s]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -519,20 +541,21 @@ export default class ClaudeAgentPlugin extends Plugin {
   }
 
   async onunload(): Promise<void> {
-    console.log("Unloading Claude Agent plugin...");
+    console.log("Unloading Hermes Agent plugin...");
     if (this.healthCheckInterval) {
       clearInterval(this.healthCheckInterval);
       this.healthCheckInterval = null;
     }
     if (this.indexPollTimer) clearTimeout(this.indexPollTimer);
     if (this.indexIdleHideTimer) clearTimeout(this.indexIdleHideTimer);
-    this.claudeClient = null;
-    this.stopServer();
+    this.hermesClient?.dispose();
+    this.hermesClient = null;
+    this.stopBridge();
   }
 
   async rebuildSemanticIndex(): Promise<void> {
     if (!this.vectorStore) {
-      new Notice("Claude Agent not connected");
+      new Notice("Hermes Agent not connected");
       return;
     }
     const ok = await this.vectorStore.reload();
@@ -550,13 +573,13 @@ export default class ClaudeAgentPlugin extends Plugin {
       clearTimeout(this.indexPollTimer);
       this.indexPollTimer = null;
     }
-    if (!this.claudeClient || !this.indexStatusBar) return;
+    if (!this.hermesClient || !this.indexStatusBar) return;
     let status: IndexStatus | null = null;
     try {
       const res = await requestUrl({
-        url: `${this.claudeClient.proxyUrl}/index/status`,
-        headers: this.claudeClient.authToken
-          ? { Authorization: `Bearer ${this.claudeClient.authToken}` }
+        url: `${this.hermesClient.bridgeUrl}/index/status`,
+        headers: this.hermesClient.authToken
+          ? { Authorization: `Bearer ${this.hermesClient.authToken}` }
           : {},
       });
       status = res.json as IndexStatus;
@@ -600,28 +623,28 @@ export default class ClaudeAgentPlugin extends Plugin {
   }
 
   /**
-   * Start the proxy server as a child process
+   * Start the Hermes bridge as a child process
    */
-  private startServer(): void {
+  private startBridge(): void {
     if (Platform.isMobile) {
-      console.warn("[ClaudeAgent] Cannot start server on mobile platform");
+      console.warn("[HermesAgent] Cannot start the Hermes bridge on mobile");
       return;
     }
 
-    if (this.serverProcess) {
-      console.log("[ClaudeAgent] Server already running");
+    if (this.bridgeProcess) {
+      console.log("[HermesAgent] Bridge already running");
       return;
     }
 
     const vaultPath = (this.app.vault.adapter as any).basePath;
     const pluginDir = path!.join(vaultPath, ".obsidian", "plugins", this.manifest.id);
-    const serverDir = path!.join(pluginDir, "server");
+    const bridgeDir = path!.join(pluginDir, "server");
 
-    console.log(`[ClaudeAgent] Starting proxy server from ${serverDir}`);
+    console.log(`[HermesAgent] Starting Hermes bridge from ${bridgeDir}`);
 
     // Use shell to inherit PATH for finding node (macOS GUI apps have minimal PATH)
-    this.serverProcess = spawn!("node", ["index.js"], {
-      cwd: serverDir,
+    this.bridgeProcess = spawn!("node", ["index.js"], {
+      cwd: bridgeDir,
       stdio: ["ignore", "pipe", "pipe"],
       detached: false,
       shell: true,
@@ -629,77 +652,64 @@ export default class ClaudeAgentPlugin extends Plugin {
         ...process.env,
         // Ensure common node install locations are in PATH
         PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ""}`,
-        PORT: String(PROXY_PORT),
+        PORT: String(BRIDGE_PORT),
         ...(this.settings.remoteAuthToken ? { AUTH_TOKEN: this.settings.remoteAuthToken } : {}),
         ...(this.settings.openaiApiKey ? { OPENAI_API_KEY: this.settings.openaiApiKey } : {}),
       },
     });
 
-    this.serverProcess.stdout?.on("data", (data: Buffer) => {
-      console.log(`[ClaudeAgent Server] ${data.toString().trim()}`);
+    this.bridgeProcess.stdout?.on("data", (data: Buffer) => {
+      console.log(`[HermesAgent Bridge] ${data.toString().trim()}`);
     });
 
-    this.serverProcess.stderr?.on("data", (data: Buffer) => {
-      console.error(`[ClaudeAgent Server Error] ${data.toString().trim()}`);
+    this.bridgeProcess.stderr?.on("data", (data: Buffer) => {
+      console.error(`[HermesAgent Bridge Error] ${data.toString().trim()}`);
     });
 
-    this.serverProcess.on("error", (err: Error) => {
-      console.error("[ClaudeAgent] Failed to start server:", err);
-      this.serverProcess = null;
+    this.bridgeProcess.on("error", (err: Error) => {
+      console.error("[HermesAgent] Failed to start bridge:", err);
+      this.bridgeProcess = null;
     });
 
-    this.serverProcess.on("exit", (code: number | null, signal: string | null) => {
-      console.error(`[ClaudeAgent] ⚠️ SERVER DIED! Exit code: ${code}, signal: ${signal}`);
-      this.serverProcess = null;
+    this.bridgeProcess.on("exit", (code: number | null, signal: string | null) => {
+      console.error(`[HermesAgent] ⚠️ BRIDGE DIED! Exit code: ${code}, signal: ${signal}`);
+      this.bridgeProcess = null;
     });
   }
 
   /**
-   * Stop the proxy server
+   * Stop the Hermes bridge
    */
-  private stopServer(): void {
+  private stopBridge(): void {
     if (Platform.isMobile) {
-      return; // No server to stop on mobile
+      return; // No local bridge to stop on mobile
     }
 
-    if (this.serverProcess) {
-      console.log("[ClaudeAgent] Stopping proxy server...");
-      this.serverProcess.kill();
-      this.serverProcess = null;
+    if (this.bridgeProcess) {
+      console.log("[HermesAgent] Stopping Hermes bridge...");
+      this.bridgeProcess.kill();
+      this.bridgeProcess = null;
     }
   }
 
   /**
-   * Wait for the server to be ready (health check with retries)
+   * Wait for the bridge to be ready (health check with retries)
    */
-  private async waitForServer(maxRetries = 30, intervalMs = 200): Promise<boolean> {
-    const localUrl = `http://localhost:${PROXY_PORT}`;
+  private async waitForBridge(maxRetries = 30, intervalMs = 200): Promise<boolean> {
+    const localUrl = `http://localhost:${BRIDGE_PORT}`;
     for (let i = 0; i < maxRetries; i++) {
       try {
         const response = await fetch(`${localUrl}/health`);
         if (response.ok) {
-          console.log(`[ClaudeAgent] Server ready after ${i + 1} attempts`);
+          console.log(`[HermesAgent] Bridge ready after ${i + 1} attempts`);
           return true;
         }
       } catch {
-        // Server not ready yet
+        // Bridge not ready yet
       }
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
     return false;
-  }
-
-  /**
-   * Check if server is already running
-   */
-  private async isServerRunning(): Promise<boolean> {
-    const localUrl = `http://localhost:${PROXY_PORT}`;
-    try {
-      const response = await fetch(`${localUrl}/health`);
-      return response.ok;
-    } catch {
-      return false;
-    }
   }
 
   /**
@@ -712,7 +722,7 @@ export default class ClaudeAgentPlugin extends Plugin {
 
     return new Promise((resolve) => {
       // Use lsof to find and kill process on our port
-      const killer = spawn!("sh", ["-c", `lsof -ti:${PROXY_PORT} | xargs kill -9 2>/dev/null || true`]);
+      const killer = spawn!("sh", ["-c", `lsof -ti:${BRIDGE_PORT} | xargs kill -9 2>/dev/null || true`]);
       killer.on("close", () => {
         resolve();
       });
@@ -723,29 +733,29 @@ export default class ClaudeAgentPlugin extends Plugin {
   }
 
   /**
-   * Ensure we have a fresh server instance that we control.
-   * This prevents the flip-flop bug where orphaned servers cause alternating failures.
+   * Ensure we have a fresh bridge instance that we control.
+   * This prevents orphaned bridge processes from causing alternating failures.
    */
-  private async ensureFreshServer(): Promise<void> {
-    // Kill our tracked server process if any
-    this.stopServer();
+  private async ensureFreshBridge(): Promise<void> {
+    // Kill our tracked bridge process if any
+    this.stopBridge();
 
     // Forcefully kill ANY process on our port (handles orphans, zombies, TIME_WAIT issues)
-    console.log("[ClaudeAgent] Killing any process on port", PROXY_PORT);
+    console.log("[HermesAgent] Killing any process on port", BRIDGE_PORT);
     await this.killProcessOnPort();
 
     // Wait for port to be fully released
     await new Promise((resolve) => setTimeout(resolve, 300));
 
-    // Start fresh server
-    console.log("[ClaudeAgent] Starting fresh server...");
-    this.startServer();
+    // Start a fresh bridge.
+    console.log("[HermesAgent] Starting fresh bridge...");
+    this.startBridge();
 
-    const serverReady = await this.waitForServer();
-    if (!serverReady) {
-      throw new Error("Failed to start proxy server. Check console for details.");
+    const bridgeReady = await this.waitForBridge();
+    if (!bridgeReady) {
+      throw new Error("Failed to start Hermes bridge. Check console for details.");
     }
-    console.log("[ClaudeAgent] ✅ Server started and health check passed");
+    console.log("[HermesAgent] ✅ Bridge started and health check passed");
   }
 
   /**
@@ -753,16 +763,20 @@ export default class ClaudeAgentPlugin extends Plugin {
    * Written by scripts/start-mobile-server.sh, synced via iCloud.
    */
   private async readConnectionFile(): Promise<ConnectionFile | null> {
-    const exists = await this.app.vault.adapter.exists(CONNECTION_FILE);
-    if (!exists) return null;
+    const fileName = (await this.app.vault.adapter.exists(CONNECTION_FILE))
+      ? CONNECTION_FILE
+      : (await this.app.vault.adapter.exists(LEGACY_CONNECTION_FILE))
+        ? LEGACY_CONNECTION_FILE
+        : null;
+    if (!fileName) return null;
 
-    const content = await this.app.vault.adapter.read(CONNECTION_FILE);
+    const content = await this.app.vault.adapter.read(fileName);
     const data = JSON.parse(content) as ConnectionFile;
     if (!data.url) {
       throw new Error("Connection file has no url field");
     }
 
-    console.log(`[ClaudeAgent] Found connection file: ${data.url}`);
+    console.log(`[HermesAgent] Found connection file ${fileName}: ${data.url}`);
     return data;
   }
 
@@ -776,28 +790,29 @@ export default class ClaudeAgentPlugin extends Plugin {
       throw new Error(`${CONNECTION_FILE} not found in vault root`);
     }
 
-    this.activeConnectionUrl = discovered.url;
+    this.activeBridgeUrl = discovered.url;
     const vaultPath = (this.app.vault.adapter as any).basePath;
 
     setConnectionStatus("connecting");
     setConnectionError(null);
 
     try {
-      this.claudeClient = new ClaudeAgentClient(
+      this.hermesClient?.dispose();
+      this.hermesClient = new HermesAgentClient(
         this.settings,
         vaultPath,
         discovered.url,
         this.settings.remoteAuthToken || undefined,
       );
-      this.claudeClient.setOnSessionChange((sessionId) => {
+      this.hermesClient.setOnSessionChange((sessionId) => {
         this.settings.sessionId = sessionId;
         this.saveSettings();
       });
-      await this.claudeClient.initialize();
+      await this.hermesClient.initialize();
       setConnectionStatus("connected");
       this.startHealthCheck();
       this.pokeIndexStatus();
-      console.log("[ClaudeAgent] Reconnected via connection file:", discovered.url);
+      console.log("[HermesAgent] Reconnected via connection file:", discovered.url);
       return { url: discovered.url };
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Unknown error";
@@ -813,7 +828,7 @@ export default class ClaudeAgentPlugin extends Plugin {
   private startHealthCheck(): void {
     if (this.healthCheckInterval) clearInterval(this.healthCheckInterval);
 
-    const url = this.activeConnectionUrl;
+    const url = this.activeBridgeUrl;
     if (!url) return;
 
     const check = async () => {
@@ -832,7 +847,7 @@ export default class ClaudeAgentPlugin extends Plugin {
         }
       } catch {
         setConnectionStatus("error");
-        setConnectionError("Server unreachable");
+        setConnectionError("Hermes bridge unreachable");
       }
     };
 
@@ -840,7 +855,7 @@ export default class ClaudeAgentPlugin extends Plugin {
   }
 
   /**
-   * Initialize the Claude client (auto-starts server if needed)
+   * Initialize the Hermes client (auto-starts the bridge if needed)
    */
   private async initializeClient(): Promise<void> {
     try {
@@ -850,18 +865,18 @@ export default class ClaudeAgentPlugin extends Plugin {
       // On mobile (or remote mode with no URL), try auto-discovery first
       let connectionConfig: ConnectionConfig;
       const needsDiscovery = Platform.isMobile ||
-        (this.settings.connectionMode === "remote" && !this.settings.remoteServerUrl);
+        (this.settings.connectionMode === "remote" && !this.settings.remoteBridgeUrl);
 
       if (needsDiscovery) {
         let discovered: ConnectionFile | null = null;
         try {
           discovered = await this.readConnectionFile();
         } catch (e) {
-          console.log("[ClaudeAgent] Connection file discovery failed:", e instanceof Error ? e.message : e);
+          console.log("[HermesAgent] Connection file discovery failed:", e instanceof Error ? e.message : e);
         }
         if (discovered) {
           connectionConfig = { url: discovered.url, authToken: this.settings.remoteAuthToken || undefined };
-          console.log("[ClaudeAgent] Using auto-discovered URL from vault, token from settings");
+          console.log("[HermesAgent] Using auto-discovered URL from vault, token from settings");
         } else {
           connectionConfig = getConnectionConfig(this.settings, Platform.isMobile);
         }
@@ -869,24 +884,24 @@ export default class ClaudeAgentPlugin extends Plugin {
         connectionConfig = getConnectionConfig(this.settings, Platform.isMobile);
       }
 
-      this.activeConnectionUrl = connectionConfig.url;
+      this.activeBridgeUrl = connectionConfig.url;
       const isLocalMode = this.settings.connectionMode === "local" && !Platform.isMobile;
 
-      // Only start server in local mode on desktop
+      // Only start the bridge locally on desktop.
       if (isLocalMode) {
-        console.log("[ClaudeAgent] Local mode: starting proxy server");
-        // Always start fresh - kill any existing server first
-        // This prevents the flip-flop bug where we detect a dying server
+        console.log("[HermesAgent] Local mode: starting Hermes bridge");
+        // Always start fresh - kill any existing bridge first.
+        // This prevents the flip-flop bug where we detect a dying bridge
         // from previous session but don't track it for cleanup
-        await this.ensureFreshServer();
+        await this.ensureFreshBridge();
       } else {
         const mode = Platform.isMobile ? "mobile" : "remote";
-        console.log(`[ClaudeAgent] ${mode} mode: connecting to ${connectionConfig.url}`);
+        console.log(`[HermesAgent] ${mode} mode: connecting to ${connectionConfig.url}`);
       }
 
-      // Create the Claude client with vault path for working directory
+      // Create the bridge client with the vault path used by Hermes ACP.
       const vaultPath = (this.app.vault.adapter as any).basePath;
-      this.claudeClient = new ClaudeAgentClient(
+      this.hermesClient = new HermesAgentClient(
         this.settings,
         vaultPath,
         connectionConfig.url,
@@ -894,19 +909,19 @@ export default class ClaudeAgentPlugin extends Plugin {
       );
 
       // Persist session ID when it changes
-      this.claudeClient.setOnSessionChange((sessionId) => {
+      this.hermesClient.setOnSessionChange((sessionId) => {
         this.settings.sessionId = sessionId;
         this.saveSettings();
       });
 
-      await this.claudeClient.initialize();
+      await this.hermesClient.initialize();
 
       setConnectionStatus("connected");
       this.startHealthCheck();
       this.pokeIndexStatus();
-      console.log("Claude Agent client initialized successfully");
+      console.log("Hermes Agent client initialized successfully");
     } catch (error) {
-      console.error("Failed to initialize Claude Agent:", error);
+      console.error("Failed to initialize Hermes Agent:", error);
 
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
@@ -916,7 +931,7 @@ export default class ClaudeAgentPlugin extends Plugin {
 
       // Show a notice but don't block the plugin from loading
       new Notice(
-        `Claude Agent: ${errorMessage}`,
+        `Hermes Agent: ${errorMessage}`,
         10000
       );
     }
@@ -928,7 +943,8 @@ export default class ClaudeAgentPlugin extends Plugin {
   async activateChatView(): Promise<void> {
     const { workspace } = this.app;
 
-    let leaf = workspace.getLeavesOfType(CHAT_VIEW_TYPE)[0];
+    let leaf = workspace.getLeavesOfType(CHAT_VIEW_TYPE)[0]
+      ?? workspace.getLeavesOfType(LEGACY_VIEW_TYPES.chat)[0];
 
     if (!leaf) {
       // Create leaf based on saved preference
@@ -951,7 +967,7 @@ export default class ClaudeAgentPlugin extends Plugin {
     if (leaf) {
       workspace.revealLeaf(leaf);
       // Focus the chat input after revealing (uses existing event listener in ChatInput)
-      window.dispatchEvent(new CustomEvent("claude-agent:focus-input"));
+      window.dispatchEvent(new CustomEvent(AGENT_EVENTS.focusInput));
     }
   }
 
@@ -962,7 +978,10 @@ export default class ClaudeAgentPlugin extends Plugin {
     const { workspace } = this.app;
 
     // Close existing chat view
-    const existingLeaves = workspace.getLeavesOfType(CHAT_VIEW_TYPE);
+    const existingLeaves = [
+      ...workspace.getLeavesOfType(CHAT_VIEW_TYPE),
+      ...workspace.getLeavesOfType(LEGACY_VIEW_TYPES.chat),
+    ];
     for (const leaf of existingLeaves) {
       leaf.detach();
     }
@@ -981,7 +1000,7 @@ export default class ClaudeAgentPlugin extends Plugin {
         active: true,
       });
       workspace.revealLeaf(newLeaf);
-      window.dispatchEvent(new CustomEvent("claude-agent:focus-input"));
+      window.dispatchEvent(new CustomEvent(AGENT_EVENTS.focusInput));
     }
   }
 
@@ -991,7 +1010,8 @@ export default class ClaudeAgentPlugin extends Plugin {
   async activateRelevantNotesView(): Promise<void> {
     const { workspace } = this.app;
 
-    let leaf = workspace.getLeavesOfType(RELEVANT_NOTES_VIEW_TYPE)[0];
+    let leaf = workspace.getLeavesOfType(RELEVANT_NOTES_VIEW_TYPE)[0]
+      ?? workspace.getLeavesOfType(LEGACY_VIEW_TYPES.relevantNotes)[0];
 
     if (!leaf) {
       // Create a new leaf in the right sidebar
@@ -1016,7 +1036,8 @@ export default class ClaudeAgentPlugin extends Plugin {
   async activateSessionsView(): Promise<void> {
     const { workspace } = this.app;
 
-    let leaf = workspace.getLeavesOfType(SESSIONS_VIEW_TYPE)[0];
+    let leaf = workspace.getLeavesOfType(SESSIONS_VIEW_TYPE)[0]
+      ?? workspace.getLeavesOfType(LEGACY_VIEW_TYPES.sessions)[0];
 
     if (!leaf) {
       const rightLeaf = workspace.getRightLeaf(false);
@@ -1040,7 +1061,8 @@ export default class ClaudeAgentPlugin extends Plugin {
   async activateGraphView(): Promise<void> {
     const { workspace } = this.app;
 
-    let leaf = workspace.getLeavesOfType(GRAPH_VIEW_TYPE)[0];
+    let leaf = workspace.getLeavesOfType(GRAPH_VIEW_TYPE)[0]
+      ?? workspace.getLeavesOfType(LEGACY_VIEW_TYPES.graph)[0];
 
     if (!leaf) {
       const rightLeaf = workspace.getRightLeaf(false);
@@ -1063,13 +1085,33 @@ export default class ClaudeAgentPlugin extends Plugin {
    */
   async loadSettings(): Promise<void> {
     const data = await this.loadData();
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
+    const normalizedData = { ...(data ?? {}) };
+    const legacyBridgeUrl = normalizedData[LEGACY_SETTING_KEYS.remoteBridgeUrl];
+    const migratedRemoteBridgeUrl = !normalizedData.remoteBridgeUrl && legacyBridgeUrl;
+    if (migratedRemoteBridgeUrl) normalizedData.remoteBridgeUrl = legacyBridgeUrl;
+    delete normalizedData[LEGACY_SETTING_KEYS.remoteBridgeUrl];
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, normalizedData);
+    const migratedFromLegacyBackend = data?.sessionBackend !== "hermes-acp";
+    if (migratedFromLegacyBackend) {
+      // Legacy SDK session UUIDs cannot be resumed by Hermes. Keep the old
+      // files untouched, but start this backend with a fresh ACP session.
+      this.settings.sessionId = null;
+    }
+    this.settings.sessionBackend = "hermes-acp";
+    // Pre-ACP provider aliases cannot be sent to ACP. Concrete ACP choices are
+    // preserved and refreshed from the live session when the chat view opens.
+    if (["haiku", "sonnet", "opus"].includes(this.settings.model)) {
+      this.settings.model = "hermes";
+    }
     // Deep-merge graphSettings so new fields get defaults from DEFAULT_GRAPH_VIEW_SETTINGS
     this.settings.graphSettings = Object.assign(
       {},
       DEFAULT_GRAPH_VIEW_SETTINGS,
       data?.graphSettings,
     );
+    if (migratedFromLegacyBackend || migratedRemoteBridgeUrl) {
+      await this.saveData(this.settings);
+    }
   }
 
   /**
@@ -1078,9 +1120,9 @@ export default class ClaudeAgentPlugin extends Plugin {
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
 
-    // Update the Claude client with new settings
-    if (this.claudeClient) {
-      this.claudeClient.updateSettings(this.settings);
+    // Update the Hermes client with new settings
+    if (this.hermesClient) {
+      this.hermesClient.updateSettings(this.settings);
     }
   }
 }

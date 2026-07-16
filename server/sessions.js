@@ -1,10 +1,10 @@
 import { readFileSync, existsSync, writeFileSync, mkdirSync, unlinkSync } from "fs";
-import { homedir } from "os";
 import { join } from "path";
-import { encodePath, extractTextFromEntry } from "./transcript.js";
+import { extractTextFromEntry } from "./transcript.js";
+import { getProjectDir } from "./storage.js";
 
 export function getRegistryPath(workingDirectory) {
-  return join(homedir(), ".claude", "projects", encodePath(workingDirectory), "session-registry.json");
+  return join(getProjectDir(workingDirectory), "session-registry.json");
 }
 
 export function loadRegistry(workingDirectory) {
@@ -70,7 +70,7 @@ export function deleteSession(workingDirectory, sessionId) {
   saveRegistry(workingDirectory, registry);
 
   // Nuke transcript + sidecars
-  const projectDir = join(homedir(), ".claude", "projects", encodePath(workingDirectory));
+  const projectDir = getProjectDir(workingDirectory);
   const files = [
     `${sessionId}.jsonl`,
     `${sessionId}.summaries.json`,
