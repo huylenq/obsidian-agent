@@ -8,7 +8,7 @@ When the chat view's textarea is focused on iOS mobile, a large black area slide
 
 Obsidian runs in a **WKWebView** on iOS. When the virtual keyboard opens, iOS does NOT resize the layout viewport — it keeps the full-screen dimensions. Instead, iOS **scrolls the webview** to reveal the focused element. This creates a disconnect:
 
-- The `.claude-agent-container` has `height: 100%` (of its parent `.view-content`)
+- The `.hermes-agent-container` has `height: 100%` (of its parent `.view-content`)
 - The parent doesn't shrink when the keyboard opens
 - iOS scrolls an ancestor element upward to show the textarea
 - The messages area (`flex: 1`) retains its full height — most of it is now empty/black
@@ -19,7 +19,7 @@ Obsidian runs in a **WKWebView** on iOS. When the virtual keyboard opens, iOS do
 ### 1. CSS `height: 100dvh` (global)
 
 ```css
-.claude-agent-container {
+.hermes-agent-container {
   height: 100%;
   height: 100dvh;  /* override with dynamic viewport height */
 }
@@ -30,7 +30,7 @@ Obsidian runs in a **WKWebView** on iOS. When the virtual keyboard opens, iOS do
 ### 2. CSS `height: 100dvh` (mobile-only)
 
 ```css
-.is-mobile .claude-agent-container {
+.is-mobile .hermes-agent-container {
   height: 100dvh;
 }
 ```
@@ -74,7 +74,7 @@ document.documentElement.scrollTop = 0;
 // Walk up from container, set overflow: hidden on all ancestors
 ```
 
-**Result:** Broke messages scrolling entirely. Too aggressive — it also locked the `.claude-agent-messages` container's scroll context.
+**Result:** Broke messages scrolling entirely. Too aggressive — it also locked the `.hermes-agent-messages` container's scroll context.
 
 ## Key Findings
 

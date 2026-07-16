@@ -1,8 +1,8 @@
-# Claude Agent for Obsidian
+# Hermes Agent for Obsidian
 
-An Obsidian plugin that lets you chat with your vault using the Claude Agent SDK.
+An Obsidian plugin that lets you chat with your vault through Hermes Agent over the Agent Client Protocol (ACP).
 
-> **Heads up:** This plugin is a personal, in-progress project built around one specific setup — my vault, my Claude configuration, and my workflow. It's not (yet) a polished community release. I try to keep things generic, but assumptions leak in. Bugs are frequent, APIs change without notice, and some features may just not work for you. Use at your own risk, and frustration is expected. You've been warned — and welcomed anyway.
+> **Heads up:** This is a personal, in-progress project built around one specific setup. It is not a polished community release; assumptions leak, APIs move, and bugs occasionally arrive wearing a fake moustache.
 
 ![Overview](docs/screenshots/overview.jpg)
 
@@ -12,63 +12,81 @@ An Obsidian plugin that lets you chat with your vault using the Claude Agent SDK
 
 ![Chat](docs/screenshots/chat.png)
 
-- Stream responses from Claude (Haiku, Sonnet, or Opus) with full markdown rendering
-- Send messages mid-response — injected into the running SDK session for real-time steering
-- `@mention` vault files to include them as context
-- Attach images (paste, drag, or pick from vault)
-- Editor selection context — selected text is automatically included with file/line info
-- Active file awareness — Claude sees which note you're viewing
-- Tool call visibility — expandable blocks showing MCP tool use and results
-- Inline Graphviz diagram rendering with copy-DOT support
+- Stream Hermes responses with full markdown rendering
+- Steer an active turn through Hermes' `/steer` ACP command
+- Interrupt an active turn with ACP `session/cancel`
+- Resume Hermes sessions by ACP session UUID
+- `@mention` vault files, attach images, include editor selections, and add the active note as context
+- Show Hermes tool calls and results in expandable blocks
+- Render Graphviz DOT diagrams inline
 
 ![Slash commands](docs/screenshots/slash-commands.jpg)
 
-- Slash commands: `/new`, `/compact`, `/done`, `/rename`, `/sessions`
+- Local commands: `/new`, `/done`, `/rename`, `/sessions`
+- Hermes command: `/compact`
 
 ![Diagram rendering](docs/screenshots/diagram.jpg)
 
 ### Semantic Graph View
+
 - Interactive force-directed graph combining wiki-link edges with embedding similarity edges
-- Configurable link depth (1–3 hops), similarity thresholds, and physics settings
-- Pin nodes to persist across center changes
-- D3-force layout with zoom/pan
+- Configurable link depth, similarity thresholds, and physics settings
+- Pinnable nodes with persistent configuration
 
 ### Session Management
-- Persistent sessions stored as JSONL transcripts (via Claude Code SDK)
-- Session registry with title, status, model, associated files
-- Browse sessions by active file ("This File") or vault-wide ("All Sessions")
-- Context compaction — `/compact` summarizes history to save tokens, with collapsible boundary UI
+
+- Hermes-native conversation state through ACP `session/new` and `session/load`
+- Plugin-owned display transcripts and sidecars under `~/.hermes/obsidian-agent/projects/`
+- Session registry with title, status, associated files, flashcard markers, and touched notes
+- Browse sessions for the active file or the whole vault
+
+## Architecture
+
+Chat uses one authenticated WebSocket to the Hermes bridge for start, streaming updates, steering, and cancellation. The bridge speaks ACP over stdio to `hermes acp`. HTTP remains only for health, indexing, history, and session metadata, which keeps the same architecture working on Obsidian mobile through a remote bridge.
 
 ## Requirements
 
-- **Claude Code CLI** — installed and authenticated (`claude` on PATH)
-- **OpenAI API Key** — for vault indexing (set in plugin settings)
+- **Hermes Agent CLI** — installed, configured, and available as `hermes` on `PATH`
+- **OpenAI API Key** — optional, used only for vault indexing in the plugin settings
+
+Validate Hermes before launching Obsidian:
+
+```bash
+hermes acp --check
+```
 
 ## Installation
 
-Clone and build somewhere **outside** your vault, then copy only the artifacts in:
+Clone and build outside your vault, then copy the artifacts into the existing plugin directory.
 
 ```bash
-# 1. Clone and build
 git clone <this-repo>
-cd claude-agent
-pnpm install && pnpm build
+cd agent
+pnpm install
+pnpm build
 
-# 2. Copy artifacts to your vault
 PLUGIN_DIR="/path/to/your/vault/.obsidian/plugins/claude-agent"
 mkdir -p "$PLUGIN_DIR"
 cp dist/main.js dist/styles.css manifest.json "$PLUGIN_DIR/"
 cp -r server "$PLUGIN_DIR/"
 
-# 3. Install server dependencies (one-time)
-cd "$PLUGIN_DIR/server" && npm install
+cd "$PLUGIN_DIR/server"
+pnpm install --prod
 ```
 
-Then reload Obsidian or toggle the plugin off/on. The server starts automatically when the plugin loads (local mode).
+Reload Obsidian or toggle the plugin off and on. In local mode the plugin starts the Hermes bridge, which lazily starts one long-lived `hermes acp` subprocess on the first chat.
+
+### Upgrade compatibility
+
+The manifest, deployment directory, and command IDs retain the original `claude-agent` identity so existing Obsidian settings, hotkeys, and installations continue to work. Runtime class names, CSS classes, primary view types, and events use the `hermes-agent` namespace. The plugin still accepts the former connection filename, view types, and flashcard-explain event as migration aliases.
 
 ## Development
 
 ```bash
-pnpm run deploy          # build + copy to vault (skips server/node_modules)
-pnpm run deploy:deps     # includes server/node_modules (only when deps change)
+pnpm run build
+pnpm --dir server test
+pnpm run deploy
+pnpm run deploy:deps
 ```
+
+Use `deploy:deps` for this migration because the bridge adds the `ws` runtime dependency. It replaces the deployed desktop `server/` tree so removed backend files and dependencies cannot linger; ordinary `deploy` remains incremental.
